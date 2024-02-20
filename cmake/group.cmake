@@ -1,0 +1,7 @@
+macro(group_pch)
+    source_group("cmake" FILES "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${ARGV0}.dir/cmake_pch.cxx")
+    source_group("cmake" FILES "CMakeLists.txt")
+    foreach(configType ${CMAKE_CONFIGURATION_TYPES})
+        source_group("cmake" FILES "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${ARGV0}.dir/${configType}/cmake_pch.hxx")
+    endforeach()
+endmacro(group_pch)
