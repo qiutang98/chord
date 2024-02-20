@@ -6,6 +6,8 @@
 
 namespace chord
 {
+
+
 	class Application : NonCopyable
 	{
 	protected:

@@ -8,15 +8,21 @@
 
 #include <utils/delegate.h>
 #include <utils/cvar.h>
+#include <regex>
+#include <execution>
 
 namespace chord
 {
 	AutoCVar<std::string> cVarLogPrintFormat("r.log.printFormat", "%^[%H:%M:%S][%l] %n: %v%$", "Print format of log in app.", EConsoleVarFlags::ReadOnly);
+
 	AutoCVar<bool> cVarLogFile("r.log.file", true, "Enable log file save in disk.", EConsoleVarFlags::ReadOnly);
+
+	AutoCVar<bool> cVarLogFileDelete("r.log.file.delete", true, "Enable delete old log file save in disk.", EConsoleVarFlags::ReadOnly);
+	AutoCVar<int32> cVarLogFileDeleteDay("r.log.file.deleteDay", 2, "Delete days for old logs.", EConsoleVarFlags::ReadOnly);
+
 	AutoCVar<std::string> cVarLogFileFormat("r.log.file.format", "[%H:%M:%S][%l] %n: %v", "Saved format of log in file.", EConsoleVarFlags::ReadOnly);
 	AutoCVar<std::string> cVarLogFileOutputFolder("r.log.file.folder", "save/log", "Save folder path of log file.", EConsoleVarFlags::ReadOnly);
 	AutoCVar<std::string> cVarLogFileName("r.log.file.name", "chord", "Save name of log file.", EConsoleVarFlags::ReadOnly);
-
 
 	LoggerSystem& LoggerSystem::get()
 	{
@@ -89,34 +95,94 @@ namespace chord
 			sink->set_pattern(cVarLogPrintFormat.get());
 		}
 
-		if (cVarLogFile.get())
+		// Create save folder for log if no exist.
+		const auto saveFolder = std::filesystem::path(cVarLogFileOutputFolder.get());
+		if (!std::filesystem::exists(saveFolder))
 		{
-			using TimePoint = std::chrono::system_clock::time_point;
-			auto serializeTimePoint = [](const TimePoint& time, const std::string& format)
-			{
-				std::time_t tt = std::chrono::system_clock::to_time_t(time);
-				std::tm tm = *std::localtime(&tt);
-				std::stringstream ss;
-				ss << std::put_time(&tm, format.c_str());
-				return ss.str();
-			};
-
-			TimePoint input = std::chrono::system_clock::now();
-			const auto& saveFolder = cVarLogFileOutputFolder.get();
-			if (!std::filesystem::exists(saveFolder))
-			{
-				std::filesystem::create_directories(saveFolder);
-			}
-
-			{
-				auto saveFilePath = cVarLogFileName.get() + serializeTimePoint(input, "_%Y_%m_%d_%H_%M_%S") + ".log";
-				auto finalPath = std::filesystem::path(saveFolder) / saveFilePath;
-
-				m_logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(finalPath.string().c_str(), true));
-				m_logSinks.back()->set_pattern(cVarLogFileFormat.get());
-			}
+			std::filesystem::create_directories(saveFolder);
 		}
 
+		using TimePoint = std::chrono::system_clock::time_point;
+		auto serializeTimePoint = [](const TimePoint& time, const std::string& format)
+		{
+			std::time_t tt = std::chrono::system_clock::to_time_t(time);
+			std::tm tm = *std::localtime(&tt);
+			std::stringstream ss;
+			ss << std::put_time(&tm, format.c_str());
+			return ss.str();
+		};
+
+		TimePoint now = std::chrono::system_clock::now();
+
+		const std::regex kLogNamePattern(R"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})");
+
+		// Delete old log files out of day.
+		if (cVarLogFileDelete.get())
+		{
+
+
+			std::vector<std::filesystem::path> pendingFiles = {};
+
+			for (const auto& dirEntry : std::filesystem::recursive_directory_iterator(saveFolder))
+			{
+				const auto path = dirEntry.path();
+				if (path.extension() == ".log")
+				{
+					const auto fileName = path.stem().string();
+
+					std::smatch matches;
+					if (std::regex_search(fileName, matches, kLogNamePattern))
+					{
+						std::string datetimeStr = matches[0];
+
+						int32 year, month, day, hour, minute, second;
+						{
+							const auto item = sscanf(datetimeStr.c_str(), "%d_%d_%d_%d_%d_%d", &year, &month, &day, &hour, &minute, &second);
+							(void)item;
+						}
+
+						std::tm tm = { 0 };
+						tm.tm_year = year - 1900;
+						tm.tm_mon  = month - 1;
+						tm.tm_mday = day;
+						tm.tm_hour = hour;
+						tm.tm_min  = minute;
+						tm.tm_sec  = second;
+
+						std::time_t t = std::mktime(&tm);
+						std::chrono::system_clock::time_point timePoint = std::chrono::system_clock::from_time_t(t);
+
+						auto duration = now - timePoint;
+
+						auto days = std::chrono::duration_cast<std::chrono::days>(duration).count();
+						if (days >= cVarLogFileDeleteDay.get())
+						{
+							pendingFiles.push_back(path);
+						}
+					}
+				}
+			}
+
+			// Parallel delete.
+			std::for_each(std::execution::par, pendingFiles.begin(), pendingFiles.end(), [](const auto& p) { std::filesystem::remove(p); });
+		}
+
+		// Create new log file.
+		if (cVarLogFile.get())
+		{
+			const auto saveFilePath = cVarLogFileName.get() + serializeTimePoint(now, "_%Y_%m_%d_%H_%M_%S") + ".log";
+			const auto finalPath = saveFolder / saveFilePath;
+
+			{
+				const auto name = finalPath.stem().string();
+				CHECK(std::regex_search(name, kLogNamePattern));
+			}
+
+			m_logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(finalPath.string().c_str(), true));
+			m_logSinks.back()->set_pattern(cVarLogFileFormat.get());
+		}
+
+		// Register a default logger for basic usage.
 		m_defaultLogger = registerLogger("Default");
 	}
 

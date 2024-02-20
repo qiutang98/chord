@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 #include <atomic>
+#include <iostream>
 
 #define ENABLE_LOG
 
@@ -65,5 +66,10 @@ namespace chord
 	{
 		static_assert(std::is_object_v<T>);
 	    ::memset(&data, 0, sizeof(T));
+	}
+
+	static inline void setApplicationTitle(const std::string_view title)
+	{
+		std::cout << "\033]0;" << title << "\007";
 	}
 }
