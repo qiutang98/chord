@@ -1,5 +1,8 @@
 #include "graphics.h"
 
+// Generic init default dispatch loader dynamic storage here.
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
 namespace chord::graphics
 {
 	spdlog::logger& log::get()

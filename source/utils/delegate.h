@@ -51,7 +51,7 @@ namespace chord
 	class EventHandle
 	{
 	private:
-		template<typename...> friend class Events;
+		template<typename, typename...> friend class MultiDelegates;
 
 		static const uint32 kUnvalidId = ~0;
 		uint32 m_id = kUnvalidId;
@@ -67,30 +67,48 @@ namespace chord
 		void reset() { m_id = kUnvalidId; }
 	};
 
-	template<typename... Args>
-	class Events : NonCopyable
+	template<typename RetType, typename... Args>
+	class MultiDelegates : NonCopyable
 	{
 	public:
-		using EventType = std::function<void(Args...)>;
+		using EventType = std::function<RetType(Args...)>;
+
 		struct Event
 		{
 			EventType   lambda = nullptr;
 			EventHandle handle = { };
 		};
 
+		void broadcastRet(Args...args, std::function<void(const RetType*)>&& opResult = nullptr)
+		{
+			std::shared_lock<std::shared_mutex> lock(m_lock);
+
+			m_broadcasting++;
+
+			for (auto& event : m_events)
+			{
+				RetType result = event.lambda(std::forward<Args>(args)...);
+				if (opResult != nullptr)
+				{
+					opResult(&result);
+				}
+			}
+
+			m_broadcasting--;
+		}
+
 		void broadcast(Args...args)
 		{
 			std::shared_lock<std::shared_mutex> lock(m_lock);
 
-			m_broadcasting ++;
-			for (const auto& event : m_events)
+			m_broadcasting++;
+
+			for (auto& event : m_events)
 			{
-				if (event.handle.isValid() && (event.lambda != nullptr))
-				{
-					event.lambda(std::forward<Args>(args)...);
-				}
+				event.lambda(std::forward<Args>(args)...);
 			}
-			m_broadcasting --;
+
+			m_broadcasting--;
 		}
 
 		[[nodiscard]] EventHandle add(EventType&& lambda)
@@ -160,7 +178,13 @@ namespace chord
 			return false;
 		}
 
-	private:
+		[[nodiscard]] const bool isEmpty() const
+		{
+			std::shared_lock<std::shared_mutex> lock(m_lock);
+			return m_events.empty();
+		}
+
+	protected:
 		bool isBroadcasting() const
 		{
 			return m_broadcasting > 0;
@@ -174,10 +198,13 @@ namespace chord
 			return event;
 		}
 
-	private:
-		std::shared_mutex m_lock;
+	protected:
+		mutable std::shared_mutex m_lock;
 
 		std::atomic<uint32> m_broadcasting = 0;
 		std::vector<Event>  m_events = { };
 	};
+
+	template<typename...Args>
+	using Events = MultiDelegates<void, Args...>;
 }
