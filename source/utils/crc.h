@@ -8,10 +8,10 @@
 namespace chord::crc
 {
 	// Crc memory hash based on data's memory, so, you must ensure struct init with T a = {};
-	extern uint32_t crc32(const void* data, uint32_t length, uint32_t crc = 0);
+	extern uint32 crc32(const void* data, uint32 length, uint32 crc = 0);
 
     // Single object crc hash.
-    template<typename T> static inline uint32_t crc32(const T& data, uint32_t crc = 0)
+    template<typename T> static inline uint32 crc32(const T& data, uint32 crc = 0)
     {
         static_assert(std::is_object_v<T>);
         return crc32(&data, sizeof(T), crc);

@@ -36,10 +36,10 @@ namespace chord
 		auto& getDefaultLogger() noexcept { return m_defaultLogger; }
 
 		// Register a new logger.
-		[[nodiscard]] std::shared_ptr<spdlog::logger> registerLogger(const std::string& name);
+		CHORD_NODISCARD std::shared_ptr<spdlog::logger> registerLogger(const std::string& name);
 
 		// Push callback to logger sink.
-		[[nodiscard]] EventHandle pushCallback(std::function<void(const std::string&, ELogType)>&& callback);
+		CHORD_NODISCARD EventHandle pushCallback(std::function<void(const std::string&, ELogType)>&& callback);
 
 		// Pop callback from logger sink.
 		void popCallback(EventHandle& name);
@@ -61,16 +61,16 @@ namespace chord
 	#define LOG_INFO(...)  { ::chord::LoggerSystem::get().getDefaultLogger()->info    (__VA_ARGS__); }
 	#define LOG_WARN(...)  { ::chord::LoggerSystem::get().getDefaultLogger()->warn    (__VA_ARGS__); }
 	#define LOG_ERROR(...) { ::chord::LoggerSystem::get().getDefaultLogger()->error   (__VA_ARGS__); }
-	#define LOG_FATAL(...) { ::chord::LoggerSystem::get().getDefaultLogger()->critical(__VA_ARGS__); throw std::runtime_error("Utils fatal!"); }
+	#define LOG_FATAL(...) { ::chord::LoggerSystem::get().getDefaultLogger()->critical(__VA_ARGS__); ::chord::applicationCrash(); }
 #else
 	#define LOG_TRACE(...)   
 	#define LOG_INFO (...)    
 	#define LOG_WARN(...)   
 	#define LOG_ERROR(...)    
-	#define LOG_FATAL(...) { throw std::runtime_error("Utils fatal!"); }
+	#define LOG_FATAL(...) { ::chord::applicationCrash(); }
 #endif
 
-#ifdef APP_DEBUG
+#if CHORD_DEBUG
 	#define CHECK(x) { if(!(x)) { LOG_FATAL("Check error, at line {0} on file {1}.", __LINE__, __FILE__); DEBUG_BREAK(); } }
 	#define ASSERT(x, ...) { if(!(x)) { LOG_FATAL("Assert failed: '{2}', at line {0} on file {1}.", __LINE__, __FILE__, std::format(__VA_ARGS__)); DEBUG_BREAK(); } }
 #else

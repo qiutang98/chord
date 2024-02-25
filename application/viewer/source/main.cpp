@@ -8,7 +8,21 @@ namespace viewer
 	{
 		CVarSystem::get().getCVarCheck<std::string>("r.log.file.name")->set(kAppName);
 
-		CHECK(Application::get().init(kAppName, "resources/icon.png"));
+		{
+			Application::InitConfig config{ };
+			config.appName = kAppName;
+			config.iconPath = "resource/icon.png";
+			CHECK(Application::get().init(config));
+		}
+
+		{
+			graphics::Context::InitConfig config{ };
+			config.bInstanceExtensionDebugUtils = true;
+			config.bInstanceExtensionGLFW = true;
+			config.bInstanceLayerValidation = true;
+			CHECK(Application::get().registerSubsystem<graphics::Context>(config));
+		}
+
 	}
 
 	void release()
@@ -37,13 +51,13 @@ int main(int argc, const char** argv)
 		auto& window1 = Application::get().createWindow(config);
 
 
-		auto handle0 = window0.onClosed.add([](const Window& win) -> bool
+		auto handle0 = window0.onBeforeClosed.add([](const Window& win) -> bool
 		{
 			LOG_INFO("Call once :0");
 			return true;
 		});
 
-		auto handle1 = window1.onClosed.add([](const Window& win) -> bool
+		auto handle1 = window1.onBeforeClosed.add([](const Window& win) -> bool
 		{
 			LOG_INFO("Call once :1");
 			return true;

@@ -51,7 +51,7 @@ namespace chord
 		void close() { m_window.bExit = true; }
 
 		// Return should exit or not value, if one delegate require continue, the exit event will stop.
-		MultiDelegates<bool, const Window&> onClosed;
+		MultiDelegates<Window, bool, const Window&> onBeforeClosed;
 
 	protected:
 		WindowData m_window = { };

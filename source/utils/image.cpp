@@ -1,4 +1,4 @@
-#include "image.h"
+#include <utils/image.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
@@ -44,10 +44,7 @@ namespace chord
 		uint8 colors[] = { R, G, B, A };
 		for (int32 i = 0; i < count; i += m_requiredComponent)
 		{
-			for (int32 j = 0; j < m_requiredComponent; j++)
-			{
-				m_pixels[i + j] = colors[j];
-			}
+			::memcpy(&m_pixels[i], colors, m_requiredComponent);
 		}
 	}
 
@@ -79,10 +76,7 @@ namespace chord
 
 
 			const bool bColor1 = (x + y == 1);
-			for (int32 j = 0; j < m_requiredComponent; j++)
-			{
-				m_pixels[i + j] = bColor1 ? colors1[j] : colors0[j];
-			}
+			::memcpy(&m_pixels[i], bColor1 ? colors1 : colors0, m_requiredComponent);
 		}
 	}
 

@@ -1,6 +1,5 @@
-#include "window.h"
-#include "application.h"
-
+#include <application/window.h>
+#include <application/application.h>
 #include <utils/log.h>
 
 namespace chord
@@ -94,9 +93,12 @@ namespace chord
 		if (m_window.bExit)
 		{
 			// On closed event intercept action and broadcast again
-			if (!onClosed.isEmpty())
+			if (!onBeforeClosed.isEmpty())
 			{
-				onClosed.broadcastRet(*this, [&](const bool* bExit) { m_window.bExit &= *bExit; });
+				onBeforeClosed.broadcastRet(*this, [&](const bool* bExit) 
+				{ 
+					m_window.bExit &= (*bExit); 
+				});
 			}
 
 			glfwSetWindowShouldClose(m_window.window, m_window.bExit);

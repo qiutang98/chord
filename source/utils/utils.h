@@ -1,29 +1,39 @@
 #pragma once
 
+#include <pch.h>
+
 #include <cstdint>
 #include <type_traits>
 #include <atomic>
 #include <iostream>
 
 #define ENABLE_LOG
-
-#pragma warning(disable:4005)
+#define ENABLE_RESTRICT
+#define ENABLE_NODISCARD
 
 #if defined(_DEBUG) || defined(DEBUG)
-	#define APP_DEBUG
+	#define CHORD_DEBUG 1
+#else
+	#define CHORD_DEBUG 0
 #endif
 
-#ifdef APP_DEBUG
+#if CHORD_DEBUG
 	#define DEBUG_BREAK() __debugbreak();
 #else
 	#define DEBUG_BREAK()
 #endif 
 
+#ifdef ENABLE_NODISCARD
+	#define CHORD_NODISCARD [[nodiscard]]
+#else 
+	#define CHORD_NODISCARD
+#endif
+
 // Optional restrict keyword for memory optimize.
-#ifdef DISABLE_RESTRICT
-	#define restrict_t 
+#ifdef ENABLE_RESTRICT
+	#define CHORD_RESTRICT __restrict
 #else
-	#define restrict_t __restrict
+	#define CHORD_RESTRICT 
 #endif
 
 // Operator enum flags support macro for enum class.
@@ -37,6 +47,9 @@
 
 namespace chord
 {
+	class ImageLdr2D;
+	class Application;
+
 	// Signed type.
 	using int32  = int32_t;
 	using int64  = int64_t;
@@ -71,5 +84,27 @@ namespace chord
 	static inline void setApplicationTitle(const std::string_view title)
 	{
 		std::cout << "\033]0;" << title << "\007";
+	}
+
+	static inline void applicationCrash()
+	{
+		::abort();
+	}
+
+	static inline bool same(const char* a, const char* b)
+	{
+		return strcmp(a, b) == 0;
+	}
+
+	template<typename T>
+	constexpr const char* getTypeName()
+	{
+		return typeid(T).name();
+	}
+
+	template<typename T>
+	constexpr size_t getTypeHash()
+	{
+		return typeid(T).hash_code();
 	}
 }

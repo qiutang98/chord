@@ -1,9 +1,9 @@
-#include "crc.h"
+#include <utils/crc.h>
 #include <utils/utils.h>
 
 namespace chord
 {
-	static const uint32_t kCrcTablesSB8[8][256] =
+	static const uint32 kCrcTablesSB8[8][256] =
 	{
 		{
 			0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988, 0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91,
@@ -152,18 +152,20 @@ namespace chord
 	};
 
 	template <typename T>
-	inline constexpr T alignT(T v, uint64_t aignment)
+	inline constexpr T alignT(T v, uint64 aignment)
 	{
-		return (T)(((uint64_t)v + aignment - 1) & ~(aignment - 1));
+		return (T)(((uint64)v + aignment - 1) & ~(aignment - 1));
 	}
 
 	// http://slicing-by-8.sourceforge.net/
-	uint32_t crc::crc32(const void* inData, uint32_t length, uint32_t crcValue)
+	uint32 crc::crc32(const void* inData, uint32 length, uint32 crcValue)
 	{
+		std::optional<int> a;
+
 		crcValue = ~crcValue;
 
-		const uint8_t* restrict_t data = (uint8_t*)inData;
-		int32_t initBytes = static_cast<int32_t>(alignT(data, 4) - data);
+		const uint8* CHORD_RESTRICT data = (uint8*)inData;
+		int32 initBytes = static_cast<int32>(alignT(data, 4) - data);
 
 		if (length > initBytes)
 		{
@@ -174,11 +176,11 @@ namespace chord
 				crcValue = (crcValue >> 8) ^ kCrcTablesSB8[0][(crcValue & 0xFF) ^ *data++];
 			}
 
-			auto data4 = (const uint32_t*)data;
-			for (uint32_t Repeat = length / 8; Repeat; --Repeat)
+			auto data4 = (const uint32*)data;
+			for (uint32 Repeat = length / 8; Repeat; --Repeat)
 			{
-				uint32_t v0 = *data4++ ^ crcValue;
-				uint32_t v1 = *data4++;
+				uint32 v0 = *data4++ ^ crcValue;
+				uint32 v1 = *data4++;
 				crcValue =
 					kCrcTablesSB8[7][(v0 >>  0) & 0xFF] ^
 					kCrcTablesSB8[6][(v0 >>  8) & 0xFF] ^
@@ -189,7 +191,7 @@ namespace chord
 					kCrcTablesSB8[1][(v1 >> 16) & 0xFF] ^
 					kCrcTablesSB8[0][(v1 >> 24)];
 			}
-			data = (const uint8_t*)data4;
+			data = (const uint8*)data4;
 
 			length %= 8;
 		}
