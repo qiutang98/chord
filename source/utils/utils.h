@@ -30,7 +30,30 @@
 	#define CHORD_RESTRICT 
 #endif
 
+#ifdef ENABLE_LOG
+	#define chord_macro_sup_enableLogOnly(x) x
+#else
+	#define chord_macro_sup_enableLogOnly(x)
+#endif
 
+#if CHORD_DEBUG
+	#define chord_macro_sup_debugOnly(x) x
+	#define chord_macro_sup_checkPrintContent(x, p) \
+	{ if(!(x)) { p("Check content '{3}' failed in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, #x); } }
+
+	#define chord_macro_sup_checkMsgfPrintContent(x, p, ...) \
+	{ if(!(x)) { p("Assert content '{4}' failed with message: '{3}' in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); } }
+#else
+	#define chord_macro_sup_debugOnly(x)
+	#define chord_macro_sup_checkPrintContent(x, p) { if(!(x)) { p("Check content '{0}' failed.", #x); } }
+	#define chord_macro_sup_checkMsgfPrintContent(x, p, ...) { if(!(x)) { p("Assert content '{0}' failed with message '{1}'.", #x, __VA_ARGS__); } }
+#endif
+
+#define chord_macro_sup_ensureMsgfContent(x, p, ...) \
+{ static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' failed with message '{3}' in function '{1}' at line #{0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); chord::debugBreak(); } }
+
+#define chord_macro_sup_checkEntryContent(x) x("Check entry in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__)
+#define chord_macro_sup_unimplementedContent(x) x("Unimplemented code entry in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__)
 
 // Operator enum flags support macro for enum class.
 #define ENUM_CLASS_FLAG_OPERATORS(T)                                              \
@@ -58,7 +81,7 @@ namespace chord
 	using uint8  = uint8_t;
 	using uint16 = uint16_t;
 
-	// Basic type platform memory CHECK.
+	// Basic type platform memory check.
 	static_assert(
 		sizeof(int32)  == 4 && 
 		sizeof(uint32) == 4 &&

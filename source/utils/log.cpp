@@ -103,7 +103,7 @@ namespace chord
 
 	void LoggerSystem::popCallback(EventHandle& handle)
 	{
-		CHECK(m_loggerCache->m_callbacks.remove(handle));
+		check(m_loggerCache->m_callbacks.remove(handle));
 	}
 
 	LoggerSystem::LoggerSystem()
@@ -207,7 +207,7 @@ namespace chord
 
 			{
 				const auto name = finalPath.stem().string();
-				CHECK(std::regex_search(name, kLogNamePattern));
+				check(std::regex_search(name, kLogNamePattern));
 			}
 
 			m_logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(finalPath.string().c_str(), true));

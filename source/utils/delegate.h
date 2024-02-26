@@ -88,7 +88,7 @@ namespace chord
 		CHORD_NODISCARD EventHandle add(EventType&& lambda)
 		{
 			// Don't add when broadcasting.
-			CHECK(!isBroadcasting());
+			check(!isBroadcasting());
 
 			std::unique_lock<std::shared_mutex> lock(m_lock);
 
@@ -112,7 +112,7 @@ namespace chord
 		CHORD_NODISCARD bool remove(EventHandle& handle)
 		{
 			// Don't remove when broadcasting.
-			CHECK(!isBroadcasting());
+			check(!isBroadcasting());
 
 			std::unique_lock<std::shared_mutex> lock(m_lock);
 

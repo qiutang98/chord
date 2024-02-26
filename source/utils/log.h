@@ -54,35 +54,22 @@ namespace chord
 		// Logger cache for custom logger.
 		std::shared_ptr<LogCacheSink<std::mutex>> m_loggerCache;
 	};
+
+#define LOG_TRACE(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->trace   (__VA_ARGS__); })
+#define LOG_INFO(...)  chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->info    (__VA_ARGS__); })
+#define LOG_WARN(...)  chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->warn    (__VA_ARGS__); })
+#define LOG_ERROR(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->error   (__VA_ARGS__); })
+#define LOG_FATAL(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->critical(__VA_ARGS__); applicationCrash(); })
 }
 
-#ifdef ENABLE_LOG
-	#define LOG_TRACE(...) { ::chord::LoggerSystem::get().getDefaultLogger()->trace   (__VA_ARGS__); }
-	#define LOG_INFO(...)  { ::chord::LoggerSystem::get().getDefaultLogger()->info    (__VA_ARGS__); }
-	#define LOG_WARN(...)  { ::chord::LoggerSystem::get().getDefaultLogger()->warn    (__VA_ARGS__); }
-	#define LOG_ERROR(...) { ::chord::LoggerSystem::get().getDefaultLogger()->error   (__VA_ARGS__); }
-	#define LOG_FATAL(...) { ::chord::LoggerSystem::get().getDefaultLogger()->critical(__VA_ARGS__); ::chord::applicationCrash(); }
-#else
-	#define LOG_TRACE(...)   
-	#define LOG_INFO (...)    
-	#define LOG_WARN(...)   
-	#define LOG_ERROR(...)    
-	#define LOG_FATAL(...) { ::chord::applicationCrash(); }
-#endif
-
-#if CHORD_DEBUG
-#define CHECK(x) { if(!(x)) { LOG_FATAL("Check failed in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__); chord::debugBreak(); } }
-#define ASSERT(x, ...) { if(!(x)) { LOG_FATAL("Assert failed with message: '{3}' in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__)); chord::debugBreak(); } }
-#else
-#define CHECK(x) { if(!(x)) { LOG_FATAL("Check error."); } }
-#define ASSERT(x, ...) { if(!(x)) { LOG_FATAL("Assert failed: {0}.", __VA_ARGS__); } }
-#endif
+#define check(x) chord_macro_sup_checkPrintContent(x, LOG_FATAL)
+#define checkMsgf(x, ...) chord_macro_sup_checkMsgfPrintContent(x, LOG_FATAL, __VA_ARGS__)
 
 // Only call once, will trigger break.
-#define ENSURE(x, ...) { static bool b = false; if(!b && !(x)) { b = true; LOG_ERROR("Ensure failed with message '{3}' in function '{1}' at line #{0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__)); chord::debugBreak(); } }
+#define ensureMsgf(x, ...) chord_macro_sup_ensureMsgfContent(x, LOG_ERROR, __VA_ARGS__)
 
-// Used for CHECK unexpected entry.
-#define CHECK_ENTRY() ASSERT(false, "Should not entry here, fix me!")
+// Used for check unexpected entry.
+#define checkEntry() chord_macro_sup_checkEntryContent(LOG_FATAL)
 
-// Used for unimplement CHECK or crash.
-#define UNIMPLEMENT() ASSERT(false, "Un-implement yet, fix me!")
+// Used for unimplement check or crash.
+#define unimplemented() chord_macro_sup_unimplementedContent(LOG_FATAL)

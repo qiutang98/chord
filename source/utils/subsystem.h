@@ -50,7 +50,7 @@ namespace chord
 
 		inline bool tick(const SubsystemTickData& tickData)
 		{
-			CHECK(!m_hash.empty());
+			check(!m_hash.empty());
 			return onTick(tickData);
 		}
 

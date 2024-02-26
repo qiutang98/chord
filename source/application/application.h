@@ -106,14 +106,14 @@ namespace chord
 			const char* className = getTypeName<T>();
 
 			// Check we never register subsystem yet.
-			CHECK(!m_registeredSubsystemMap[className].isValid());
+			check(!m_registeredSubsystemMap[className].isValid());
 
 			const auto newIndex = m_subsystems.size();
 
 			static_assert(std::is_constructible_v<T, Args...>);
 			auto subsystem = std::make_unique<T>(std::forward<Args>(args)...);
 
-			// Register CHECK.
+			// Register check.
 			subsystem->registerCheck();
 
 			// Update index.

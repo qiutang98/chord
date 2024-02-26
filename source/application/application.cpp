@@ -18,7 +18,7 @@ namespace chord
             if (id.isValid())
             {
 
-                CHECK(m_subsystems.size() > id.get());
+                check(m_subsystems.size() > id.get());
 
                 m_subsystems.erase(m_subsystems.begin() + id.get());
                 m_registeredSubsystemMap.erase(key);
@@ -44,7 +44,7 @@ namespace chord
 
     bool Application::init(const InitConfig& config)
     {
-        CHECK(!m_bInit);
+        check(!m_bInit);
 
         // GLFW init.
         if (glfwInit() != GLFW_TRUE)
@@ -146,7 +146,7 @@ namespace chord
                 // Release after all subsystem ticking finish.
                 for (size_t i = pendingSubsystems.size(); i > 0; i--)
                 {
-                    CHECK(removeSubsystem(pendingSubsystems[i - 1]->getHash()));
+                    check(removeSubsystem(pendingSubsystems[i - 1]->getHash()));
                 }
 
                 // Update tick count when end of loop.

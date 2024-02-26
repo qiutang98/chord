@@ -207,7 +207,7 @@ namespace chord
 		CVarStorageInterface<T>* getCVarCheck(std::string_view name) const
 		{
 			auto* ptr = getCVarIfExist<T>(name);
-			CHECK(ptr != nullptr);
+			check(ptr != nullptr);
 
 			return ptr;
 		}
@@ -221,7 +221,7 @@ namespace chord
 			std::unique_lock<std::shared_mutex> lock(m_lock);
 
 			const size_t hashId = std::hash<std::string_view>()(name);
-			CHECK(!m_storages.contains(hashId));
+			check(!m_storages.contains(hashId));
 
 			m_storages[hashId] = std::make_unique<CVarStorageValue<T>>(flag, name, description, v);
 			return (CVarStorageValue<T>*)m_storages[hashId].get();
@@ -233,7 +233,7 @@ namespace chord
 			std::unique_lock<std::shared_mutex> lock(m_lock);
 
 			const size_t hashId = std::hash<std::string_view>()(name);
-			CHECK(!m_storages.contains(hashId));
+			check(!m_storages.contains(hashId));
 
 			m_storages[hashId] = std::make_unique<CVarStorageRef<T>>(flag, name, description, v);
 			return (CVarStorageRef<T>*)m_storages[hashId].get();

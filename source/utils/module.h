@@ -18,7 +18,7 @@ namespace chord
 		explicit IRuntimeModule() = default;
 		virtual ~IRuntimeModule() = default;
 
-		// Used to CHECK module dependency.
+		// Used to check module dependency.
 		virtual void registerCheck(EngineInterface* engine) { }
 
 		virtual bool init() = 0;

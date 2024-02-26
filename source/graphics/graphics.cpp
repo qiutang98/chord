@@ -292,7 +292,7 @@ namespace chord::graphics
 			std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
 			checkVkResult(vkEnumeratePhysicalDevices(m_instance, &physicalDeviceCount, physicalDevices.data()));
 
-			ASSERT_GRAPHICS(physicalDeviceCount > 0, "No GPU support vulkan on your computer.");
+			checkGraphicsMsgf(physicalDeviceCount > 0, "No GPU support vulkan on your computer.");
 
 			bool bExistDiscreteGPU = false;
 			for (auto& GPU : physicalDevices)
@@ -509,7 +509,7 @@ namespace chord::graphics
 				auto& s = m_physicalDeviceFeatures;
 				auto& e = m_physicalDeviceFeaturesEnabled;
 
-				#define forceEnable(x) CHECK(s.x == VK_TRUE); e.x = VK_TRUE; LOG_GRAPHICS_INFO("Enable '{0}'.", #x);
+				#define forceEnable(x) check(s.x == VK_TRUE); e.x = VK_TRUE; LOG_GRAPHICS_INFO("Enable '{0}'.", #x);
 				{
 					// Vulkan 1.0 core.
 					forceEnable(core10Features.samplerAnisotropy);

@@ -6,14 +6,14 @@ namespace viewer
 
 	void init()
 	{
-
+		
 		CVarSystem::get().getCVarCheck<std::string>("r.log.file.name")->set(kAppName);
 
 		{
 			Application::InitConfig config{ };
 			config.appName = kAppName;
 			config.iconPath = "resource/icon.png";
-			CHECK(Application::get().init(config));
+			check(Application::get().init(config));
 		}
 
 		{
@@ -23,7 +23,7 @@ namespace viewer
 			config.bValidation = true;
 			config.bHDR = true;
 			config.bRaytracing = true;
-			CHECK(Application::get().registerSubsystem<graphics::Context>(config));
+			check(Application::get().registerSubsystem<graphics::Context>(config));
 		}
 
 	}

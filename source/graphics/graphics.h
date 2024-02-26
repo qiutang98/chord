@@ -32,31 +32,22 @@ namespace chord::graphics
 	{
 		extern spdlog::logger& get();
 	}
+
+
+#define LOG_GRAPHICS_TRACE(...) chord_macro_sup_enableLogOnly({ log::get().trace   (__VA_ARGS__); })
+#define LOG_GRAPHICS_INFO(...)  chord_macro_sup_enableLogOnly({ log::get().info    (__VA_ARGS__); })
+#define LOG_GRAPHICS_WARN(...)  chord_macro_sup_enableLogOnly({ log::get().warn    (__VA_ARGS__); })
+#define LOG_GRAPHICS_ERROR(...) chord_macro_sup_enableLogOnly({ log::get().error   (__VA_ARGS__); })
+#define LOG_GRAPHICS_FATAL(...) chord_macro_sup_enableLogOnly({ log::get().critical(__VA_ARGS__); ::chord::applicationCrash(); })
 }
 
-#ifdef ENABLE_LOG
-	#define LOG_GRAPHICS_TRACE(...) { ::chord::graphics::log::get().trace   (__VA_ARGS__); }
-	#define LOG_GRAPHICS_INFO(...)  { ::chord::graphics::log::get().info    (__VA_ARGS__); }
-	#define LOG_GRAPHICS_WARN(...)  { ::chord::graphics::log::get().warn    (__VA_ARGS__); }
-	#define LOG_GRAPHICS_ERROR(...) { ::chord::graphics::log::get().error   (__VA_ARGS__); }
-	#define LOG_GRAPHICS_FATAL(...) { ::chord::graphics::log::get().critical(__VA_ARGS__); ::chord::applicationCrash(); }
-#else
-	#define LOG_GRAPHICS_TRACE(...)   
-	#define LOG_GRAPHICS_INFO(...)    
-	#define LOG_GRAPHICS_WARN(...)   
-	#define LOG_GRAPHICS_ERROR(...)    
-	#define LOG_GRAPHICS_FATAL(...) { ::chord::applicationCrash(); }
-#endif
 
-#if CHORD_DEBUG
-	#define CHECK_GRAPHICS(x) { if(!(x)) { LOG_GRAPHICS_FATAL("Check error, at line {0} on file {1}.", __LINE__, __FILE__); debugBreak(); } }
-	#define ASSERT_GRAPHICS(x, ...) { if(!(x)) { LOG_GRAPHICS_FATAL("Assert failed: '{2}', at line {0} on file {1}.", __LINE__, __FILE__, std::format(__VA_ARGS__)); debugBreak(); } }
-#else
-	#define CHECK_GRAPHICS(x) { if(!(x)) { LOG_GRAPHICS_FATAL("Check error."); } }
-	#define ASSERT_GRAPHICS(x, ...) { if(!(x)) { LOG_GRAPHICS_FATAL("Assert failed: {0}.", __VA_ARGS__); } }
-#endif
 
-#define ENSURE_GRAPHICS(x, ...) { static bool bExecuted = false; if((!bExecuted) && !(x)) { bExecuted = true; LOG_GRAPHICS_ERROR("Ensure failed in graphics: '{2}', at line {0} on file {1}.", __LINE__, __FILE__, std::format(__VA_ARGS__)); DEBUG_BREAK(); } }
+#define checkGraphics(x) chord_macro_sup_checkPrintContent(x, LOG_GRAPHICS_FATAL)
+#define checkGraphicsMsgf(x, ...) chord_macro_sup_checkMsgfPrintContent(x, LOG_GRAPHICS_FATAL, __VA_ARGS__)
+#define ensureGraphicsMsgf(x, ...) chord_macro_sup_ensureMsgfContent(x, LOG_GRAPHICS_ERROR, __VA_ARGS__)
+
+#define checkVkResult(x) checkGraphics((x) == VK_SUCCESS)
 
 namespace chord::graphics
 {
@@ -69,11 +60,6 @@ namespace chord::graphics
 	{
 		*(ptr) = &(v);
 		 (ptr) = &(v.pNext);
-	}
-
-	static inline void checkVkResult(VkResult result)
-	{
-		CHECK_GRAPHICS(result == VK_SUCCESS);
 	}
 
 	class Context : public ISubsystem

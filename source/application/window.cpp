@@ -7,7 +7,7 @@ namespace chord
 	Window::Window(const InitConfig config)
 	{
 		// Must init application before create a window.
-		CHECK(Application::get().isValid());
+		check(Application::get().isValid());
 		using ShowModeEnum = InitConfig::EWindowMode;
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -31,7 +31,7 @@ namespace chord
 		}
 		else
 		{
-			CHECK(
+			check(
 				config.windowShowMode == ShowModeEnum::FullScreenWithTile ||
 				config.windowShowMode == ShowModeEnum::Free);
 
