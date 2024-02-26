@@ -17,12 +17,6 @@
 	#define CHORD_DEBUG 0
 #endif
 
-#if CHORD_DEBUG
-	#define DEBUG_BREAK() __debugbreak();
-#else
-	#define DEBUG_BREAK()
-#endif 
-
 #ifdef ENABLE_NODISCARD
 	#define CHORD_NODISCARD [[nodiscard]]
 #else 
@@ -35,6 +29,8 @@
 #else
 	#define CHORD_RESTRICT 
 #endif
+
+
 
 // Operator enum flags support macro for enum class.
 #define ENUM_CLASS_FLAG_OPERATORS(T)                                              \
@@ -62,7 +58,7 @@ namespace chord
 	using uint8  = uint8_t;
 	using uint16 = uint16_t;
 
-	// Basic type platform memory check.
+	// Basic type platform memory CHECK.
 	static_assert(
 		sizeof(int32)  == 4 && 
 		sizeof(uint32) == 4 &&
@@ -86,8 +82,11 @@ namespace chord
 		std::cout << "\033]0;" << title << "\007";
 	}
 
+	extern void debugBreak();
+
 	static inline void applicationCrash()
 	{
+		debugBreak();
 		::abort();
 	}
 

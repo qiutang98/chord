@@ -2,7 +2,7 @@
 
 #include <utils/utils.h>
 #include <utils/noncopyable.h>
-#include <utils/hashstringkey.h>
+#include <utils/optional.h>
 #include <utils/log.h>
 
 namespace chord
@@ -35,7 +35,7 @@ namespace chord
 			return m_hash;
 		}
 
-		inline bool init(HashStringKey hash)
+		inline bool init(const std::string& hash)
 		{
 			m_hash = hash;
 			if (onInit())
@@ -44,13 +44,13 @@ namespace chord
 				return true;
 			}
 
-			m_hash = { };
+			m_hash.clear();
 			return false;
 		}
 
 		inline bool tick(const SubsystemTickData& tickData)
 		{
-			CHECK(m_hash.isValid());
+			CHECK(!m_hash.empty());
 			return onTick(tickData);
 		}
 
@@ -70,7 +70,7 @@ namespace chord
 
 	protected:
 		std::string m_name;
-		HashStringKey m_hash { };
+		std::string m_hash { };
 	};
 
 	template<typename T>

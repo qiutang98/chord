@@ -49,8 +49,8 @@ namespace chord::graphics
 #endif
 
 #if CHORD_DEBUG
-	#define CHECK_GRAPHICS(x) { if(!(x)) { LOG_GRAPHICS_FATAL("Check error, at line {0} on file {1}.", __LINE__, __FILE__); DEBUG_BREAK(); } }
-	#define ASSERT_GRAPHICS(x, ...) { if(!(x)) { LOG_GRAPHICS_FATAL("Assert failed: '{2}', at line {0} on file {1}.", __LINE__, __FILE__, std::format(__VA_ARGS__)); DEBUG_BREAK(); } }
+	#define CHECK_GRAPHICS(x) { if(!(x)) { LOG_GRAPHICS_FATAL("Check error, at line {0} on file {1}.", __LINE__, __FILE__); debugBreak(); } }
+	#define ASSERT_GRAPHICS(x, ...) { if(!(x)) { LOG_GRAPHICS_FATAL("Assert failed: '{2}', at line {0} on file {1}.", __LINE__, __FILE__, std::format(__VA_ARGS__)); debugBreak(); } }
 #else
 	#define CHECK_GRAPHICS(x) { if(!(x)) { LOG_GRAPHICS_FATAL("Check error."); } }
 	#define ASSERT_GRAPHICS(x, ...) { if(!(x)) { LOG_GRAPHICS_FATAL("Assert failed: {0}.", __VA_ARGS__); } }
@@ -58,11 +58,19 @@ namespace chord::graphics
 
 #define ENSURE_GRAPHICS(x, ...) { static bool bExecuted = false; if((!bExecuted) && !(x)) { bExecuted = true; LOG_GRAPHICS_ERROR("Ensure failed in graphics: '{2}', at line {0} on file {1}.", __LINE__, __FILE__, std::format(__VA_ARGS__)); DEBUG_BREAK(); } }
 
-#define ChordVkGetNextPtr(v) &(v).pNext
-#define ChordVkStepNextPtr(ptr, v) (*(ptr)) = &(v); (ptr) = &((v).pNext);
-
 namespace chord::graphics
 {
+	static inline auto getNextPtr(auto& v)
+	{
+		return &v.pNext;
+	}
+
+	static inline void stepNextPtr(auto& ptr, auto& v)
+	{
+		*(ptr) = &(v);
+		 (ptr) = &(v.pNext);
+	}
+
 	static inline void checkVkResult(VkResult result)
 	{
 		CHECK_GRAPHICS(result == VK_SUCCESS);
@@ -73,24 +81,14 @@ namespace chord::graphics
 	public:
 		struct InitConfig
 		{
-			// Instance layers.
-			bool bInstanceLayerValidation = false;
-
-			// Instance extension.
-			bool bInstanceExtensionDebugUtils = false;
-			bool bInstanceExtensionGLFW = false;
-
-			// Device extensions.
-			bool b8BitStorage   = false;
-			bool b16BitStorage  = false;
-
-			// Raytracing feature.
-			bool bRaytracing = false;
-
-			// Enable when application will create windows.
-			bool bHDR = false;
-			bool bSwapchain = false;
+			bool bValidation  = false;
+			bool bDebugUtils  = false;
+			bool bGLFW        = false;
+			bool bHDR         = false;
+			bool bRaytracing  = false;
 		};
+
+
 
 		explicit Context(const InitConfig& config)
 			: ISubsystem("Graphics")
@@ -101,14 +99,76 @@ namespace chord::graphics
 
 		struct PhysicalDeviceProperties
 		{
-			VkPhysicalDeviceMemoryProperties   memoryProperties;
-			VkPhysicalDeviceProperties         deviceProperties;
-			VkPhysicalDeviceProperties2        deviceProperties2;
-			VkPhysicalDeviceSubgroupProperties subgroupProperties;
-			VkPhysicalDeviceDescriptorIndexingProperties descriptorIndexingProperties;
+			VkPhysicalDeviceMemoryProperties   memoryProperties   { };
+			VkPhysicalDeviceProperties         deviceProperties   { };
+			VkPhysicalDeviceProperties2        deviceProperties2  { };
+			VkPhysicalDeviceSubgroupProperties subgroupProperties { };
+			VkPhysicalDeviceDescriptorIndexingProperties descriptorIndexingProperties { };
 
 			// KHR.
-			VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties;
+			VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties { };
+		};
+
+		struct PhysicalDeviceFeatures
+		{
+			// Core.
+			VkPhysicalDeviceFeatures core10Features
+			{
+			
+			};
+			VkPhysicalDeviceVulkan11Features core11Features
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES
+			};
+			VkPhysicalDeviceVulkan12Features core12Features
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
+			};
+			VkPhysicalDeviceVulkan13Features core13Features
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES
+			};
+
+			// KHR.
+			VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR
+			};
+			VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracingPipelineFeatures
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR
+			};
+			VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR
+			};
+
+			// EXT.
+			VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT
+			};
+			VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT
+			};
+
+			// Update pNext chain when query or create device.
+			void** stepNextPtr(auto& s)
+			{
+				auto pNext = getNextPtr(s);
+
+				graphics::stepNextPtr(pNext, this->core11Features);
+				graphics::stepNextPtr(pNext, this->core12Features);
+				graphics::stepNextPtr(pNext, this->core13Features);
+				graphics::stepNextPtr(pNext, this->rayQueryFeatures);
+				graphics::stepNextPtr(pNext, this->raytracingPipelineFeatures);
+				graphics::stepNextPtr(pNext, this->accelerationStructureFeatures);
+				graphics::stepNextPtr(pNext, this->extendedDynamicState2Features);
+				graphics::stepNextPtr(pNext, this->extendedDynamicState3Features);
+
+				return pNext;
+			}
 		};
 
 	protected:
@@ -133,9 +193,16 @@ namespace chord::graphics
 		VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
 
 		// Vulkan cached physical device's properties.
-		PhysicalDeviceProperties m_physicalDeviceProperties;
+		PhysicalDeviceProperties m_physicalDeviceProperties = { };
 
-		GPUQueuesInfo m_gpuQueuesInfo;
+		// Vulkan cached physical device features.
+		PhysicalDeviceFeatures m_physicalDeviceFeatures = { };
+
+		// Current enable physical device features.
+		PhysicalDeviceFeatures m_physicalDeviceFeaturesEnabled = { };
+
+		// Vulkan gpu queue infos.
+		GPUQueuesInfo m_gpuQueuesInfo = { };
 	};
 }
 

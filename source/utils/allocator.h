@@ -5,7 +5,7 @@ namespace chord
 {
 	// Single object inline allocator. it keep one small stack memory.
 	// When stack memory overflow, then use heap memory.
-	template<size_t kMaxStackSize>
+	template<std::size_t kMaxStackSize>
 	class SingleInlineAllocator
 	{
 	private:
@@ -17,15 +17,15 @@ namespace chord
 			char buffer[kMaxStackSize];
 			void* pPtr; // Heap memory, use when memory size bigger than kMaxStackSize.
 		};
-		size_t m_size;
+		std::size_t m_size;
 
 	public:
 		// Allocate memory.
-		void* allocateInternal(const size_t size)
+		void* allocate(const std::size_t size)
 		{
 			if (m_size != size)
 			{
-				freeInternal();
+				release();
 
 				m_size = size;
 				if (size > kMaxStackSize)
@@ -38,7 +38,7 @@ namespace chord
 		}
 
 		// Free memory.
-		void freeInternal()
+		void release()
 		{
 			if (m_size > kMaxStackSize)
 			{
@@ -48,10 +48,20 @@ namespace chord
 		}
 
 	public:
-		size_t getSize() const { return m_size; }
+		std::size_t getSize() const 
+		{ 
+			return m_size; 
+		}
 
-		bool hasAllocation() const { return m_size > 0; }
-		bool hasHeapAllocation() const { return m_size > kMaxStackSize; }
+		bool hasAllocation() const 
+		{ 
+			return m_size > 0; 
+		}
+
+		bool hasHeapAllocation() const 
+		{ 
+			return m_size > kMaxStackSize; 
+		}
 
 		void* getAllocation() const
 		{
@@ -74,21 +84,21 @@ namespace chord
 		{
 			if (other.hasAllocation())
 			{
-				::memcpy(allocateInternal(other.m_size), other.getAllocation(), other.m_size);
+				::memcpy(allocate(other.m_size), other.getAllocation(), other.m_size);
 			}
 			m_size = other.m_size;
 		}
 
 		~SingleInlineAllocator() noexcept
 		{
-			freeInternal();
+			release();
 		}
 
 		SingleInlineAllocator& operator=(const SingleInlineAllocator& other)
 		{
 			if (other.hasAllocation())
 			{
-				::memcpy(allocateInternal(other.m_size), other.getAllocation(), other.m_size);
+				::memcpy(allocate(other.m_size), other.getAllocation(), other.m_size);
 			}
 			m_size = other.m_size;
 
@@ -115,7 +125,7 @@ namespace chord
 		// Move copy function.
 		SingleInlineAllocator& operator=(SingleInlineAllocator&& other) noexcept
 		{
-			freeInternal();
+			release();
 
 			m_size = other.m_size;
 			other.m_size = 0;

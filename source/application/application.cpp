@@ -10,19 +10,20 @@ namespace chord
         return app;
     }
 
-    bool Application::removeSubsystem(HashStringKey key)
+    bool Application::removeSubsystem(const std::string& key)
     {
-        if ((!m_subsystems.empty()) && m_registeredSubsystemMap.contains(key))
+        if (!m_subsystems.empty() && m_registeredSubsystemMap.contains(key))
         {
             const auto& id = m_registeredSubsystemMap.at(key);
             if (id.isValid())
             {
+
                 CHECK(m_subsystems.size() > id.get());
 
                 m_subsystems.erase(m_subsystems.begin() + id.get());
                 m_registeredSubsystemMap.erase(key);
 
-                // We need to update registered subsystem map.
+                // We need to update registered subsystem index map.
                 for (std::size_t i = 0; i < m_subsystems.size(); i ++)
                 {
                     m_registeredSubsystemMap[m_subsystems[i]->getHash()] = i;
@@ -67,13 +68,13 @@ namespace chord
                     if (!m_icon->fillFromFile(config.iconPath))
                     {
                         const auto path = std::filesystem::absolute(config.iconPath).string();
-                        LOG_WARN("Fail to load app icon file in disk {}, will use default icon as fallback.", path);
+                        LOG_WARN("Fail to load app icon file in disk {0}, will use default icon as fallback.", path);
                     }
                 }
                 else
                 {
                     const auto path = std::filesystem::absolute(config.iconPath).string();
-                    LOG_WARN("Invalid icon file path {}, will use default icon as fallback.", path);
+                    LOG_WARN("Invalid icon file path {0}, will use default icon as fallback.", path);
                 }
             }
 

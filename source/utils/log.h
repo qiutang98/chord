@@ -71,25 +71,18 @@ namespace chord
 #endif
 
 #if CHORD_DEBUG
-	#define CHECK(x) { if(!(x)) { LOG_FATAL("Check error, at line {0} on file {1}.", __LINE__, __FILE__); DEBUG_BREAK(); } }
-	#define ASSERT(x, ...) { if(!(x)) { LOG_FATAL("Assert failed: '{2}', at line {0} on file {1}.", __LINE__, __FILE__, std::format(__VA_ARGS__)); DEBUG_BREAK(); } }
+#define CHECK(x) { if(!(x)) { LOG_FATAL("Check failed in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__); chord::debugBreak(); } }
+#define ASSERT(x, ...) { if(!(x)) { LOG_FATAL("Assert failed with message: '{3}' in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__)); chord::debugBreak(); } }
 #else
-	#define CHECK(x) { if(!(x)) { LOG_FATAL("Check error."); } }
-	#define ASSERT(x, ...) { if(!(x)) { LOG_FATAL("Assert failed: {0}.", __VA_ARGS__); } }
+#define CHECK(x) { if(!(x)) { LOG_FATAL("Check error."); } }
+#define ASSERT(x, ...) { if(!(x)) { LOG_FATAL("Assert failed: {0}.", __VA_ARGS__); } }
 #endif
 
 // Only call once, will trigger break.
-#define ENSURE(x, ...) { static bool bExecuted = false; if((!bExecuted) && !(x)) { bExecuted = true; LOG_ERROR("Ensure failed: '{2}', at line {0} on file {1}.", __LINE__, __FILE__, std::format(__VA_ARGS__)); DEBUG_BREAK(); } }
+#define ENSURE(x, ...) { static bool b = false; if(!b && !(x)) { b = true; LOG_ERROR("Ensure failed with message '{3}' in function '{1}' at line #{0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__)); chord::debugBreak(); } }
 
-// Used for check unexpected entry.
+// Used for CHECK unexpected entry.
 #define CHECK_ENTRY() ASSERT(false, "Should not entry here, fix me!")
 
-// Used for unimplement check or crash.
+// Used for unimplement CHECK or crash.
 #define UNIMPLEMENT() ASSERT(false, "Un-implement yet, fix me!")
-#define UNIMPLEMENT_ONCE() ENSURE(false, "Logic still un-implement!")
-
-
-
-
-
-

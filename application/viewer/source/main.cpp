@@ -6,6 +6,7 @@ namespace viewer
 
 	void init()
 	{
+
 		CVarSystem::get().getCVarCheck<std::string>("r.log.file.name")->set(kAppName);
 
 		{
@@ -17,9 +18,11 @@ namespace viewer
 
 		{
 			graphics::Context::InitConfig config{ };
-			config.bInstanceExtensionDebugUtils = true;
-			config.bInstanceExtensionGLFW = true;
-			config.bInstanceLayerValidation = true;
+			config.bDebugUtils = true;
+			config.bGLFW = true;
+			config.bValidation = true;
+			config.bHDR = true;
+			config.bRaytracing = true;
 			CHECK(Application::get().registerSubsystem<graphics::Context>(config));
 		}
 
@@ -47,7 +50,7 @@ int main(int argc, const char** argv)
 
 		auto& window0 = Application::get().createWindow(config);
 
-		config.name = "ίχ";
+		config.name = "neko";
 		auto& window1 = Application::get().createWindow(config);
 
 

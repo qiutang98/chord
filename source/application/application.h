@@ -5,7 +5,7 @@
 #include <utils/image.h>
 #include <utils/delegate.h>
 #include <utils/subsystem.h>
-#include <utils/hashstringkey.h>
+#include <utils/optional.h>
 
 namespace chord
 {
@@ -27,13 +27,14 @@ namespace chord
 		
 		// Subsystem register in current application.
 		std::vector<std::unique_ptr<ISubsystem>>  m_subsystems;
-		std::map<HashStringKey, OptionalSizeT> m_registeredSubsystemMap;
+		std::map<std::string, OptionalSizeT> m_registeredSubsystemMap;
 
 	private:
 		// Application should be a singleton.
 		Application() = default;
 
-		CHORD_NODISCARD bool removeSubsystem(HashStringKey key);
+		// Remove subsystem.
+		CHORD_NODISCARD bool removeSubsystem(const std::string& key);
 
 	public:
 		static Application& get();
@@ -79,19 +80,19 @@ namespace chord
 
 	public:
 		template<typename T>
-		inline bool existSubsystem() const
+		CHORD_NODISCARD inline bool existSubsystem() const
 		{
 			checkIsBasedOnSubsystem<T>();
 			return m_registeredSubsystemMap.contains(getTypeName<T>());
 		}
 
-		inline bool isSubsystemEmpty() const 
+		CHORD_NODISCARD inline bool isSubsystemEmpty() const
 		{ 
 			return m_subsystems.empty(); 
 		}
 
 		template<typename T>
-		CHORD_NODISCARD T& getSubsystem()
+		CHORD_NODISCARD T& getSubsystem() const
 		{
 			checkIsBasedOnSubsystem<T>();
 			const auto& index = m_registeredSubsystemMap.at(getTypeName<T>()).get();
@@ -104,14 +105,18 @@ namespace chord
 			checkIsBasedOnSubsystem<T>();
 			const char* className = getTypeName<T>();
 
+			// Check we never register subsystem yet.
 			CHECK(!m_registeredSubsystemMap[className].isValid());
 
 			const auto newIndex = m_subsystems.size();
 
 			static_assert(std::is_constructible_v<T, Args...>);
 			auto subsystem = std::make_unique<T>(std::forward<Args>(args)...);
+
+			// Register CHECK.
 			subsystem->registerCheck();
 
+			// Update index.
 			m_registeredSubsystemMap[className] = newIndex;
 
 			m_subsystems.push_back(std::move(subsystem));

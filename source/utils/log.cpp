@@ -73,19 +73,13 @@ namespace chord
 		{
 			switch (level)
 			{
-			case spdlog::level::trace:
-				return ELogType::Trace;
-			case spdlog::level::info:
-				return ELogType::Info;
-			case spdlog::level::warn:
-				return ELogType::Warn;
-			case spdlog::level::err:
-				return ELogType::Error;
-			case spdlog::level::critical:
-				return ELogType::Fatal;
-			default:
-				return ELogType::Other;
+			case spdlog::level::trace:    return ELogType::Trace;
+			case spdlog::level::info:     return ELogType::Info;
+			case spdlog::level::warn:     return ELogType::Warn;
+			case spdlog::level::err:      return ELogType::Error;
+			case spdlog::level::critical: return ELogType::Fatal;
 			}
+			return ELogType::Other;
 		}
 
 	protected:
