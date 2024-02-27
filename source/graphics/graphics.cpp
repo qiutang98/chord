@@ -1,5 +1,5 @@
 #define VOLK_IMPLEMENTATION
-#include <Volk/volk.h>
+#include <volk/volk.h>
 
 #include <graphics/graphics.h>
 #include <utils/cvar.h>
@@ -131,7 +131,7 @@ namespace chord::graphics
 			}
 
 			auto version = volkGetInstanceVersion();
-			LOG_GRAPHICS_TRACE("Volk initialize, vulkan SDK version {0}.{1}.{2} initialize.",
+			LOG_GRAPHICS_TRACE("Volk initialized with vulkan SDK version '{0}.{1}.{2}'.",
 				VK_VERSION_MAJOR(version),
 				VK_VERSION_MINOR(version),
 				VK_VERSION_PATCH(version));
@@ -255,15 +255,14 @@ namespace chord::graphics
 
 			VkDebugUtilsMessengerCreateInfoEXT debugUtilsCreateInfo{ };
 
-			// Instance create info pNext.
+			// Instance create info pNext chain.
 			{
-				const void** pNextInstanceCreate = &instanceInfo.pNext;
+				auto pNext = getNextPtr(instanceInfo);
+
 				if (m_initConfig.bDebugUtils)
 				{
 					debugUtilsCreateInfo = debugUtils::configMessengerCreateInfo(m_initConfig);
-
-					(*pNextInstanceCreate) = &debugUtilsCreateInfo;
-					pNextInstanceCreate = &debugUtilsCreateInfo.pNext;
+					stepNextPtr(pNext, debugUtilsCreateInfo);
 				}
 			}
 
@@ -343,10 +342,12 @@ namespace chord::graphics
 				m_physicalDeviceFeatures = {};
 				VkPhysicalDeviceFeatures2 deviceFeatures2 { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
 
-				m_physicalDeviceFeatures.stepNextPtr(deviceFeatures2);
+				auto pNext = m_physicalDeviceFeatures.stepNextPtr(deviceFeatures2);
 
+				// Query.
 				vkGetPhysicalDeviceFeatures2(m_physicalDevice, &deviceFeatures2);
 
+				// Update core 1.0 features.
 				m_physicalDeviceFeatures.core10Features = deviceFeatures2.features;
 			}
 
@@ -509,69 +510,71 @@ namespace chord::graphics
 				auto& s = m_physicalDeviceFeatures;
 				auto& e = m_physicalDeviceFeaturesEnabled;
 
-				#define forceEnable(x) check(s.x == VK_TRUE); e.x = VK_TRUE; LOG_GRAPHICS_INFO("Enable '{0}'.", #x);
+				#define FORCE_ENABLE(x) check(s.x == VK_TRUE); e.x = VK_TRUE; LOG_GRAPHICS_INFO("Enable '{0}'.", #x);
 				{
 					// Vulkan 1.0 core.
-					forceEnable(core10Features.samplerAnisotropy);
-					forceEnable(core10Features.depthClamp);
-					forceEnable(core10Features.shaderSampledImageArrayDynamicIndexing);
-					forceEnable(core10Features.multiDrawIndirect);
-					forceEnable(core10Features.drawIndirectFirstInstance);
-					forceEnable(core10Features.independentBlend);
-					forceEnable(core10Features.multiViewport);
-					forceEnable(core10Features.fragmentStoresAndAtomics);
-					forceEnable(core10Features.shaderInt16);
-					forceEnable(core10Features.fillModeNonSolid);
-					forceEnable(core10Features.depthBiasClamp);
+					FORCE_ENABLE(core10Features.samplerAnisotropy);
+					FORCE_ENABLE(core10Features.depthClamp);
+					FORCE_ENABLE(core10Features.shaderSampledImageArrayDynamicIndexing);
+					FORCE_ENABLE(core10Features.multiDrawIndirect);
+					FORCE_ENABLE(core10Features.drawIndirectFirstInstance);
+					FORCE_ENABLE(core10Features.independentBlend);
+					FORCE_ENABLE(core10Features.multiViewport);
+					FORCE_ENABLE(core10Features.fragmentStoresAndAtomics);
+					FORCE_ENABLE(core10Features.shaderInt16);
+					FORCE_ENABLE(core10Features.fillModeNonSolid);
+					FORCE_ENABLE(core10Features.depthBiasClamp);
 
 					// Vulkan 1.1 core.
-					forceEnable(core11Features.shaderDrawParameters);
-					forceEnable(core11Features.uniformAndStorageBuffer16BitAccess);
-					forceEnable(core11Features.storageBuffer16BitAccess);
+					FORCE_ENABLE(core11Features.shaderDrawParameters);
+					FORCE_ENABLE(core11Features.uniformAndStorageBuffer16BitAccess);
+					FORCE_ENABLE(core11Features.storageBuffer16BitAccess);
 
 					// Vulkan 1.2 core.
-					forceEnable(core12Features.drawIndirectCount);
-					forceEnable(core12Features.imagelessFramebuffer);
-					forceEnable(core12Features.separateDepthStencilLayouts);
-					forceEnable(core12Features.descriptorIndexing);
-					forceEnable(core12Features.runtimeDescriptorArray);
-					forceEnable(core12Features.descriptorBindingPartiallyBound);
-					forceEnable(core12Features.descriptorBindingVariableDescriptorCount);
-					forceEnable(core12Features.shaderSampledImageArrayNonUniformIndexing);
-					forceEnable(core12Features.descriptorBindingUpdateUnusedWhilePending);
-					forceEnable(core12Features.descriptorBindingSampledImageUpdateAfterBind);
-					forceEnable(core12Features.descriptorBindingStorageBufferUpdateAfterBind);
-					forceEnable(core12Features.shaderStorageBufferArrayNonUniformIndexing);
-					forceEnable(core12Features.timelineSemaphore);
-					forceEnable(core12Features.bufferDeviceAddress);
-					forceEnable(core12Features.shaderFloat16);
-					forceEnable(core12Features.storagePushConstant8);
-					forceEnable(core12Features.hostQueryReset);
-					forceEnable(core12Features.storageBuffer8BitAccess);
-					forceEnable(core12Features.uniformAndStorageBuffer8BitAccess);
+					FORCE_ENABLE(core12Features.drawIndirectCount);
+					FORCE_ENABLE(core12Features.imagelessFramebuffer);
+					FORCE_ENABLE(core12Features.separateDepthStencilLayouts);
+					FORCE_ENABLE(core12Features.descriptorIndexing);
+					FORCE_ENABLE(core12Features.runtimeDescriptorArray);
+					FORCE_ENABLE(core12Features.descriptorBindingPartiallyBound);
+					FORCE_ENABLE(core12Features.descriptorBindingVariableDescriptorCount);
+					FORCE_ENABLE(core12Features.shaderSampledImageArrayNonUniformIndexing);
+					FORCE_ENABLE(core12Features.descriptorBindingUpdateUnusedWhilePending);
+					FORCE_ENABLE(core12Features.descriptorBindingSampledImageUpdateAfterBind);
+					FORCE_ENABLE(core12Features.descriptorBindingStorageBufferUpdateAfterBind);
+					FORCE_ENABLE(core12Features.shaderStorageBufferArrayNonUniformIndexing);
+					FORCE_ENABLE(core12Features.timelineSemaphore);
+					FORCE_ENABLE(core12Features.bufferDeviceAddress);
+					FORCE_ENABLE(core12Features.shaderFloat16);
+					FORCE_ENABLE(core12Features.storagePushConstant8);
+					FORCE_ENABLE(core12Features.hostQueryReset);
+					FORCE_ENABLE(core12Features.storageBuffer8BitAccess);
+					FORCE_ENABLE(core12Features.uniformAndStorageBuffer8BitAccess);
 
 					// Vulkan 1.3 core.
-					forceEnable(core13Features.dynamicRendering);
-					forceEnable(core13Features.synchronization2);
-					forceEnable(core13Features.maintenance4);
+					FORCE_ENABLE(core13Features.dynamicRendering);
+					FORCE_ENABLE(core13Features.synchronization2);
+					FORCE_ENABLE(core13Features.maintenance4);
 
 					// EXT dynamic state2.
-					forceEnable(extendedDynamicState2Features.extendedDynamicState2LogicOp);
+					FORCE_ENABLE(extendedDynamicState2Features.extendedDynamicState2LogicOp);
 
 					// EXT dynamic state3
-					forceEnable(extendedDynamicState3Features.extendedDynamicState3DepthClampEnable);
-					forceEnable(extendedDynamicState3Features.extendedDynamicState3PolygonMode);
+					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3DepthClampEnable);
+					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3PolygonMode);
 				}
-				#undef forceEnable
+				#undef FORCE_ENABLE
 
-				#define optionalEnable(y, x) if (y) { if (s.x != VK_TRUE) { y = false; } else { e.x = VK_TRUE;  LOG_GRAPHICS_INFO("Enable '{0}'.", #x) } }
+				#define OPTIONAL_ENABLE(y, x) if (y) { if (s.x != VK_TRUE) { y = false; } else { e.x = VK_TRUE;  LOG_GRAPHICS_INFO("Enable '{0}'.", #x) } }
 				{
 					// Raytracing.
-					optionalEnable(m_initConfig.bRaytracing, accelerationStructureFeatures.accelerationStructure);
-					optionalEnable(m_initConfig.bRaytracing, raytracingPipelineFeatures.rayTracingPipeline);
-					optionalEnable(m_initConfig.bRaytracing, rayQueryFeatures.rayQuery);
+					OPTIONAL_ENABLE(m_initConfig.bRaytracing, accelerationStructureFeatures.accelerationStructure);
+					OPTIONAL_ENABLE(m_initConfig.bRaytracing, raytracingPipelineFeatures.rayTracingPipeline);
+					OPTIONAL_ENABLE(m_initConfig.bRaytracing, rayQueryFeatures.rayQuery);
+
+					// Mesh shader.
 				}
-				#undef optionalEnable
+				#undef OPTIONAL_ENABLE
 			}
 
 			std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;

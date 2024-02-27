@@ -3,7 +3,7 @@
 #pragma warning(disable : 4005)
 #pragma warning(disable : 4996)
 
-#include <Volk/volk.h>
+#include <volk/volk.h>
 #include <GLFW/glfw3.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>

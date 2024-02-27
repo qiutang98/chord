@@ -55,11 +55,11 @@ namespace chord
 		std::shared_ptr<LogCacheSink<std::mutex>> m_loggerCache;
 	};
 
-#define LOG_TRACE(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->trace   (__VA_ARGS__); })
-#define LOG_INFO(...)  chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->info    (__VA_ARGS__); })
-#define LOG_WARN(...)  chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->warn    (__VA_ARGS__); })
-#define LOG_ERROR(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->error   (__VA_ARGS__); })
-#define LOG_FATAL(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->critical(__VA_ARGS__); applicationCrash(); })
+	#define LOG_TRACE(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->trace(__VA_ARGS__); })
+	#define LOG_INFO(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->info(__VA_ARGS__); })
+	#define LOG_WARN(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->warn(__VA_ARGS__); })
+	#define LOG_ERROR(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->error(__VA_ARGS__); })
+	#define LOG_FATAL(...) chord_macro_sup_enableLogOnly({ LoggerSystem::get().getDefaultLogger()->critical(__VA_ARGS__); applicationCrash(); })
 }
 
 #define check(x) chord_macro_sup_checkPrintContent(x, LOG_FATAL)
