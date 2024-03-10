@@ -4,6 +4,7 @@
 #include <graphics/graphics.h>
 #include <utils/cvar.h>
 #include <application/application.h>
+#include <graphics/helper.h>
 
 namespace chord::graphics
 {
@@ -109,11 +110,6 @@ namespace chord::graphics
 		return *logger;
 	}
 
-	bool Context::onTick(const SubsystemTickData& tickData)
-	{
-		return true;
-	}
-
 	bool Context::onInit()
 	{
 		// Pre-return if application unvalid.
@@ -137,10 +133,52 @@ namespace chord::graphics
 				VK_VERSION_PATCH(version));
 		}
 
+		// Sup struct for enable feature or extension, when bEnable is nullptr, will force enable.
+		auto enableIfExist = [](bool* pEnable, const char* name, const char* feature, auto pMemberPtr, const auto& supports, std::vector<const char*>&enableds)
+		{
+			bool bForce  = (pEnable == nullptr);
+			bool bEnable = true;
+
+			if (!bForce)
+			{
+				bEnable = *pEnable;
+				if (!bEnable)
+				{
+					return;
+				}
+			}
+
+			bEnable = false;
+			for (const auto& support : supports)
+			{
+				if (same(name, support.*pMemberPtr))
+				{
+					bEnable = true;
+					break;
+				}
+			}
+
+			if (bEnable)
+			{
+				enableds.push_back(name);
+			}
+			else
+			{
+				LOG_GRAPHICS_ERROR("'{0}' unvalid, the feature {1} will disable.", name, feature);
+				checkGraphics(!bForce);
+
+				// Update enable state if require.
+				if (pEnable)
+				{
+					*pEnable = bEnable;
+				}
+			}
+		};
+
 		LOG_GRAPHICS_TRACE("Creating vulkan instance...");
 		{
 			VkApplicationInfo appInfo{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
-			appInfo.pApplicationName   = Application::get().getName().c_str();
+			appInfo.pApplicationName   = "vulkan";
 			appInfo.applicationVersion = 0U;
 			appInfo.pEngineName        = "chord";
 			appInfo.engineVersion      = 0U;
@@ -153,36 +191,7 @@ namespace chord::graphics
 				std::vector<VkLayerProperties> supportedInstanceLayers(instanceLayerCount);
 				checkVkResult(vkEnumerateInstanceLayerProperties(&instanceLayerCount, supportedInstanceLayers.data()));
 
-				auto layerCheck = [&](const char* name, const char* feature) -> bool
-				{
-					for (const auto& properties : supportedInstanceLayers)
-					{
-						if (same(name, properties.layerName))
-						{
-							return true;
-						}
-					}
-
-					LOG_GRAPHICS_ERROR(
-						"Required instance layer {0} unvalid, the instance layer feature {1} will disable.", name, feature);
-
-					return false;
-				};
-
-				auto optionalEnable = [&](bool& bState, const char* name, const char* feature)
-				{
-					if (bState)
-					{
-						bState = layerCheck(name, feature);
-						if (bState)
-						{
-							layers.push_back(name);
-						}
-					}
-				};
-
-				// Validation layer.
-				optionalEnable(m_initConfig.bValidation, "VK_LAYER_KHRONOS_validation", "Validation");
+				enableIfExist(&m_initConfig.bValidation, "VK_LAYER_KHRONOS_validation", "Validation", &VkLayerProperties::layerName, supportedInstanceLayers, layers);
 			}
 
 			std::vector<const char*> extensions{ };
@@ -192,34 +201,7 @@ namespace chord::graphics
 				std::vector<VkExtensionProperties> availableInstanceExtensions(instanceExtensionCount);
 				checkVkResult(vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, availableInstanceExtensions.data()));
 
-				auto extensionsCheck = [&](const char* name, const char* feature) -> bool
-				{
-					for (const auto& properties : availableInstanceExtensions)
-					{
-						if (same(name, properties.extensionName))
-						{
-							return true;
-						}
-					}
-
-					LOG_GRAPHICS_ERROR(
-						"Required instance extension {0} unvalid, the instance extension feature {1} will disable.", name, feature);
-					return false;
-				};
-
-				auto optionalEnable = [&](bool& bState, const char* name, const char* feature)
-				{
-					if (bState)
-					{
-						bState = extensionsCheck(name, feature);
-						if (bState)
-						{
-							extensions.push_back(name);
-						}
-					}
-				};
-
-				optionalEnable(m_initConfig.bDebugUtils, VK_EXT_DEBUG_UTILS_EXTENSION_NAME, "DebugUtils");
+				enableIfExist(&m_initConfig.bDebugUtils, VK_EXT_DEBUG_UTILS_EXTENSION_NAME, "DebugUtils", &VkExtensionProperties::extensionName, availableInstanceExtensions, extensions);
 
 				// GLFW special extension.
 				if (m_initConfig.bGLFW)
@@ -230,7 +212,7 @@ namespace chord::graphics
 
 					for (auto i = 0; i < glfwExtensionCount; i++)
 					{
-						optionalEnable(m_initConfig.bGLFW, glfwExtensions[i], "GLFW");
+						enableIfExist(&m_initConfig.bGLFW, glfwExtensions[i], "GLFW", &VkExtensionProperties::extensionName, availableInstanceExtensions, extensions);
 					}
 				}
 			}
@@ -267,7 +249,7 @@ namespace chord::graphics
 			}
 
 			// create vulkan instance.
-			if (vkCreateInstance(&instanceInfo, nullptr, &m_instance) != VK_SUCCESS)
+			if (vkCreateInstance(&instanceInfo, m_initConfig.pAllocationCallbacks, &m_instance) != VK_SUCCESS)
 			{
 				LOG_GRAPHICS_ERROR("Fail to create vulkan instance.");
 				return false;
@@ -279,7 +261,7 @@ namespace chord::graphics
 
 				if (m_initConfig.bDebugUtils)
 				{
-					checkVkResult(vkCreateDebugUtilsMessengerEXT(m_instance, &debugUtilsCreateInfo, nullptr, &m_debugUtilsHandle));
+					checkVkResult(vkCreateDebugUtilsMessengerEXT(m_instance, &debugUtilsCreateInfo, m_initConfig.pAllocationCallbacks, &m_debugUtilsHandle));
 				}
 			}
 		}
@@ -318,23 +300,16 @@ namespace chord::graphics
 			{
 				auto& props = m_physicalDeviceProperties;
 
+				// Query memory.
 				vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &props.memoryProperties);
-				vkGetPhysicalDeviceProperties(m_physicalDevice, &props.deviceProperties);
-				LOG_GRAPHICS_INFO("Application select GPU '{0}'.", props.deviceProperties.deviceName);
 
-				props.deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-				props.deviceProperties2.pNext = &props.descriptorIndexingProperties;
-
-				props.descriptorIndexingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
-				props.descriptorIndexingProperties.pNext = &props.accelerationStructureProperties;
-
-				props.accelerationStructureProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
-				props.accelerationStructureProperties.pNext = &props.subgroupProperties;
-
-				props.subgroupProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
-				props.subgroupProperties.pNext = nullptr;
+				// 
+				auto pNext = props.getNextPtr();
 
 				vkGetPhysicalDeviceProperties2(m_physicalDevice, &props.deviceProperties2);
+				props.deviceProperties = props.deviceProperties2.properties;
+
+				LOG_GRAPHICS_INFO("Application select GPU '{0}'.", props.deviceProperties.deviceName);
 			}
 
 			// Query and cache GPU features.
@@ -358,6 +333,7 @@ namespace chord::graphics
 				uint32 copyQueueCount     { 0 };
 				uint32 sparseBindingCount { 0 };
 				uint32 videoDecodeCount   { 0 };
+				uint32 videoEncodeCount   { 0 };
 
 				uint32 queueFamilyCount = 0;
 				vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueFamilyCount, nullptr);
@@ -365,59 +341,86 @@ namespace chord::graphics
 				vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueFamilyCount, queueFamilies.data());
 
 				// NOTE: QueueFamilies sort by VkQueueFlagBits in my nVidia graphics card, no ensure the order is same with AMD graphics card.
-				for (uint32 queueIndex = 0; queueIndex < queueFamilies.size(); queueIndex ++)
+				std::vector<uint32> queueTypeIndices(queueFamilyCount);
+				for (uint32 i = 0; i < queueFamilyCount; i++)
 				{
-					auto& queueFamily = queueFamilies[queueIndex];
-					auto& info = m_gpuQueuesInfo;
-
-					const bool bSupportGraphics      = queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT;
-					const bool bSupportCompute       = queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT;
-					const bool bSupportCopy          = queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT; 
-					const bool bSupportSparseBinding = queueFamily.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT;
-					const bool bSupportVideoDecode   = queueFamily.queueFlags & VK_QUEUE_VIDEO_DECODE_BIT_KHR;
-
-					if (bSupportGraphics && !info.graphicsFamily.isValid())
-					{
-						graphicsQueueCount = queueFamily.queueCount;
-						info.graphicsFamily = queueIndex;
-
-						LOG_GRAPHICS_INFO("Found graphics family at #{0} with count: {1}.", queueIndex, queueFamily.queueCount);
-					}
-					else if (bSupportCompute && !info.computeFamily.isValid())
-					{
-						computeQueueCount = queueFamily.queueCount;
-						info.computeFamily = queueIndex;
-
-						LOG_GRAPHICS_INFO("Found compute family at #{0} with count: {1}.", queueIndex, queueFamily.queueCount);
-					}
-					else if (bSupportCopy && !info.copyFamily.isValid())
-					{
-						copyQueueCount = queueFamily.queueCount;
-						info.copyFamily = queueIndex;
-
-						LOG_GRAPHICS_INFO("Found copy family at #{0} with count: {1}.", queueIndex, queueFamily.queueCount);
-					}
-					else if (bSupportSparseBinding && !info.sparseBindingFamily.isValid())
-					{
-						sparseBindingCount = queueFamily.queueCount;
-						info.sparseBindingFamily = queueIndex;
-
-						LOG_GRAPHICS_INFO("Found sparse binding family at #{0} with count: {1}.", queueIndex, queueFamily.queueCount);
-					}
-					else if (bSupportVideoDecode && !info.videoDecodeFamily.isValid())
-					{
-						videoDecodeCount = queueFamily.queueCount;
-						info.videoDecodeFamily = queueIndex;
-
-						LOG_GRAPHICS_INFO("Found video decode family at #{0} with count: {1}.", queueIndex, queueFamily.queueCount);
-					}
+					queueTypeIndices[i] = i;
 				}
+
+				// Sort by importance type.
+				std::sort(queueTypeIndices.begin(), queueTypeIndices.end(), [&](const auto& A, const auto& B)
+				{
+					int32 AScore = 0;
+					int32 BScore = 0;
+
+					auto getScore = [&](auto index, auto type, int32 weight)
+					{
+						return (queueFamilies[index].queueFlags & type ? 1 : 0) * queueFamilies[index].queueCount * weight;
+					};
+					
+					// Graphics.
+					AScore += getScore(A, VK_QUEUE_GRAPHICS_BIT, 100000);
+					BScore += getScore(B, VK_QUEUE_GRAPHICS_BIT, 100000);
+
+					// Compute.
+					AScore += getScore(A, VK_QUEUE_COMPUTE_BIT, 10000);
+					BScore += getScore(B, VK_QUEUE_COMPUTE_BIT, 10000);
+
+					// Copy.
+					AScore += getScore(A, VK_QUEUE_TRANSFER_BIT, 1000);
+					BScore += getScore(B, VK_QUEUE_TRANSFER_BIT, 1000);
+
+					// Sparse binding.
+					AScore += getScore(A, VK_QUEUE_SPARSE_BINDING_BIT, 500);
+					BScore += getScore(B, VK_QUEUE_SPARSE_BINDING_BIT, 500);
+
+					// Video decode.
+					AScore += getScore(A, VK_QUEUE_VIDEO_DECODE_BIT_KHR, 500);
+					BScore += getScore(B, VK_QUEUE_VIDEO_DECODE_BIT_KHR, 500);
+
+					// Video encode.
+					AScore += getScore(A, VK_QUEUE_VIDEO_ENCODE_BIT_KHR, 500);
+					BScore += getScore(B, VK_QUEUE_VIDEO_ENCODE_BIT_KHR, 500);
+
+					return AScore > BScore;
+				});
+
+				std::unordered_set<uint32> soloUsedFamilies {};
+				auto setQueueFamily = [&](auto bit, auto& count, auto& family, const char* type, bool bSolo)
+				{
+					for (uint32 i = 0; i < queueFamilies.size(); i++)
+					{
+						auto queueIndex = queueTypeIndices[i];
+						const auto& queueFamily = queueFamilies[queueIndex];
+						if (!soloUsedFamilies.contains(queueIndex) && (queueFamily.queueFlags & bit))
+						{
+							count = queueFamily.queueCount;
+							family = queueIndex;
+
+							LOG_GRAPHICS_INFO("Found {2} family at #{0} with count: {1}.", queueIndex, queueFamily.queueCount, type);
+							break;
+						}
+					}
+
+					if (bSolo)
+					{
+						soloUsedFamilies.emplace(family.get());
+					}
+				};
+
+				setQueueFamily(VK_QUEUE_GRAPHICS_BIT, graphicsQueueCount, m_gpuQueuesInfo.graphicsFamily, "graphics", true);
+				setQueueFamily(VK_QUEUE_COMPUTE_BIT, computeQueueCount, m_gpuQueuesInfo.computeFamily, "compute", true);
+				setQueueFamily(VK_QUEUE_TRANSFER_BIT, copyQueueCount, m_gpuQueuesInfo.copyFamily, "copy", true);
+				setQueueFamily(VK_QUEUE_VIDEO_ENCODE_BIT_KHR, videoEncodeCount, m_gpuQueuesInfo.videoEncodeFamily, "video encode", true);
+				setQueueFamily(VK_QUEUE_VIDEO_DECODE_BIT_KHR, videoDecodeCount, m_gpuQueuesInfo.videoDecodeFamily, "video decode", true);
+				setQueueFamily(VK_QUEUE_SPARSE_BINDING_BIT, sparseBindingCount, m_gpuQueuesInfo.sparseBindingFamily, "sparse binding", true);
 
 				m_gpuQueuesInfo.graphcisQueues.resize(graphicsQueueCount);
 				m_gpuQueuesInfo.computeQueues.resize(computeQueueCount);
 				m_gpuQueuesInfo.copyQueues.resize(copyQueueCount);
 				m_gpuQueuesInfo.spatialBindingQueues.resize(sparseBindingCount);
 				m_gpuQueuesInfo.videoDecodeQueues.resize(videoDecodeCount);
+				m_gpuQueuesInfo.videoEncodeQueues.resize(videoEncodeCount);
 			}
 		}
 
@@ -430,74 +433,28 @@ namespace chord::graphics
 				// Query all useful device extensions.
 				uint32 deviceExtensionCount;
 				vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &deviceExtensionCount, nullptr);
-				std::vector<VkExtensionProperties> availableDeviceExtensions(deviceExtensionCount);
-				vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &deviceExtensionCount, availableDeviceExtensions.data());
+				std::vector<VkExtensionProperties> available(deviceExtensionCount);
+				vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &deviceExtensionCount, available.data());
 
-				auto existDeviceExtension = [&](const char* name, const char* feature)
-				{
-					for (auto& availableExtension : availableDeviceExtensions)
-					{
-						if (same(availableExtension.extensionName, name))
-						{
-							return true;
-						}
-					}
-
-					return false;
-				};
 				// Force enable some device extensions.
-				{
-					auto forceEnable = [&](const char* name, const char* feature)
-					{
-						if (!existDeviceExtension(name, feature))
-						{
-							LOG_GRAPHICS_FATAL("Force enable device extension {0} unvalid, the necessary feature {1} will disabled.", name, feature);
-						}
-						deviceExtensionNames.push_back(name);
-					};
+				enableIfExist(nullptr, VK_KHR_MAINTENANCE1_EXTENSION_NAME, "Maintenance1", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_KHR_MAINTENANCE2_EXTENSION_NAME, "Maintenance2", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_KHR_MAINTENANCE3_EXTENSION_NAME, "Maintenance3", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_KHR_MAINTENANCE1_EXTENSION_NAME, "Maintenance1", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, "PushDescriptor", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 
-					// Maintenance extension.
-					forceEnable(VK_KHR_MAINTENANCE1_EXTENSION_NAME, "Maintenance1");
-					forceEnable(VK_KHR_MAINTENANCE2_EXTENSION_NAME, "Maintenance2");
-					forceEnable(VK_KHR_MAINTENANCE3_EXTENSION_NAME, "Maintenance3");
+				// GLFW
+				enableIfExist(&m_initConfig.bGLFW, VK_KHR_SWAPCHAIN_EXTENSION_NAME, "GLFW", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 
-					// Push descriptor.
-					forceEnable(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, "PushDescriptor");
-				}
+				// Hdr.
+				m_initConfig.bHDR &= m_initConfig.bGLFW;
+				enableIfExist(&m_initConfig.bHDR, VK_EXT_HDR_METADATA_EXTENSION_NAME, "HDR", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 
-				// Optional device extensions.
-				{
-					auto optionalEnable = [&](bool& bState, const char* name, const char* feature)
-					{
-						if (bState)
-						{
-							if (existDeviceExtension(name, feature))
-							{
-								deviceExtensionNames.push_back(name);
-							}
-							else
-							{
-								LOG_GRAPHICS_ERROR("Required device extension {0} unvalid, the feature {1} will disabled.", name, feature);
-								bState = false;
-							}
-						}
-					};
-
-					// GLFW.
-					optionalEnable(m_initConfig.bGLFW, VK_KHR_SWAPCHAIN_EXTENSION_NAME, "GLFW");
-
-					// HDR.
-					if (m_initConfig.bGLFW)
-					{
-						optionalEnable(m_initConfig.bHDR, VK_EXT_HDR_METADATA_EXTENSION_NAME, "HDR");
-					}
-
-					// Raytracing.
-					optionalEnable(m_initConfig.bRaytracing, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,   "Raytracing");
-					optionalEnable(m_initConfig.bRaytracing, VK_KHR_RAY_QUERY_EXTENSION_NAME,                "Raytracing");
-					optionalEnable(m_initConfig.bRaytracing, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,     "Raytracing");
-					optionalEnable(m_initConfig.bRaytracing, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, "Raytracing");
-				}
+				// RTX.
+				enableIfExist(&m_initConfig.bRaytracing, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, "Raytracing", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(&m_initConfig.bRaytracing, VK_KHR_RAY_QUERY_EXTENSION_NAME, "Raytracing", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(&m_initConfig.bRaytracing, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, "Raytracing", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(&m_initConfig.bRaytracing, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, "Raytracing", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 
 				for (auto i = 0; i < deviceExtensionNames.size(); i++)
 				{
@@ -510,7 +467,7 @@ namespace chord::graphics
 				auto& s = m_physicalDeviceFeatures;
 				auto& e = m_physicalDeviceFeaturesEnabled;
 
-				#define FORCE_ENABLE(x) check(s.x == VK_TRUE); e.x = VK_TRUE; LOG_GRAPHICS_INFO("Enable '{0}'.", #x);
+				#define FORCE_ENABLE(x) checkGraphics(s.x == VK_TRUE); e.x = VK_TRUE; LOG_GRAPHICS_INFO("Enable '{0}'.", #x);
 				{
 					// Vulkan 1.0 core.
 					FORCE_ENABLE(core10Features.samplerAnisotropy);
@@ -586,6 +543,7 @@ namespace chord::graphics
 			std::vector<float> copyQueuePriority(m_gpuQueuesInfo.copyQueues.size(), kQueueDefaultPriority);
 			std::vector<float> sparseBindingQueuePriority(m_gpuQueuesInfo.spatialBindingQueues.size(), kQueueDefaultPriority);
 			std::vector<float> videoDecodeQueuePriority(m_gpuQueuesInfo.videoDecodeQueues.size(), kQueueDefaultPriority);
+			std::vector<float> videoEncodeQueuePriority(m_gpuQueuesInfo.videoEncodeQueues.size(), kQueueDefaultPriority);
 
 			// Priority config.
 			{
@@ -601,75 +559,43 @@ namespace chord::graphics
 
 			// Update queues' priority.
 			{
-				for (auto id = 0; id < m_gpuQueuesInfo.graphcisQueues.size(); id++)
+				auto updateQueuesPriority = [](auto& dest, const auto& src)
 				{
-					m_gpuQueuesInfo.graphcisQueues[id].priority = graphicsQueuePriority[id];
-				}
+					for (auto id = 0; id < dest.size(); id++)
+					{
+						dest[id].priority = src[id];
+					}
+				};
 
-				for (auto id = 0; id < m_gpuQueuesInfo.computeQueues.size(); id++)
-				{
-					m_gpuQueuesInfo.computeQueues[id].priority = computeQueuePriority[id];
-				}
-
-				for (auto id = 0; id < m_gpuQueuesInfo.copyQueues.size(); id++)
-				{
-					m_gpuQueuesInfo.copyQueues[id].priority = copyQueuePriority[id];
-				}
-
-				for (auto id = 0; id < m_gpuQueuesInfo.spatialBindingQueues.size(); id++)
-				{
-					m_gpuQueuesInfo.spatialBindingQueues[id].priority = sparseBindingQueuePriority[id];
-				}
-
-				for (auto id = 0; id < m_gpuQueuesInfo.videoDecodeQueues.size(); id++)
-				{
-					m_gpuQueuesInfo.videoDecodeQueues[id].priority = videoDecodeQueuePriority[id];
-				}
+				updateQueuesPriority(m_gpuQueuesInfo.graphcisQueues, graphicsQueuePriority);
+				updateQueuesPriority(m_gpuQueuesInfo.computeQueues, computeQueuePriority);
+				updateQueuesPriority(m_gpuQueuesInfo.copyQueues, copyQueuePriority);
+				updateQueuesPriority(m_gpuQueuesInfo.spatialBindingQueues, sparseBindingQueuePriority);
+				updateQueuesPriority(m_gpuQueuesInfo.videoDecodeQueues, videoDecodeQueuePriority);
+				updateQueuesPriority(m_gpuQueuesInfo.videoEncodeQueues, videoEncodeQueuePriority);
 			}
 
 			// Build queue create infos.
 			{
-				VkDeviceQueueCreateInfo queueCreateInfo{ .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+				VkDeviceQueueCreateInfo queueCreateInfo { .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
 
-				if (m_gpuQueuesInfo.graphcisQueues.size() > 0)
+				auto buildQueueCreateInfo = [&](const auto& queues, const auto& family, const auto& priorities)
 				{
-					queueCreateInfo.queueFamilyIndex = m_gpuQueuesInfo.graphicsFamily.get();
-					queueCreateInfo.queueCount = (uint32)m_gpuQueuesInfo.graphcisQueues.size();
-					queueCreateInfo.pQueuePriorities = graphicsQueuePriority.data();
-					queueCreateInfos.push_back(queueCreateInfo);
-				}
+					if (queues.size() > 0)
+					{
+						queueCreateInfo.queueFamilyIndex = family.get();
+						queueCreateInfo.queueCount = (uint32)queues.size();
+						queueCreateInfo.pQueuePriorities = priorities.data();
+						queueCreateInfos.push_back(queueCreateInfo);
+					}
+				};
 
-				if (m_gpuQueuesInfo.computeQueues.size() > 0)
-				{
-					queueCreateInfo.queueFamilyIndex = m_gpuQueuesInfo.computeFamily.get();
-					queueCreateInfo.queueCount = (uint32)m_gpuQueuesInfo.computeQueues.size();
-					queueCreateInfo.pQueuePriorities = computeQueuePriority.data();
-					queueCreateInfos.push_back(queueCreateInfo);
-				}
-
-				if (m_gpuQueuesInfo.copyQueues.size() > 0)
-				{
-					queueCreateInfo.queueFamilyIndex = m_gpuQueuesInfo.copyFamily.get();
-					queueCreateInfo.queueCount = (uint32)m_gpuQueuesInfo.copyQueues.size();
-					queueCreateInfo.pQueuePriorities = copyQueuePriority.data();
-					queueCreateInfos.push_back(queueCreateInfo);
-				}
-
-				if (m_gpuQueuesInfo.spatialBindingQueues.size() > 0)
-				{
-					queueCreateInfo.queueFamilyIndex = m_gpuQueuesInfo.sparseBindingFamily.get();
-					queueCreateInfo.queueCount = (uint32)m_gpuQueuesInfo.spatialBindingQueues.size();
-					queueCreateInfo.pQueuePriorities = sparseBindingQueuePriority.data();
-					queueCreateInfos.push_back(queueCreateInfo);
-				}
-
-				if (m_gpuQueuesInfo.videoDecodeQueues.size() > 0)
-				{
-					queueCreateInfo.queueFamilyIndex = m_gpuQueuesInfo.videoDecodeFamily.get();
-					queueCreateInfo.queueCount = (uint32)m_gpuQueuesInfo.videoDecodeQueues.size();
-					queueCreateInfo.pQueuePriorities = videoDecodeQueuePriority.data();
-					queueCreateInfos.push_back(queueCreateInfo);
-				}
+				buildQueueCreateInfo(m_gpuQueuesInfo.graphcisQueues, m_gpuQueuesInfo.graphicsFamily, graphicsQueuePriority);
+				buildQueueCreateInfo(m_gpuQueuesInfo.computeQueues, m_gpuQueuesInfo.computeFamily, computeQueuePriority);
+				buildQueueCreateInfo(m_gpuQueuesInfo.copyQueues, m_gpuQueuesInfo.copyFamily, copyQueuePriority);
+				buildQueueCreateInfo(m_gpuQueuesInfo.spatialBindingQueues, m_gpuQueuesInfo.sparseBindingFamily, sparseBindingQueuePriority);
+				buildQueueCreateInfo(m_gpuQueuesInfo.videoDecodeQueues, m_gpuQueuesInfo.videoDecodeFamily, videoDecodeQueuePriority);
+				buildQueueCreateInfo(m_gpuQueuesInfo.videoEncodeQueues, m_gpuQueuesInfo.videoEncodeFamily, videoEncodeQueuePriority);
 			}
 
 			// Device create feature.
@@ -702,7 +628,7 @@ namespace chord::graphics
 			createInfo.enabledLayerCount = 0;
 
 			// Now create device.
-			checkVkResult(vkCreateDevice(m_physicalDevice, &createInfo, nullptr, &m_device));
+			checkVkResult(vkCreateDevice(m_physicalDevice, &createInfo, m_initConfig.pAllocationCallbacks, &m_device));
 		}
 
 		// Post device create process.
@@ -711,65 +637,131 @@ namespace chord::graphics
 
 			// Queue udpate.
 			{
-				for (auto id = 0; id < m_gpuQueuesInfo.graphcisQueues.size(); id++)
+				auto updateQueue = [&](auto& queues, const auto& family)
 				{
-					vkGetDeviceQueue(m_device, m_gpuQueuesInfo.graphicsFamily.get(), id, &m_gpuQueuesInfo.graphcisQueues[id].queue);
-				}
-				for (auto id = 0; id < m_gpuQueuesInfo.computeQueues.size(); id++)
-				{
-					vkGetDeviceQueue(m_device, m_gpuQueuesInfo.computeFamily.get(), id, &m_gpuQueuesInfo.computeQueues[id].queue);
-				}
-				for (auto id = 0; id < m_gpuQueuesInfo.copyQueues.size(); id++)
-				{
-					vkGetDeviceQueue(m_device, m_gpuQueuesInfo.copyFamily.get(), id, &m_gpuQueuesInfo.copyQueues[id].queue);
-				}
-				for (auto id = 0; id < m_gpuQueuesInfo.spatialBindingQueues.size(); id++)
-				{
-					vkGetDeviceQueue(m_device, m_gpuQueuesInfo.sparseBindingFamily.get(), id, &m_gpuQueuesInfo.spatialBindingQueues[id].queue);
-				}
-				for (auto id = 0; id < m_gpuQueuesInfo.videoDecodeQueues.size(); id++)
-				{
-					vkGetDeviceQueue(m_device, m_gpuQueuesInfo.videoDecodeFamily.get(), id, &m_gpuQueuesInfo.videoDecodeQueues[id].queue);
-				}
+					for (auto id = 0; id < queues.size(); id++)
+					{
+						vkGetDeviceQueue(m_device, family.get(), id, &queues[id].queue);
+					}
+				};
+				updateQueue(m_gpuQueuesInfo.graphcisQueues, m_gpuQueuesInfo.graphicsFamily);
+				updateQueue(m_gpuQueuesInfo.computeQueues, m_gpuQueuesInfo.computeFamily);
+				updateQueue(m_gpuQueuesInfo.copyQueues, m_gpuQueuesInfo.copyFamily);
+				updateQueue(m_gpuQueuesInfo.spatialBindingQueues, m_gpuQueuesInfo.sparseBindingFamily);
+				updateQueue(m_gpuQueuesInfo.videoDecodeQueues, m_gpuQueuesInfo.videoDecodeFamily);
+				updateQueue(m_gpuQueuesInfo.videoEncodeQueues, m_gpuQueuesInfo.videoEncodeFamily);
+			}
+
+			// Create pipeline cache
+			{
+				VkPipelineCacheCreateInfo ci {};
+				ci.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+				
+				checkVkResult(vkCreatePipelineCache(m_device, &ci, m_initConfig.pAllocationCallbacks, &m_pipelineCache));
+			}
+
+			// Create swapchain.
+			{
+				m_swapchain = std::make_unique<Swapchain>();
 			}
 		}
 
+		return true;
+	}
+
+	Context::Context(const InitConfig& config)
+		: ISubsystem("Graphics")
+		, m_initConfig(config)
+	{
+
+	}
+
+	bool Context::onTick(const SubsystemTickData& tickData)
+	{
+		const bool bMainMinimized = Application::get().isFramebufferZeroSize();
+
+		auto [contextCmd, contextWaitSemaphore] = m_swapchain->beginFrameCmd(tickData.tickCount);
+		{
+			// Record.
+		}
+		helper::endCommandBuffer(contextCmd);
+
+		if (bMainMinimized)
+		{
+			// Submit to queue.
+		}
+		else
+		{
+			// Acquire next present image.
+			uint32 backBufferIndex = m_swapchain->acquireNextPresentImage();
+
+			// Submit and present fence.
+			{
+				VkPipelineStageFlags kWaitFlags = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+
+				VkSemaphore waitSemaphores[] =
+				{ 
+					m_swapchain->getCurrentFrameWaitSemaphore(), 
+					contextWaitSemaphore 
+				};
+
+				VkSemaphore signalSemaphores[] =
+				{ 
+					m_swapchain->getCurrentFrameFinishSemaphore() 
+				};
+
+				helper::SubmitInfo contextCmdSubmitInfo{ };
+				contextCmdSubmitInfo.setWaitStage(&kWaitFlags)
+					.setWaitSemaphore(waitSemaphores, countof(waitSemaphores))
+					.setSignalSemaphore(signalSemaphores, countof(waitSemaphores))
+					.setCommandBuffer(&contextCmd, 1);
+
+				std::vector<VkSubmitInfo> infosRawSubmit{ contextCmdSubmitInfo };
+				m_swapchain->submit((uint32)infosRawSubmit.size(), infosRawSubmit.data());
+			}
+
+		}
+
+
+		if (!bMainMinimized)
+		{
+			m_swapchain->present();
+		}
 
 		return true;
 	}
 
 	void Context::beforeRelease()
 	{
-
+		vkDeviceWaitIdle(m_device);
 	}
-
 
 	void Context::onRelease()
 	{
+		// Swapchain.
+		m_swapchain.reset();
+
+
+		helper::destroyPipelineCache(m_pipelineCache);
+
 		if (m_device != VK_NULL_HANDLE)
 		{
-			vkDestroyDevice(m_device, nullptr);
+			vkDestroyDevice(m_device, m_initConfig.pAllocationCallbacks);
+			m_device = VK_NULL_HANDLE;
 		}
 
-		if (m_debugUtilsHandle != VK_NULL_HANDLE)
-		{
-			vkDestroyDebugUtilsMessengerEXT(m_instance, m_debugUtilsHandle, nullptr);
-			m_debugUtilsHandle = VK_NULL_HANDLE;
-		}
+		helper::destroyDebugUtilsMessenger(m_debugUtilsHandle);
 
 		if (m_instance != VK_NULL_HANDLE)
 		{
-			vkDestroyInstance(m_instance, nullptr);
+			vkDestroyInstance(m_instance, m_initConfig.pAllocationCallbacks);
 			m_instance = VK_NULL_HANDLE;
 		}
 	}
-}
 
-namespace chord
-{
-	graphics::Context& getContext()
+	Context& graphics::getContext()
 	{
-		return Application::get().getSubsystem<graphics::Context>();
+		static Context* context = &Application::get().getEngine().getSubsystem<Context>();
+		return *context;
 	}
 }
-

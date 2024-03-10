@@ -19,39 +19,38 @@ namespace chord
 		clear();
 
 		m_requiredComponent = requiredComponent;
-		m_pixels = stbi_load(path.c_str(), &m_width, &m_height, &m_component, m_requiredComponent);
-
-		if (m_pixels == nullptr)
+		auto* pixels = stbi_load(path.c_str(), &m_width, &m_height, &m_component, m_requiredComponent);
 		{
-			clear();
-			return false;
+			if (pixels == nullptr)
+			{
+				clear();
+				return false;
+			}
+
+			m_pixels.resize(m_width * m_height * m_requiredComponent);
+			::memcpy(m_pixels.data(), pixels, m_pixels.size());
 		}
+		stbi_image_free(pixels);
 
 		return true;
 	}
 
-	ImageLdr2D::ImageLdr2D(
-		uint8 R, uint8 G, uint8 B, uint8 A, 
-		int32 width, int32 height)
+	void ImageLdr2D::fillColor(RGBA c, int32 width, int32 height)
 	{
 		m_width  = width;
 		m_height = height;
 		m_component = m_requiredComponent = 4;
 
 		const auto count = width * height * m_requiredComponent;
-		m_pixels = (uint8*)(::malloc(count));
+		m_pixels.resize(count);
 
-		uint8 colors[] = { R, G, B, A };
 		for (int32 i = 0; i < count; i += m_requiredComponent)
 		{
-			::memcpy(&m_pixels[i], colors, m_requiredComponent);
+			::memcpy(&m_pixels[i], c.getData(), m_requiredComponent);
 		}
 	}
 
-	void ImageLdr2D::fillChessboard(
-		uint8 R0, uint8 G0, uint8 B0, uint8 A0, 
-		uint8 R1, uint8 G1, uint8 B1, uint8 A1, 
-		int32 width, int32 height, int32 blockDim)
+	void ImageLdr2D::fillChessboard(RGBA c0, RGBA c1, int32 width, int32 height, int32 blockDim)
 	{
 		clear();
 
@@ -60,11 +59,7 @@ namespace chord
 		m_component = m_requiredComponent = 4;
 
 		const auto count = width * height * m_requiredComponent;
-		m_pixels = (uint8*)(::malloc(count));
-
-		uint8 colors0[] = { R0, G0, B0, A0 };
-		uint8 colors1[] = { R1, G1, B1, A1 };
-
+		m_pixels.resize(count);
 
 		for (int32 i = 0; i < count; i += m_requiredComponent)
 		{
@@ -74,20 +69,14 @@ namespace chord
 			int32 x = ((pixelIndex % width) % (blockDim * 2)) / blockDim;
 			int32 y = ((pixelIndex / width) % (blockDim * 2)) / blockDim;
 
-
 			const bool bColor1 = (x + y == 1);
-			::memcpy(&m_pixels[i], bColor1 ? colors1 : colors0, m_requiredComponent);
+			::memcpy(&m_pixels[i], bColor1 ? c1.getData() : c0.getData(), m_requiredComponent);
 		}
 	}
 
 	void ImageLdr2D::clear()
 	{
-		if (m_pixels != nullptr)
-		{
-			::free(m_pixels);
-		}
-
-		m_pixels = nullptr;
+		m_pixels = { };
 		m_width = 0;
 		m_height = 0;
 		m_component = 0;

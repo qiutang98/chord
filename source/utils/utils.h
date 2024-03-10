@@ -100,10 +100,27 @@ namespace chord
 	    ::memset(&data, 0, sizeof(T));
 	}
 
-	static inline void setApplicationTitle(const std::string_view title)
+	static inline auto convertString(const std::u8string& u8str)
 	{
-		std::cout << "\033]0;" << title << "\007";
+		return reinterpret_cast<const char*>(u8str.c_str());
 	}
+
+	static inline auto convertUTF8(const std::string& str)
+	{
+		return reinterpret_cast<const char8_t*>(str.c_str());
+	}
+
+	extern void setConsoleTitle(const std::string& title);
+	extern void setConsoleUtf8();
+
+	// Set first valid font as console font.
+	struct ConsoleFontConfig
+	{
+		std::wstring name;
+		uint32 width;
+		uint32 height;
+	};
+	extern void setConsoleFont(const std::vector<ConsoleFontConfig>& fontTypes);
 
 	extern void debugBreak();
 
@@ -128,5 +145,11 @@ namespace chord
 	constexpr size_t getTypeHash()
 	{
 		return typeid(T).hash_code();
+	}
+
+	template < typename T, size_t N >
+	size_t countof(T(&arr)[N])
+	{
+		return std::extent<T[N]>::value;
 	}
 }

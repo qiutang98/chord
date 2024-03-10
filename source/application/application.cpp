@@ -4,42 +4,92 @@
 
 namespace chord
 {
+    static void resizeCallBack(GLFWwindow* window, int width, int height)
+    {
+        auto data = reinterpret_cast<WindowData*>(glfwGetWindowUserPointer(window));
+
+        data->width = width;
+        data->height = height;
+    }
+
     Application& Application::get()
     {
         static Application app{ };
         return app;
     }
 
-    bool Application::removeSubsystem(const std::string& key)
+    void Application::createMainWindow(const InitConfig& config)
     {
-        if (!m_subsystems.empty() && m_registeredSubsystemMap.contains(key))
-        {
-            const auto& id = m_registeredSubsystemMap.at(key);
-            if (id.isValid())
-            {
+        using ShowModeEnum = InitConfig::EWindowMode;
 
-                check(m_subsystems.size() > id.get());
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // Vulkan need disable OpenGL context api.
+		glfwWindowHint(GLFW_RESIZABLE, config.bResizable ? GL_TRUE : GL_FALSE);
 
-                m_subsystems.erase(m_subsystems.begin() + id.get());
-                m_registeredSubsystemMap.erase(key);
+		// We create window in primary monitor.
+		auto* monitor = glfwGetPrimaryMonitor();
 
-                // We need to update registered subsystem index map.
-                for (std::size_t i = 0; i < m_subsystems.size(); i ++)
-                {
-                    m_registeredSubsystemMap[m_subsystems[i]->getHash()] = i;
-                }
+		// Get monitor information.
+		const GLFWvidmode* mode = glfwGetVideoMode(monitor);
 
-                return true;
-            }
-        }
+		// Create window for different window type.
+		if (config.windowShowMode == ShowModeEnum::FullScreen)
+		{
+			m_windowData.window = glfwCreateWindow(mode->width, mode->height, config.appName.c_str(), monitor, nullptr);
+		}
+		else if (config.windowShowMode == ShowModeEnum::FullScreenWithoutTile)
+		{
+			glfwWindowHint(GLFW_RED_BITS,     mode->redBits);
+			glfwWindowHint(GLFW_GREEN_BITS,   mode->greenBits);
+			glfwWindowHint(GLFW_BLUE_BITS,    mode->blueBits);
+			glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+			glfwWindowHint(GLFW_DECORATED,    GLFW_FALSE);
 
-        return false;
-    }
+            m_windowData.window = glfwCreateWindow(mode->width, mode->height, config.appName.c_str(), monitor, nullptr);
+		}
+		else
+		{
+			check(
+				config.windowShowMode == ShowModeEnum::FullScreenWithTile ||
+				config.windowShowMode == ShowModeEnum::Free);
 
-    Window& Application::createWindow(const Window::InitConfig& config)
-    {
-        m_windows.push_back(std::make_unique<Window>(config));
-        return *m_windows.back();
+			auto clampWidth  = std::max(1U, config.width);
+			auto clampHeight = std::max(1U, config.height);
+
+			if (config.windowShowMode == ShowModeEnum::FullScreenWithTile)
+			{
+				glfwWindowHint(GLFW_MAXIMIZED, GL_TRUE);
+			}
+
+            m_windowData.window = glfwCreateWindow(clampWidth, clampHeight, config.appName.c_str(), nullptr, nullptr);
+
+			// Update window size.
+			glfwGetWindowSize(m_windowData.window, &m_windowData.width, &m_windowData.height);
+
+			// Center free mode window to center.
+			if (config.windowShowMode == ShowModeEnum::Free)
+			{
+				glfwSetWindowPos(m_windowData.window, (mode->width - m_windowData.width) / 2, (mode->height - m_windowData.height) / 2);
+			}
+		}
+
+		// Update window size again.
+		glfwGetWindowSize(m_windowData.window, &m_windowData.width, &m_windowData.height);
+		LOG_INFO("Create window size: ({0},{1}).", m_windowData.width, m_windowData.height);
+
+		// Hook window user pointer.
+		glfwSetWindowUserPointer(m_windowData.window, (void*)(&m_windowData));
+
+		// UPdate icon.
+		{
+			GLFWimage glfwIcon
+			{ 
+				.width  = m_icon->getWidth(),
+				.height = m_icon->getHeight(),
+				.pixels = (unsigned char*)m_icon->getPixels()
+			};
+
+			glfwSetWindowIcon(m_windowData.window, 1, &glfwIcon);
+		}
     }
 
     bool Application::init(const InitConfig& config)
@@ -81,19 +131,38 @@ namespace chord
             // Fallback.
             if (m_icon->isEmpty())
             {
-                m_icon->fillChessboard(0, 0, 0, 255, 255, 255, 255, 255, 36, 36, 12);
+                m_icon->fillChessboard(RGBA::kBlack, RGBA::kWhite, 36, 36, 12);
             }
         }
 
         // Update app name in title.
         m_name = config.appName;
-        setApplicationTitle(std::format("{} console", m_name));
+
+        // Console config.
+        setConsoleTitle(std::format("{} console", m_name));
+        setConsoleUtf8();
+
+        const std::vector<ConsoleFontConfig> fontTypes 
+        {
+            { .name = L"Consolas", .width = 0, .height = 20 },
+        };
+        setConsoleFont(fontTypes);
+
+        // Create main window.
+        createMainWindow(config);
 
         // Temporal update init state.
         m_bInit = true;
 
-        // Broadcast init events.
-        onInit.broadcastRet([&](const bool* bResult) { m_bInit &= (*bResult); });
+        // Create engine.
+        m_engine = std::make_unique<Engine>(*this);
+        m_bInit &= m_engine->init(config.engineConfig);
+
+        // Broadcast init events if engine succeed init.
+        if (m_bInit)
+        {
+            onInit.broadcastRet([&](const bool* bResult) { m_bInit &= (*bResult); });
+        }
 
         // Return result.
         return m_bInit;
@@ -101,88 +170,67 @@ namespace chord
 
     void Application::loop()
     {
-        SubsystemTickData subsystemTickData{ };
+        ApplicationTickData tickData { };
 
-        while (m_bLooping)
+        while (m_windowData.bContinue)
         {
             glfwPollEvents();
 
-            // Loop and try erase window which no-longer need loop.
-            m_windows.erase(std::remove_if(m_windows.begin(), m_windows.end(), [](auto& window)
-            {
-                return !window->tick();
-            }), m_windows.end());
-
-            // When windows empty, break application looping.
-            if (m_windows.empty())
-            {
-                m_bLooping = false;
-            }
-
             // Subsystem tick.
-            if (!m_subsystems.empty())
+            m_windowData.bContinue &= m_engine->tick(tickData);
+            m_windowData.bContinue &= glfwWindowShouldClose(m_windowData.window) == GLFW_FALSE;
+
+            if (!m_windowData.bContinue)
             {
-                std::vector<ISubsystem*> pendingSubsystems { };
-                for (auto& subsystem : m_subsystems)
+                // Query events if they prevent exit.
+                if (!onShouldClosed.isEmpty())
                 {
-                    if (!subsystem->tick(subsystemTickData))
+                    // On closed event intercept action and broadcast again.
+                    onShouldClosed.broadcastRet([&](const bool* bExit)
                     {
-                        pendingSubsystems.push_back(subsystem.get());
-                    }
+                        m_windowData.bContinue |= !(*bExit);
+                    });
                 }
 
-                // BeforeRelease after all subsystem ticking finish.
-                for (size_t i = pendingSubsystems.size(); i > 0; i--)
-                {
-                    pendingSubsystems[i - 1]->beforeRelease();
-                }
-
-                // Release after all subsystem ticking finish.
-                for (size_t i = pendingSubsystems.size(); i > 0; i--)
-                {
-                    pendingSubsystems[i - 1]->release();
-                }
-
-                // Release after all subsystem ticking finish.
-                for (size_t i = pendingSubsystems.size(); i > 0; i--)
-                {
-                    check(removeSubsystem(pendingSubsystems[i - 1]->getHash()));
-                }
-
-                // Update tick count when end of loop.
-                {
-                    subsystemTickData.tickCount++;
-                }
+                // Reupdate window close state.
+                glfwSetWindowShouldClose(m_windowData.window, !m_windowData.bContinue);
             }
-        }
-
-        // Subsystem before release.
-        for (size_t i = m_subsystems.size(); i > 0; i--)
-        {
-            m_subsystems[i - 1]->beforeRelease();
         }
     }
 
     void Application::release()
     {
+        // Engine before release.
+        m_engine->beforeRelease();
+
         // Broadcast release event.
         onRelease.broadcast();
 
-        // Subsystem release.
-        for (size_t i = m_subsystems.size(); i > 0; i--)
-        {
-            m_subsystems[i - 1]->release();
-        }
+        // Release engine.
+        m_engine.reset();
 
-        // Clear map.
-        m_registeredSubsystemMap.clear();
-        m_subsystems.clear();
-
-        // Clear all windows.
-        m_windows.clear();
+        // Destroy window.
+        glfwDestroyWindow(m_windowData.window);
 
         // Final terminate GLFW.
         glfwTerminate();
+    }
+
+    void Application::queryFramebufferSize(int32& width, int32& height) const
+    {
+        glfwGetFramebufferSize(m_windowData.window, &width, &height);
+    }
+
+    void Application::queryWindowSize(int32& width, int32& height) const
+    {
+        glfwGetWindowSize(m_windowData.window, &width, &height);
+    }
+
+    bool Application::isFramebufferZeroSize() const
+    {
+        int32 width, height;
+        queryFramebufferSize(width, height);
+        return (width == 0) || (height == 0);
     }
 }
 

@@ -11,7 +11,7 @@ namespace chord
 {
 	enum class EConsoleVarFlags : uint16
 	{
-		NONE = 0,
+		None = 0,
 		
 		// ReadOnly meaning can not change value by code in runtime.
 		ReadOnly    = 0x01 << 0,
@@ -19,7 +19,7 @@ namespace chord
 		// Export this value as a scalability config.
 		Scalability = 0x01 << 1, 
 		
-		COUNT,
+		MAX,
 	};
 	ENUM_CLASS_FLAG_OPERATORS(EConsoleVarFlags)
 
@@ -248,7 +248,7 @@ namespace chord
 	class AutoCVar
 	{
 	public:
-		explicit AutoCVar(std::string_view name, const T& v,  std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::NONE,
+		explicit AutoCVar(std::string_view name, const T& v,  std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None,
 			std::function<void(const T&, const T&)>&& onValueChangeCallback = nullptr)
 		{
 			m_ptr = CVarSystem::get().addCVar<T>(flag, name, description, v);
@@ -269,7 +269,7 @@ namespace chord
 	class AutoCVarRef
 	{
 	public:
-		explicit AutoCVarRef(std::string_view name, T& v, std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::NONE)
+		explicit AutoCVarRef(std::string_view name, T& v, std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None)
 		{
 			m_ptr = CVarSystem::get().addCVarRef<T>(flag, name, description, v);
 		}

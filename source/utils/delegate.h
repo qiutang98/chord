@@ -159,6 +159,7 @@ namespace chord
 		}
 
 	protected:
+		// Broadcast return used for chain call.
 		void broadcastRet(Args...args, std::function<void(const RetType*)>&& opResult = nullptr)
 		{
 			std::shared_lock<std::shared_mutex> lock(m_lock);

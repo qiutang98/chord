@@ -10,14 +10,16 @@ namespace chord
 {
 	enum class ELogType : uint8
 	{
-		Trace = 0,
+		None = 0,
+
+		Trace,
 		Info,
 		Warn,
 		Error,
 		Fatal,
 		Other,
 
-		Max,
+		MAX,
 	};
 
 	// Custom log cache sink.

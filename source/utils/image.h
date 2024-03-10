@@ -2,15 +2,14 @@
 
 #include <utils/noncopyable.h>
 #include <utils/utils.h>
+#include <utils/rgb.h>
 
 namespace chord
 {
-
-
 	class ImageLdr2D : NonCopyable
 	{
 	private:
-		uint8* m_pixels = nullptr;
+		std::vector<uint8> m_pixels = { };
 
 		int32  m_width = 0;
 		int32  m_height = 0;
@@ -22,17 +21,10 @@ namespace chord
 
 	public:
 		virtual ~ImageLdr2D();
-
 		explicit ImageLdr2D() = default;
 
-		explicit ImageLdr2D(uint8 R, uint8 G, uint8 B, uint8 A, int32 width = 1, int32 height = 1);
-
-
-		void fillChessboard(
-			uint8 R0, uint8 G0, uint8 B0, uint8 A0,
-			uint8 R1, uint8 G1, uint8 B1, uint8 A1,
-			int32 width, int32 height, int32 blockDim);
-
+		void fillColor(RGBA c, int32 width = 1, int32 height = 1);
+		void fillChessboard(RGBA c0, RGBA c1, int32 width, int32 height, int32 blockDim);
 		bool fillFromFile(const std::string& path, int32 requiredComponent = 4);
 
 		auto getWidth() const { return m_width; }
@@ -40,8 +32,8 @@ namespace chord
 		auto getComponent() const { return m_component; }
 		auto getRequiredComponent() const { return m_requiredComponent; }
 
-		const auto* getPixels() const { return m_pixels; }
+		const auto* getPixels() const { return m_pixels.data(); }
 
-		bool isEmpty() const { return m_pixels == nullptr; }
+		bool isEmpty() const { return m_pixels.empty(); }
 	};
 }
