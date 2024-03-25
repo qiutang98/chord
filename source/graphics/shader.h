@@ -4,417 +4,266 @@
 #include <utils/noncopyable.h>
 #include <utils/optional.h>
 #include <graphics/graphics.h>
+#include <graphics/shaderpermutation.h>
+#include <utils/threadpool.h>
 
 namespace chord::graphics
 {
-	class ShaderCompileDefinitions
-	{
-	public:
-		void setDefine(const std::string& name, const std::string& v);
-		void setDefine(const std::string& name, bool v);
-		void setDefine(const std::string& name, int32 v);
-		void setDefine(const std::string& name, uint32 v);
-		void setDefine(const std::string& name, float v);
-
-		void add(const ShaderCompileDefinitions& o);
-
-	private:
-		std::map<std::string, std::string> m_definitions;
-	};
-
-	// Shader compile environment.
-	class ShaderCompileEnvironment
-	{
-	public:
-		void setDefine(const std::string& name, const std::string& v) { m_definitions.setDefine(name, v); }
-		void setDefine(const std::string& name, bool v)   { m_definitions.setDefine(name, v); }
-		void setDefine(const std::string& name, int32 v)  { m_definitions.setDefine(name, v); }
-		void setDefine(const std::string& name, uint32 v) { m_definitions.setDefine(name, v); }
-		void setDefine(const std::string& name, float v)  { m_definitions.setDefine(name, v); }
-
-	private:
-		ShaderCompileDefinitions m_definitions;
-	};
-
-	// Bool type variant.
-	class ShaderVariantBool
-	{
-	public:
-		using Type = bool;
-		static constexpr uint32 kCount = 2; // 0 or 1.
-		static constexpr bool bMultiVariant = false;
-
-		static int32 toId(bool b)
-		{
-			return b ? 1 : 0;
-		}
-
-		static bool fromId(int32 value)
-		{
-			// Bool only support 0 or 1.
-			checkGraphics(value == 0 || value == 1);
-
-			// Convert to bool.
-			return value == 1;
-		}
-
-		static bool toDefined(Type b)
-		{
-			return b;
-		}
-	};
-	// Define TEST_SHADER_VARIANT 0/1
-	// Class SV_TestVariant : SHADER_VARIANT_BOOL("TEST_SHADER_VARIANT");
-	#define SHADER_VARIANT_BOOL(x) public ShaderVariantBool { public: static constexpr const char* kName = x; }
-
-	// Continuous int range variant.
-	template<typename T, int32 kDimSize, int32 kFirstValue = 0>
-	class ShaderVariantInt
-	{
-	public:
-		using Type = T;
-		static constexpr uint32 kCount = kDimSize;
-		static constexpr bool bMultiVariant = false;
-
-		static int32 toId(Type b)
-		{
-			int32 id = static_cast<int32>(b) - kFirstValue;
-			checkGraphics(id >= 0 && id < kCount);
-			return id;
-		}
-
-		static Type fromId(int32 id)
-		{
-			checkGraphics(id >= 0 && id < kCount);
-			return static_cast<Type>(id + kFirstValue);
-		}
-
-		static int32 toDefined(Type b)
-		{
-			return toId(b) + kFirstValue;
-		}
-	};
-	// Define TEST_SHADER_VARIANT [0, N)
-	// Class SV_TestVariant : SHADER_VARIANT_INT("TEST_SHADER_VARIANT", N);
-	#define SHADER_VARIANT_INT(x, count) \
-	public ShaderVariantInt<int32, count> { public: static constexpr const char* kName = x; }
-
-	// Define TEST_SHADER_VARIANT [X, N + X)
-	// Class SV_TestVariant : SHADER_VARIANT_RANGE_INT("TEST_SHADER_VARIANT", X, N);
-	#define SHADER_VARIANT_RANGE_INT(x, start, count) \
-	public ShaderVariantInt<int32, count, start> { public: static constexpr const char* kName = x; }
-
-	// Ensure enum end with MAX, it will define [0, MAX)
-	#define SHADER_VARIANT_ENUM(x, T) \
-	public ShaderVariantInt<T, static_cast<int32>(T::MAX)> { public: static constexpr const char* kName = x; }
-
-	template<int32... Ts>
-	class ShaderVariantSparseInt
-	{
-	public:
-		using Type = int32;
-		static constexpr uint32 kCount = 0;
-		static constexpr bool bMultiVariant = false;
-
-		static int32 toId(Type b)
-		{
-			checkEntry();
-			return 0;
-		}
-
-		static Type fromId(int32 id)
-		{
-			checkEntry();
-			return Type(0);
-		}
-	};
-
-	template<int32 Value, int32... Ts>
-	class ShaderVariantSparseInt<Value, Ts...>
-	{
-	public:
-		using Type = int32;
-		static constexpr uint32 kCount = ShaderVariantSparseInt<Ts...>::kCount + 1;
-		static constexpr bool bMultiVariant = false;
-
-		static int32 toId(Type b)
-		{
-			if (b == Value)
-			{
-				return kCount - 1;
-			}
-
-			return ShaderVariantSparseInt<Ts...>::toId(b);
-		}
-
-		static Type fromId(int32 id)
-		{
-			if (id == kCount - 1)
-			{
-				return Value;
-			}
-			return ShaderVariantSparseInt<Ts...>::fromId(id);
-		}
-
-		static int32 toDefined(Type b)
-		{
-			return int32(b);
-		}
-	};
-	#define SHADER_VARIANT_SPARSE_INT(x, ...) \
-	public ShaderVariantSparseInt<__VA_ARGS__> { public: static constexpr const char* kName = x; }
-
-	// Shader variant vector merge all type of variant.
-	template<typename... Ts>
-	class TShaderVariantVector
-	{
-	public:
-		using Type = TShaderVariantVector<Ts...>;
-		static constexpr uint32 kCount = 1;
-		static constexpr bool bMultiVariant = true;
-
-		TShaderVariantVector<Ts...>()
-		{ 
-		
-		}
-
-		// Utils template class so don't support non-zero id, it should not use for compile.
-		explicit TShaderVariantVector<Ts...>(int32 id) 
-		{ 
-			checkGraphics(id == 0);
-		}
-
-		// Set value.
-		template<typename T> 
-		void set(const typename T::Type& Value) 
-		{
-			checkEntry();
-		}
-
-		// Get value.
-		template<typename T> 
-		const typename T::Type get() const 
-		{
-			checkEntry(); 
-			return { }; 
-		}
-
-		void modifyCompileEnvironment(ShaderCompileEnvironment& o) const
-		{
-			// Do nothing.
-		}
-
-		static int32 toId(const Type& vector) 
-		{ 
-			return 0; 
-		}
-
-		int32 toId() const 
-		{ 
-			return toId(*this); 
-		}
-
-		static Type fromId(int32 id) 
-		{ 
-			return Type(id); 
-		}
-
-		bool operator==(const Type& o) const
-		{
-			return true;
-		}
-	};
-
-	template<bool bNext>
-	class TShaderVariantImpl
-	{
-	public:
-		template<typename VariantVector, typename NextToGet>
-		static const typename NextToGet::Type& get(const VariantVector& vector)
-		{
-			return vector.m_next.template get<NextToGet>();
-		}
-
-		template<typename VariantVector, typename NextToSet>
-		static void set(VariantVector& vector, const typename NextToSet::Type& value)
-		{
-			return vector.m_next.template set<NextToSet>(value);
-		}
-
-		template<typename VariantVector, typename T>
-		static void modifyCompileEnvironment(const VariantVector& vector, ShaderCompileEnvironment& outEnvironment)
-		{
-			outEnvironment.setDefine(T::kName, T::toDefined(vector.m_value));
-			return vector.m_next.modifyCompileEnvironment(outEnvironment);
-		}
-	};
-
-	template<>
-	class TShaderVariantImpl<true>
-	{
-	public:
-		template<typename VariantVector, typename NextToGet>
-		static const typename NextToGet::Type& get(const VariantVector& vector)
-		{
-			return vector.m_value;
-		}
-
-		template<typename VariantVector, typename NextToSet>
-		static void set(VariantVector& vector, const typename NextToSet::Type& value)
-		{
-			vector.m_value = value;
-		}
-
-		template<typename VariantVector, typename T>
-		static void modifyCompileEnvironment(const VariantVector& vector, ShaderCompileEnvironment& outEnvironment)
-		{
-			vector.m_value.modifyCompileEnvironment(outEnvironment);
-			return vector.m_next.modifyCompileEnvironment(outEnvironment);
-		}
-	};
-
-	template<typename T, typename... Ts>
-	class TShaderVariantVector<T, Ts...>
-	{
-	public:
-		using Type = TShaderVariantVector<T, Ts...>;
-		using Next = TShaderVariantVector<Ts...>;
-
-		static constexpr uint32 kCount = Next::kCount * T::kCount;
-		static constexpr bool bMultiVariant = true;
-
-		TShaderVariantVector<T, Ts...>() 
-			: m_value(T::fromId(0))
-		{ }
-
-		explicit TShaderVariantVector<T, Ts...>(int32 id)
-			: m_value(T::fromId(id % T::kCount))
-			, m_next(id / T::kCount)
-		{
-			checkGraphics(id >= 0 && id < kCount);
-		}
-
-		// Set value.
-		template<typename ToSet>
-		void set(const typename ToSet::Type& value)
-		{
-			return TShaderVariantImpl<std::is_same_v<T, ToSet>>::template set<Type, ToSet>(*this, value);
-		}
-
-		// Get value.
-		template<typename ToGet>
-		const typename ToGet::Type& get() const
-		{ 
-			return TShaderVariantImpl<std::is_same_v<T, ToGet>>::template get<Type, ToGet>(*this);
-		}
-
-		void modifyCompileEnvironment(ShaderCompileEnvironment& o) const
-		{
-			TShaderVariantImpl<T::bMultiVariant>::template modifyCompileEnvironment<Type, T>(*this, o);
-		}
-
-		static int32 toId(const Type& vector)
-		{
-			return vector.toId();
-		}
-
-		int32 toId() const 
-		{ 
-			return T::toId(m_value) + T::kCount * m_next.toId();
-		}
-
-		static Type fromId(int32 id) 
-		{ 
-			return Type(id); 
-		}
-
-		bool operator==(const Type& o) const
-		{
-			return m_value == o.m_value && m_next == o.m_next;
-		}
-
-		bool operator!=(const Type& o) const
-		{
-			return !(*this == o);
-		}
-
-	private:
-		template<bool> friend class TShaderVariantImpl;
-
-		typename T::Type m_value;
-		Next m_next;
-	};
-
-	class ShaderKey
-	{
-	public:
-		// Shader inner hash code.
-		uint64 hash;
-
-		// Shader name hash.
-		uint32 name;
-
-		// Shader type: builtin/material etc.
-		uint32 type;
-	};
-
-	class ShaderPermutationType
-	{
-	public:
-		std::string name;
-
-
-
-	};
-
-	template<typename...Args>
-	class ShaderPermutation
-	{
-
-	};
-
 	// Shader contain multi permutation.
-	class ShaderInterface : NonCopyable
+	class ShaderModule : NonCopyable
 	{
 	public:
-		virtual ~ShaderInterface();
+		enum ECompileState
+		{
+			// Shader ready.
+			Ready,
+
+			// Shader compile error.
+			Error,
+
+			// Default.
+			MAX
+		};
+
+		explicit ShaderModule(SizedBuffer buffer);
+		virtual ~ShaderModule();
+
+		VkShaderModule get() const
+		{
+			std::lock_guard lock(m_lock);
+			return m_shader.get();
+		}
+
+		bool isReady() const
+		{
+			std::lock_guard lock(m_lock);
+			return m_compileState == ECompileState::Ready;
+		}
+
+		bool isError() const
+		{
+			std::lock_guard lock(m_lock);
+			return m_compileState == ECompileState::Error;
+		}
+
+		ECompileState getCompileState() const
+		{
+			std::lock_guard lock(m_lock);
+			return m_compileState;
+		}
+
+		void setCompileState(ECompileState state)
+		{
+			std::lock_guard lock(m_lock);
+			m_compileState = state;
+		}
+
+		void create(SizedBuffer buffer);
 
 	protected:
 		void clear();
 
 	protected:
+		mutable std::mutex m_lock;
+
+		ECompileState m_compileState = ECompileState::MAX;
+
 		// Cache shader modules.
-		std::unordered_map<uint64, OptionalVkShaderModule> m_shaders;
-
-
+		OptionalVkShaderModule m_shader;
 	};
+	using ShaderModuleRef = std::shared_ptr<ShaderModule>;
 
-	class BuiltinShader : public ShaderInterface
+	struct GlobalShaderRegisteredInfo
 	{
-	private:
-
-
+		std::string shaderFilePath;
+		std::string entry;
+		EShaderStage stage;
+		int32 permutationCount;
 	};
 
-	class ShaderFile
+	extern uint64 getShaderModuleHash(int32 permutationId, const GlobalShaderRegisteredInfo& info);
+
+	struct ShaderPermutationCompileInfo
+	{
+		ShaderCompileEnvironment env;
+		uint64 hash;
+		int32 permutationId;
+	};
+
+	class ShaderPermutationBatchCompile
 	{
 	public:
+		explicit ShaderPermutationBatchCompile(const GlobalShaderRegisteredInfo& info)
+			: m_registedInfo(info)
+		{
 
+		}
+
+		template<typename Permutation>
+		auto& add(const Permutation& permutation)
+		{
+			ShaderPermutationCompileInfo info { };
+
+			info.permutationId = permutation.toId();
+			info.hash = getShaderModuleHash(info.permutationId, m_registedInfo);
+
+			// Modify compilation environment.
+			permutation.modifyCompileEnvironment(info.env);
+
+			// Add batch.
+			m_batches.push_back(std::move(info));
+			return *this;
+		}
+
+		auto& addDummy()
+		{
+			ShaderPermutationCompileInfo info{ };
+
+			info.permutationId = 0;
+			info.hash = getShaderModuleHash(info.permutationId, m_registedInfo);
+
+			// Add batch.
+			m_batches.push_back(std::move(info));
+			return *this;
+		}
+
+		const auto& getBatches() const
+		{
+			return m_batches;
+		}
 
 	private:
-		std::string m_filePath;
-
-		std::map<uint64, std::unique_ptr<ShaderInterface>> m_shaderCollection;
+		const GlobalShaderRegisteredInfo& m_registedInfo;
+		std::vector<ShaderPermutationCompileInfo> m_batches;
 	};
 
+	// Shader file collect all permutation create from it.
+	class ShaderFile : NonCopyable
+	{
+	public:
+		explicit ShaderFile(const std::string& path);
+
+		// Get or create shader module from definitions.
+		template<typename Permutation>
+		const ShaderModuleRef getShaderModule(const GlobalShaderRegisteredInfo& info, Permutation permutation)
+		{
+			uint64 hash = getShaderModuleHash(permutation.toId(), info);
+			return m_shaderCollection.at(hash);
+		}
+
+		const ShaderModuleRef getShaderModule(const GlobalShaderRegisteredInfo& info, int32 permutationId = 0)
+		{
+			uint64 hash = getShaderModuleHash(permutationId, info);
+			return m_shaderCollection.at(hash);
+		}
+
+		FutureCollection<void> prepareBatchCompile(const ShaderPermutationBatchCompile& batch);
+
+	private:
+		// Shader file paths.
+		std::string m_filePath;
+
+		// Shader permutation collection.
+		std::map<uint64, std::shared_ptr<ShaderModule>> m_shaderCollection;
+	};
+
+	class GlobalShader : NonCopyable
+	{
+	public:
+		// 
+		static void modifyCompileEnvironment(ShaderCompileEnvironment& o);
+
+	};
+
+
+
+	class GlobalShaderRegisterTable : NonCopyable
+	{
+		template<class ShaderType>
+		friend class GlobalShaderRegister;
+	public:
+
+		static GlobalShaderRegisterTable& get();
+		const auto& getTable() const { return m_registeredShaders; }
+
+	private:
+		GlobalShaderRegisterTable() = default;
+		
+		std::unordered_map<size_t, GlobalShaderRegisteredInfo> m_registeredShaders;
+		std::vector<ShaderPermutationBatchCompile> m_batchCompile;
+	};
+
+	template<typename T>
+	concept has_some_type = requires { typename T::Permutation; };
+
+	template<class ShaderType>
+	class GlobalShaderRegister : NonCopyable
+	{
+	public:
+		GlobalShaderRegister(const char* file, const char* entry, EShaderStage stage)
+		{
+			auto& table   = GlobalShaderRegisterTable::get().m_registeredShaders;
+			auto& batches = GlobalShaderRegisterTable::get().m_batchCompile;
+
+			const auto& typeHash = getTypeHash<ShaderType>();
+			const auto  registerInfo = GlobalShaderRegisteredInfo{ .entry = entry, .shaderFilePath = file, .stage = stage };
+
+			// Register global shader meta info.
+			table[typeHash] = registerInfo;
+
+			// Fetch all shader permutations.
+			if constexpr (requires { typename ShaderType::Permutation; })
+			{
+				using Permutation = ShaderType::Permutation;
+				constexpr uint32 permutationCount = Permutation::kCount;
+
+				ShaderPermutationBatchCompile batch(registerInfo);
+				for (auto i = 0; i < permutationCount; i++)
+				{
+					batch.add(Permutation::fromId(i));
+				}
+				batches.push_back(std::move(batch));
+			}
+			else
+			{
+				ShaderPermutationBatchCompile batch(registerInfo);
+				batch.addDummy();
+
+				batches.push_back(std::move(batch));
+			}
+		}
+	};
+	#define IMPLEMENT_GLOBAL_SHADER(type, file, entry, stage) namespace { const static GlobalShaderRegister<type> o(file, entry, stage); }
+		
 
 	// All shader cache library.
 	class ShaderLibrary : NonCopyable
 	{
 	public:
+		// Get shader file.
+		std::shared_ptr<ShaderFile> getShaderFile(const std::string& path);
+
+		// Get shader with permutation.
+		template<typename ShaderType, typename PermutationType = int32>
+		std::shared_ptr<ShaderModule> getShader(PermutationType permutation = 0) const
+		{
+			const auto& globalShaderTable = GlobalShaderRegisterTable::get().getTable();
+			const auto& typeHash = getTypeHash<ShaderType>();
+
+			// Find global shader info.
+			const GlobalShaderRegisteredInfo& info = globalShaderTable.at(typeHash);
+
+			// Now get shader file.
+			auto shaderFile = getShaderFile(info.shaderFilePath);
+
+			// Now get permutation.
+			return shaderFile->getShaderModule(info, permutation);
+		}
+
+	private:
 		void release();
 
 	private:
-		std::map<uint64, std::unique_ptr<ShaderFile>> m_shaders;
+		std::map<uint64, std::shared_ptr<ShaderFile>> m_shaderFiles;
 	};
 }

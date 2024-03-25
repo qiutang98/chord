@@ -7,9 +7,14 @@
 #include <atomic>
 #include <iostream>
 
+#include <utils/noncopyable.h>
+
 #define ENABLE_LOG
 #define ENABLE_RESTRICT
 #define ENABLE_NODISCARD
+#define ENABLE_DEPRECATED
+#define ENABLE_LIKELY
+
 
 #if defined(_DEBUG) || defined(DEBUG)
 	#define CHORD_DEBUG 1
@@ -23,12 +28,27 @@
 	#define CHORD_NODISCARD
 #endif
 
+#ifdef ENABLE_DEPRECATED
+	#define CHORD_DEPRECATED(msg) [[deprecated(msg)]]
+#else 
+	#define CHORD_DEPRECATED(msg)
+#endif
+
 // Optional restrict keyword for memory optimize.
 #ifdef ENABLE_RESTRICT
 	#define CHORD_RESTRICT __restrict
 #else
 	#define CHORD_RESTRICT 
 #endif
+
+#ifdef ENABLE_LIKELY
+	#define CHORD_LIKELY [[likely]]
+	#define CHORD_UNLIKELY [[unlikely]]
+#else
+	#define CHORD_LIKELY
+	#define CHORD_UNLIKELY
+#endif // ENABLE_LIKELY
+
 
 #ifdef ENABLE_LOG
 	#define chord_macro_sup_enableLogOnly(x) x
@@ -89,6 +109,62 @@ namespace chord
 		sizeof(uint64) == 8 &&
 		sizeof(int8)   == 1 &&
 		sizeof(uint8)  == 1);
+
+	// 
+	enum class ERuntimePeriod
+	{
+		Initing = 0,
+		Ticking,
+		BeforeReleasing,
+		Releasing,
+
+		MAX
+	};
+
+	class SizedBuffer
+	{
+	public:
+		SizedBuffer() = default;
+		SizedBuffer(uint64 inSize, void* inPtr)
+			: size(inSize)
+			, ptr(inPtr)
+		{
+
+		}
+
+		template<typename T>
+		SizedBuffer(const std::vector<T>& blob)
+			: size(blob.size() * sizeof(T)), ptr((void*)blob.data())
+		{
+
+		}
+
+		uint64 size = 0;
+		void* ptr = nullptr;
+
+		bool isValid()
+		{
+			return ptr != nullptr && size > 0;
+		}
+	};
+
+	// Interface for all resource used in application.
+	class IResource : NonCopyable { };
+	using ResourceRef = std::shared_ptr<IResource>;
+
+	// DeletionQueue used for shared_ptr resource lazy release.
+	// FIFO
+	class DeleteQueue
+	{
+	private:
+		std::vector<ResourceRef> m_pendingQueue;
+
+	public:
+		~DeleteQueue();
+
+		void push(ResourceRef inT);
+		void clear();
+	};
 
 	// CPU cache line size, set 64 bytes here.
 	constexpr uint32 kCpuCachelineSize = 64;
@@ -152,4 +228,17 @@ namespace chord
 	{
 		return std::extent<T[N]>::value;
 	}
+
+	extern void namedThread(std::thread& t, const std::wstring& name);
+	extern void namedCurrentThread(const std::wstring& name);
+
+	static inline std::wstring toWstring(const std::string& stringToConvert)
+	{
+		std::wstring wideString =
+			std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(stringToConvert);
+		return wideString;
+	}
+
+	extern bool loadFile(const std::filesystem::path& path, std::vector<char>& binData, const char* mode);
+	extern bool storeFile(const std::filesystem::path& path, const uint8* ptr, uint32 size, const char* mode);
 }

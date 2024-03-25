@@ -1,18 +1,50 @@
 #define VOLK_IMPLEMENTATION
 #include <volk/volk.h>
 
+#define VMA_IMPLEMENTATION
+#include <vma/vk_mem_alloc.h>
+
 #include <graphics/graphics.h>
 #include <utils/cvar.h>
 #include <application/application.h>
 #include <graphics/helper.h>
+#include <graphics/swapchain.h>
+#include <graphics/bindless.h>
+#include <graphics/resource.h>
+#include <graphics/shadercompiler.h>
+#include <graphics/shader.h>
 
 namespace chord::graphics
 {
-	static bool bGraphicsQueueMajorPriority = 0;
+	static bool bGraphicsQueueMajorPriority = false;
 	static AutoCVarRef<bool> cVarGraphicsQueueMajorPriority(
 		"r.graphics.queue.majorPriority",
 		bGraphicsQueueMajorPriority,
 		"Enable vulkan major queue with higher priority.",
+		EConsoleVarFlags::ReadOnly
+	);
+
+	static bool bGraphicsDebugMarkerEnable = true;
+	static AutoCVarRef<bool> cVarDebugMarkerEnable(
+		"r.graphics.debugmarker",
+		bGraphicsDebugMarkerEnable,
+		"Enable vulkan object debug marker or not.",
+		EConsoleVarFlags::ReadOnly
+	);
+
+	static uint32 sDesiredShaderCompilerThreadCount = 4;
+	static AutoCVarRef<uint32> cVarDesiredShaderCompilerThreadCount(
+		"r.graphics.shadercompiler.threadcount",
+		sDesiredShaderCompilerThreadCount,
+		"Desired shader compiler max used thread count.",
+		EConsoleVarFlags::ReadOnly
+	);
+
+	static uint32 sFreeShaderCompilerThreadCount = 1;
+	static AutoCVarRef<uint32> cVarFreeShaderCompilerThreadCount(
+		"r.graphics.shadercompiler.freeThreadCount",
+		sFreeShaderCompilerThreadCount,
+		"Free shader compiler thread count.",
 		EConsoleVarFlags::ReadOnly
 	);
 
@@ -110,8 +142,76 @@ namespace chord::graphics
 		return *logger;
 	}
 
-	bool Context::onInit()
+	PhysicalDeviceFeatures::PhysicalDeviceFeatures()
 	{
+		core11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+		core12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+		core13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+
+		// KHR.
+		accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+		raytracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+		rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+
+		// EXT.
+		extendedDynamicState3Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
+		extendedDynamicState2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
+	}
+
+	void** PhysicalDeviceFeatures::stepNextPtr(void** ppNext)
+	{
+		graphics::stepNextPtr(ppNext, this->core11Features);
+		graphics::stepNextPtr(ppNext, this->core12Features);
+		graphics::stepNextPtr(ppNext, this->core13Features);
+		graphics::stepNextPtr(ppNext, this->rayQueryFeatures);
+		graphics::stepNextPtr(ppNext, this->raytracingPipelineFeatures);
+		graphics::stepNextPtr(ppNext, this->accelerationStructureFeatures);
+		graphics::stepNextPtr(ppNext, this->extendedDynamicState2Features);
+		graphics::stepNextPtr(ppNext, this->extendedDynamicState3Features);
+
+		return ppNext;
+	}
+
+	PhysicalDeviceProperties::PhysicalDeviceProperties()
+	{
+		deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		subgroupProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
+		descriptorIndexingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
+
+		// KHR.
+		accelerationStructureProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR ;
+	}
+
+	void** PhysicalDeviceProperties::getNextPtr()
+	{
+		auto pNext = graphics::getNextPtr(this->deviceProperties2);
+
+		graphics::stepNextPtr(pNext, this->subgroupProperties);
+		graphics::stepNextPtr(pNext, this->descriptorIndexingProperties);
+		graphics::stepNextPtr(pNext, this->accelerationStructureProperties);
+
+		return pNext;
+	}
+
+	GPUBufferRef Context::createStageUploadBuffer(const std::string& name, SizedBuffer data)
+	{
+		VkBufferCreateInfo ci{ };
+		ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		ci.size  = data.size;
+		ci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+		ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		VmaAllocationCreateInfo vmaAllocInfo = {};
+		vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+		vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+		return std::make_shared<GPUBuffer>(name, ci, vmaAllocInfo, data);
+	}
+
+	bool Context::init(const InitConfig& inputConfig)
+	{
+		m_initConfig = inputConfig;
+
 		// Pre-return if application unvalid.
 		if (!Application::get().isValid())
 		{
@@ -304,7 +404,7 @@ namespace chord::graphics
 				vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &props.memoryProperties);
 
 				// 
-				auto pNext = props.getNextPtr();
+				void** ppNext = props.getNextPtr();
 
 				vkGetPhysicalDeviceProperties2(m_physicalDevice, &props.deviceProperties2);
 				props.deviceProperties = props.deviceProperties2.properties;
@@ -317,13 +417,25 @@ namespace chord::graphics
 				m_physicalDeviceFeatures = {};
 				VkPhysicalDeviceFeatures2 deviceFeatures2 { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
 
-				auto pNext = m_physicalDeviceFeatures.stepNextPtr(deviceFeatures2);
+				void** ppNext = getNextPtr(deviceFeatures2);
+
+				// Add physics device features chain.
+				ppNext = m_physicalDeviceFeatures.stepNextPtr(ppNext);
 
 				// Query.
 				vkGetPhysicalDeviceFeatures2(m_physicalDevice, &deviceFeatures2);
 
 				// Update core 1.0 features.
 				m_physicalDeviceFeatures.core10Features = deviceFeatures2.features;
+
+				// Bindless relative support state check.
+				checkGraphics(m_physicalDeviceFeatures.core12Features.shaderSampledImageArrayNonUniformIndexing);
+				checkGraphics(m_physicalDeviceFeatures.core12Features.descriptorBindingSampledImageUpdateAfterBind);
+				checkGraphics(m_physicalDeviceFeatures.core12Features.shaderUniformBufferArrayNonUniformIndexing);
+				checkGraphics(m_physicalDeviceFeatures.core12Features.descriptorBindingUniformBufferUpdateAfterBind);
+				checkGraphics(m_physicalDeviceFeatures.core12Features.shaderStorageBufferArrayNonUniformIndexing);
+				checkGraphics(m_physicalDeviceFeatures.core12Features.descriptorBindingStorageBufferUpdateAfterBind);
+				checkGraphics(m_physicalDeviceFeatures.core12Features.descriptorBindingStorageImageUpdateAfterBind);
 			}
 
 			// Query queue infos.
@@ -350,39 +462,23 @@ namespace chord::graphics
 				// Sort by importance type.
 				std::sort(queueTypeIndices.begin(), queueTypeIndices.end(), [&](const auto& A, const auto& B)
 				{
-					int32 AScore = 0;
-					int32 BScore = 0;
+					int32 scoreA = 0;
+					int32 scoreB = 0;
 
-					auto getScore = [&](auto index, auto type, int32 weight)
+					auto countScore = [&](auto type, int32 weight)
 					{
-						return (queueFamilies[index].queueFlags & type ? 1 : 0) * queueFamilies[index].queueCount * weight;
+						scoreA += (queueFamilies[A].queueFlags & type ? 1 : 0) * queueFamilies[A].queueCount * weight;
+						scoreB += (queueFamilies[B].queueFlags & type ? 1 : 0) * queueFamilies[B].queueCount * weight;
 					};
-					
-					// Graphics.
-					AScore += getScore(A, VK_QUEUE_GRAPHICS_BIT, 100000);
-					BScore += getScore(B, VK_QUEUE_GRAPHICS_BIT, 100000);
 
-					// Compute.
-					AScore += getScore(A, VK_QUEUE_COMPUTE_BIT, 10000);
-					BScore += getScore(B, VK_QUEUE_COMPUTE_BIT, 10000);
+					countScore(VK_QUEUE_GRAPHICS_BIT, 100000);       // Graphics major queue, most importance.
+					countScore(VK_QUEUE_COMPUTE_BIT, 10000);         // Compute queues, importance.
+					countScore(VK_QUEUE_TRANSFER_BIT, 5000);         // Copy queues, importance.
+					countScore(VK_QUEUE_VIDEO_ENCODE_BIT_KHR, 2500); // Video encode queues, maybe importance.
+					countScore(VK_QUEUE_VIDEO_DECODE_BIT_KHR, 1000); // Video decode queues.
+					countScore(VK_QUEUE_SPARSE_BINDING_BIT, 500);    // Sparse binding queues, current seem useless.
 
-					// Copy.
-					AScore += getScore(A, VK_QUEUE_TRANSFER_BIT, 1000);
-					BScore += getScore(B, VK_QUEUE_TRANSFER_BIT, 1000);
-
-					// Sparse binding.
-					AScore += getScore(A, VK_QUEUE_SPARSE_BINDING_BIT, 500);
-					BScore += getScore(B, VK_QUEUE_SPARSE_BINDING_BIT, 500);
-
-					// Video decode.
-					AScore += getScore(A, VK_QUEUE_VIDEO_DECODE_BIT_KHR, 500);
-					BScore += getScore(B, VK_QUEUE_VIDEO_DECODE_BIT_KHR, 500);
-
-					// Video encode.
-					AScore += getScore(A, VK_QUEUE_VIDEO_ENCODE_BIT_KHR, 500);
-					BScore += getScore(B, VK_QUEUE_VIDEO_ENCODE_BIT_KHR, 500);
-
-					return AScore > BScore;
+					return scoreA > scoreB;
 				});
 
 				std::unordered_set<uint32> soloUsedFamilies {};
@@ -408,9 +504,12 @@ namespace chord::graphics
 					}
 				};
 
+				// Always can find match queues.
 				setQueueFamily(VK_QUEUE_GRAPHICS_BIT, graphicsQueueCount, m_gpuQueuesInfo.graphicsFamily, "graphics", true);
 				setQueueFamily(VK_QUEUE_COMPUTE_BIT, computeQueueCount, m_gpuQueuesInfo.computeFamily, "compute", true);
 				setQueueFamily(VK_QUEUE_TRANSFER_BIT, copyQueueCount, m_gpuQueuesInfo.copyFamily, "copy", true);
+
+				// Not sure can found or not.
 				setQueueFamily(VK_QUEUE_VIDEO_ENCODE_BIT_KHR, videoEncodeCount, m_gpuQueuesInfo.videoEncodeFamily, "video encode", true);
 				setQueueFamily(VK_QUEUE_VIDEO_DECODE_BIT_KHR, videoDecodeCount, m_gpuQueuesInfo.videoDecodeFamily, "video decode", true);
 				setQueueFamily(VK_QUEUE_SPARSE_BINDING_BIT, sparseBindingCount, m_gpuQueuesInfo.sparseBindingFamily, "sparse binding", true);
@@ -442,6 +541,8 @@ namespace chord::graphics
 				enableIfExist(nullptr, VK_KHR_MAINTENANCE3_EXTENSION_NAME, "Maintenance3", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_KHR_MAINTENANCE1_EXTENSION_NAME, "Maintenance1", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, "PushDescriptor", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, "MemoryBudge", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				
 
 				// GLFW
 				enableIfExist(&m_initConfig.bGLFW, VK_KHR_SWAPCHAIN_EXTENSION_NAME, "GLFW", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
@@ -500,6 +601,10 @@ namespace chord::graphics
 					FORCE_ENABLE(core12Features.descriptorBindingSampledImageUpdateAfterBind);
 					FORCE_ENABLE(core12Features.descriptorBindingStorageBufferUpdateAfterBind);
 					FORCE_ENABLE(core12Features.shaderStorageBufferArrayNonUniformIndexing);
+					FORCE_ENABLE(core12Features.shaderUniformBufferArrayNonUniformIndexing);
+					FORCE_ENABLE(core12Features.descriptorBindingUniformBufferUpdateAfterBind);
+					FORCE_ENABLE(core12Features.descriptorBindingStorageImageUpdateAfterBind);
+					
 					FORCE_ENABLE(core12Features.timelineSemaphore);
 					FORCE_ENABLE(core12Features.bufferDeviceAddress);
 					FORCE_ENABLE(core12Features.shaderFloat16);
@@ -570,6 +675,7 @@ namespace chord::graphics
 				updateQueuesPriority(m_gpuQueuesInfo.graphcisQueues, graphicsQueuePriority);
 				updateQueuesPriority(m_gpuQueuesInfo.computeQueues, computeQueuePriority);
 				updateQueuesPriority(m_gpuQueuesInfo.copyQueues, copyQueuePriority);
+
 				updateQueuesPriority(m_gpuQueuesInfo.spatialBindingQueues, sparseBindingQueuePriority);
 				updateQueuesPriority(m_gpuQueuesInfo.videoDecodeQueues, videoDecodeQueuePriority);
 				updateQueuesPriority(m_gpuQueuesInfo.videoEncodeQueues, videoEncodeQueuePriority);
@@ -612,7 +718,8 @@ namespace chord::graphics
 				.pNext = &physicalDeviceFeatures2,
 			};
 			// NOTE: If exist other chain, continue use this pNext.
-			void** pNextDeviceCreateInfo = m_physicalDeviceFeaturesEnabled.stepNextPtr(physicalDeviceFeatures2);
+			void** pNextDeviceCreateInfo = getNextPtr(physicalDeviceFeatures2);
+			pNextDeviceCreateInfo = m_physicalDeviceFeaturesEnabled.stepNextPtr(pNextDeviceCreateInfo);
 
 			// Queues info.
 			createInfo.pQueueCreateInfos = queueCreateInfos.data();
@@ -637,6 +744,7 @@ namespace chord::graphics
 
 			// Queue udpate.
 			{
+				// Get queue id and create a command pool.
 				auto updateQueue = [&](auto& queues, const auto& family)
 				{
 					for (auto id = 0; id < queues.size(); id++)
@@ -652,6 +760,9 @@ namespace chord::graphics
 				updateQueue(m_gpuQueuesInfo.videoEncodeQueues, m_gpuQueuesInfo.videoEncodeFamily);
 			}
 
+			// Create graphics command pool.
+			m_graphicsCommandPool = std::make_unique<CommandPoolResetable>("GraphicsBuiltinCommandPool");
+
 			// Create pipeline cache
 			{
 				VkPipelineCacheCreateInfo ci {};
@@ -659,6 +770,42 @@ namespace chord::graphics
 				
 				checkVkResult(vkCreatePipelineCache(m_device, &ci, m_initConfig.pAllocationCallbacks, &m_pipelineCache));
 			}
+
+			// VMA
+			{
+				VmaVulkanFunctions vulkanFunctions = {};
+				vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+				vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+				VmaAllocatorCreateInfo allocatorInfo = {};
+				allocatorInfo.physicalDevice   = m_physicalDevice;
+				allocatorInfo.device           = m_device;
+				allocatorInfo.instance         = m_instance;
+				allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+				allocatorInfo.pVulkanFunctions = &vulkanFunctions;
+				allocatorInfo.flags = 
+					VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT | 
+					VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+
+				checkVkResult(vmaCreateAllocator(&allocatorInfo, &m_vmaAllocator));
+			}
+
+			// Create bindless manager.
+			{
+				m_bindlessManager = std::make_unique<BindlessManager>();
+			}
+
+			// Shader compiler.
+			{
+				m_shaderCompiler = std::make_unique<ShaderCompilerManager>(sFreeShaderCompilerThreadCount, sDesiredShaderCompilerThreadCount);
+				m_shaderLibrary = std::make_unique<ShaderLibrary>();
+			}
+
+			{
+				m_samplerManager = std::make_unique<GPUSamplerManager>();
+			}
+
+			initBuiltinTextures();
 
 			// Create swapchain.
 			{
@@ -669,14 +816,7 @@ namespace chord::graphics
 		return true;
 	}
 
-	Context::Context(const InitConfig& config)
-		: ISubsystem("Graphics")
-		, m_initConfig(config)
-	{
-
-	}
-
-	bool Context::onTick(const SubsystemTickData& tickData)
+	bool Context::tick(const ApplicationTickData& tickData)
 	{
 		const bool bMainMinimized = Application::get().isFramebufferZeroSize();
 
@@ -719,9 +859,7 @@ namespace chord::graphics
 				std::vector<VkSubmitInfo> infosRawSubmit{ contextCmdSubmitInfo };
 				m_swapchain->submit((uint32)infosRawSubmit.size(), infosRawSubmit.data());
 			}
-
 		}
-
 
 		if (!bMainMinimized)
 		{
@@ -731,18 +869,52 @@ namespace chord::graphics
 		return true;
 	}
 
+	OptionalUint32 Context::findMemoryType(uint32 typeFilter, VkMemoryPropertyFlags properties) const
+	{
+		for (uint32 i = 0; i < m_physicalDeviceProperties.memoryProperties.memoryTypeCount; i++)
+		{
+			if ((typeFilter & (1 << i)) &&
+				(m_physicalDeviceProperties.memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
+			{
+				return i;
+			}
+		}
+
+		return { };
+	}
+
 	void Context::beforeRelease()
 	{
 		vkDeviceWaitIdle(m_device);
 	}
 
-	void Context::onRelease()
+	void Context::release()
 	{
 		// Swapchain.
 		m_swapchain.reset();
 
+		// Clear all builtin textures.
+		m_builtinTextures = {};
 
+		// Clear shader compiler.
+		m_shaderLibrary.reset();
+		m_shaderCompiler.reset();
+
+		// Release bindless manager resources.
+		m_bindlessManager.reset();
+
+		// Clear VMA.
+		if (m_vmaAllocator != VK_NULL_HANDLE)
+		{
+			vmaDestroyAllocator(m_vmaAllocator);
+			m_vmaAllocator = VK_NULL_HANDLE;
+		}
+
+		// Pipeline cache destroy.
 		helper::destroyPipelineCache(m_pipelineCache);
+
+		// Clear command pool.
+		m_graphicsCommandPool.reset();
 
 		if (m_device != VK_NULL_HANDLE)
 		{
@@ -759,9 +931,123 @@ namespace chord::graphics
 		}
 	}
 
+	void Context::initBuiltinTextures()
+	{
+		auto imageCI1x1  = helper::buildBasicUploadImageCreateInfo(1, 1);
+		auto uploadVMACI = helper::buildVMAUploadImageAllocationCI();
+
+		// Sync upload builtin textures.
+		{
+			m_builtinTextures.white = std::make_shared<GPUTexture>("Builtin::White", imageCI1x1, uploadVMACI);
+
+			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kWhite.getData());
+			syncUploadTexture(*m_builtinTextures.white, buffer1x1);
+		}
+		{
+			m_builtinTextures.transparent = std::make_shared<GPUTexture>("Builtin::Transparent", imageCI1x1, uploadVMACI);
+
+			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kTransparent.getData());
+			syncUploadTexture(*m_builtinTextures.transparent, buffer1x1);
+		}
+		{
+			m_builtinTextures.black = std::make_shared<GPUTexture>("Builtin::Black", imageCI1x1, uploadVMACI);
+
+			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kBlack.getData());
+			syncUploadTexture(*m_builtinTextures.black, buffer1x1);
+		}
+	}
+
+	void Context::syncUploadTexture(GPUTexture& texture, SizedBuffer data)
+	{
+		auto stageBuffer = createStageUploadBuffer(texture.getName() + "-syncStageBuffer", data);
+
+		executeImmediatelyMajorGraphics([&](VkCommandBuffer cmd, uint32 family, VkQueue queue)
+		{
+			const auto range = helper::buildBasicImageSubresource();
+
+			GPUTextureSyncBarrierMasks copyState{};
+			copyState.barrierMasks.queueFamilyIndex = family;
+			copyState.barrierMasks.accesMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			copyState.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			texture.transition(cmd, copyState, range);
+
+			VkBufferImageCopy region{};
+			region.bufferOffset      = 0;
+			region.bufferRowLength   = 0;
+			region.bufferImageHeight = 0;
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.mipLevel   = 0;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageOffset = { 0, 0, 0 };
+			region.imageExtent = texture.getExtent();
+			vkCmdCopyBufferToImage(cmd, *stageBuffer, texture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+			GPUTextureSyncBarrierMasks finalState{};
+			finalState.barrierMasks.queueFamilyIndex = family;
+			finalState.barrierMasks.accesMask = VK_ACCESS_SHADER_READ_BIT;
+			finalState.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			texture.transition(cmd, finalState, range);
+		});
+	}
+
+	void Context::executeImmediately(VkCommandPool commandPool, uint32 family, VkQueue queue, std::function<void(VkCommandBuffer cb, uint32 family, VkQueue queue)>&& func) const
+	{
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandPool = commandPool;
+		allocInfo.commandBufferCount = 1;
+
+		VkCommandBuffer commandBuffer;
+		checkVkResult(vkAllocateCommandBuffers(m_device, &allocInfo, &commandBuffer));
+
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		checkVkResult(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+		func(commandBuffer, family, queue);
+		checkVkResult(vkEndCommandBuffer(commandBuffer));
+
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
+		checkVkResult(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+		checkVkResult(vkQueueWaitIdle(queue));
+
+		vkFreeCommandBuffers(m_device, commandPool, 1, &commandBuffer);
+	}
+
+	void Context::executeImmediatelyMajorGraphics(std::function<void(VkCommandBuffer cb, uint32 family, VkQueue queue)>&& func) const
+	{
+		executeImmediately(getGraphicsCommandPool().pool(), getGraphicsCommandPool().family(), getMajorGraphicsQueue(), std::move(func));
+	}
+
 	Context& graphics::getContext()
 	{
-		static Context* context = &Application::get().getEngine().getSubsystem<Context>();
-		return *context;
+		return Application::get().getContext();
 	}
+
+	void setResourceName(VkObjectType objectType, uint64 handle, const char* name)
+	{
+		if (!bGraphicsDebugMarkerEnable)
+		{
+			return;
+		}
+
+		static std::mutex kMutexForSetResource;
+		{
+			std::lock_guard lock(kMutexForSetResource);
+
+			VkDebugUtilsObjectNameInfoEXT nameInfo = {};
+			nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			nameInfo.objectType = objectType;
+			nameInfo.objectHandle = handle;
+			nameInfo.pObjectName = name;
+
+			vkSetDebugUtilsObjectNameEXT(getDevice(), &nameInfo);
+		}
+	}
+
 }

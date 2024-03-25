@@ -26,24 +26,9 @@ namespace chord
 	bool Engine::init(const EngineInitConfig& config)
 	{
 		bool bResult = true;
-
-		// Graphics context init first.
 		if(bResult)
 		{
-			graphics::Context::InitConfig contextConfig{ };
 
-			// Hardcode configs.
-			contextConfig.bGLFW = true; // Force enable.
-			contextConfig.pAllocationCallbacks = nullptr;
-
-			// Load from inputs.
-			contextConfig.bDebugUtils = config.bDebugUtils;
-			contextConfig.bValidation = config.bValidation;
-			contextConfig.bHDR        = config.bHDR;
-			contextConfig.bRaytracing = config.bRaytracing;
-
-			// Register graphics context.
-			bResult &= registerSubsystem<graphics::Context>(contextConfig);
 		}
 
 		return bResult;

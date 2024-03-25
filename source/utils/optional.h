@@ -54,6 +54,10 @@ namespace chord
 	};
 	using OptionalSizeT  = OptionalValue<std::size_t, ~0>;
 	using OptionalUint32 = OptionalValue<uint32,      ~0>;
+	using OptionalUint64 = OptionalValue<uint64,      ~0>;
 
-	using OptionalVkShaderModule = OptionalValue<VkShaderModule, VK_NULL_HANDLE>;
+	using OptionalVkShaderModule   = OptionalValue<VkShaderModule,   VK_NULL_HANDLE>;
+	using OptionalVkDescriptorSet  = OptionalValue<VkDescriptorSet,  VK_NULL_HANDLE>;
+	using OptionalVkDescriptorPool = OptionalValue<VkDescriptorPool, VK_NULL_HANDLE>;
+	using OptionalVkImageView      = OptionalValue<VkImageView,      VK_NULL_HANDLE>;
 }

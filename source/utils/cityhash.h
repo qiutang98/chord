@@ -21,14 +21,14 @@
 // CityHash, by Geoff Pike and Jyrki Alakuijala
 //
 // This file provides a few functions for hashing strings. On x86-64
-// hardware in 2011, CityHash64() is faster than other high-quality
+// hardware in 2011, cityhash64() is faster than other high-quality
 // hash functions, such as Murmur.  This is largely due to higher
-// instruction-level parallelism.  CityHash64() and CityHash128() also perform
+// instruction-level parallelism.  cityhash64() and cityhash128() also perform
 // well on hash-quality tests.
 //
-// CityHash128() is optimized for relatively long strings and returns
+// cityhash128() is optimized for relatively long strings and returns
 // a 128-bit hash.  For strings more than about 2000 bytes it can be
-// faster than CityHash64().
+// faster than cityhash64().
 //
 // Functions in the CityHash family are not suitable for cryptography.
 //
@@ -54,37 +54,39 @@ namespace cityhash
 	typedef uint64_t uint64;
 	typedef std::pair<uint64, uint64> uint128;
 
-	inline uint64 Uint128Low64(const uint128& x) { return x.first; }
-	inline uint64 Uint128High64(const uint128& x) { return x.second; }
+	inline uint64 uint128Low64(const uint128& x) { return x.first; }
+	inline uint64 uint128High64(const uint128& x) { return x.second; }
 
 	// Hash function for a byte array.
-	extern uint64 CityHash64(const char* buf, size_t len);
+	extern uint64 cityhash64(const char* buf, size_t len);
+
+	extern uint64 HashLen16(uint64 u, uint64 v);
 
 	// Hash function for a byte array.  For convenience, a 64-bit seed is also
 	// hashed into the result.
-	extern uint64 CityHash64WithSeed(const char* buf, size_t len, uint64 seed);
+	extern uint64 ctyhash64WithSeed(const char* buf, size_t len, uint64 seed);
 
 	// Hash function for a byte array.  For convenience, two seeds are also
 	// hashed into the result.
-	extern uint64 CityHash64WithSeeds(const char* buf, size_t len,
+	extern uint64 cityhash64WithSeeds(const char* buf, size_t len,
 		uint64 seed0, uint64 seed1);
 
 	// Hash function for a byte array.
-	extern uint128 CityHash128(const char* s, size_t len);
+	extern uint128 cityhash128(const char* s, size_t len);
 
 	// Hash function for a byte array.  For convenience, a 128-bit seed is also
 	// hashed into the result.
-	extern uint128 CityHash128WithSeed(const char* s, size_t len, uint128 seed);
+	extern uint128 cityhash128WithSeed(const char* s, size_t len, uint128 seed);
 
 	// Hash 128 input bits down to 64 bits of output.
 	// This is intended to be a reasonably good hash function.
-	inline uint64 Hash128to64(const uint128& x)
+	inline uint64 hash128to64(const uint128& x)
 	{
 		// Murmur-inspired hashing.
 		const uint64 kMul = 0x9ddfea08eb382d69ULL;
-		uint64 a = (Uint128Low64(x) ^ Uint128High64(x)) * kMul;
+		uint64 a = (uint128Low64(x) ^ uint128High64(x)) * kMul;
 		a ^= (a >> 47);
-		uint64 b = (Uint128High64(x) ^ a) * kMul;
+		uint64 b = (uint128High64(x) ^ a) * kMul;
 		b ^= (b >> 47);
 		b *= kMul;
 		return b;

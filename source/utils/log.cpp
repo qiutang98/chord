@@ -181,12 +181,17 @@ namespace chord
 			return false;
 		};
 
+		const auto saveFilePath = cVarLogFileName.get() + serializeTimePoint(now, "_%Y_%m_%d_%H_%M_%S") + ".log";
+		const auto finalPath = saveFolder / saveFilePath;
+
+
 		// Delete old log files out of day.
 		if (cVarLogFileDelete.get())
 		{
 			std::vector<std::filesystem::path> pendingFiles = {};
 
-			for (const auto& dirEntry : std::filesystem::recursive_directory_iterator(saveFolder))
+			auto checkDeleted = finalPath.parent_path();
+			for (const auto& dirEntry : std::filesystem::recursive_directory_iterator(checkDeleted))
 			{
 				const auto& path = dirEntry.path();
 				if (shouldDeleteLogInDisk(path))
@@ -202,14 +207,10 @@ namespace chord
 		// Create new log file.
 		if (cVarLogFile.get())
 		{
-			const auto saveFilePath = cVarLogFileName.get() + serializeTimePoint(now, "_%Y_%m_%d_%H_%M_%S") + ".log";
-			const auto finalPath = saveFolder / saveFilePath;
-
 			{
 				const auto name = finalPath.stem().string();
 				check(std::regex_search(name, kLogNamePattern));
 			}
-
 			m_logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(finalPath.string().c_str(), true));
 			m_logSinks.back()->set_pattern(cVarLogFileFormat.get());
 		}

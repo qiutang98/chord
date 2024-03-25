@@ -6,12 +6,28 @@
 #include <utils/delegate.h>
 #include <utils/subsystem.h>
 #include <utils/optional.h>
+#include <graphics/graphics.h>
 
 namespace chord
 {
 	class Engine;
 
-	class EngineInitConfig
+	namespace graphics
+	{
+		class Context;
+	}
+
+	enum class EWindowMode
+	{
+		FullScreenWithoutTile = 0,
+		FullScreenWithTile,
+		Free,
+		FullScreen,
+
+		MAX
+	};
+
+	class GraphicsInitConfig
 	{
 	public:
 		bool bDebugUtils : 1;
@@ -20,10 +36,15 @@ namespace chord
 		bool bRaytracing : 1;
 	};
 
+	class EngineInitConfig
+	{
+	public:
+	};
+
 	class ApplicationTickData
 	{
 	public:
-
+		uint64 tickCount = 0;
 	};
 
 	class WindowData : NonCopyable
@@ -42,6 +63,9 @@ namespace chord
 	class Application : NonCopyable
 	{
 	protected:
+		// Application runtime period.
+		ERuntimePeriod m_runtimePeriod = ERuntimePeriod::MAX;
+
 		// Application init or not.
 		bool m_bInit = false;
 
@@ -52,8 +76,8 @@ namespace chord
 		// Cache main window.
 		WindowData m_windowData = { };
 
-		// Application own engine.
-		std::unique_ptr<Engine> m_engine = nullptr;
+		// Graphics context.
+		graphics::Context m_context;
 
 	public:
 		static Application& get();
@@ -63,6 +87,11 @@ namespace chord
 			return m_bInit; 
 		}
 
+		const auto getRuntimePeriod() const
+		{
+			return m_runtimePeriod;
+		}
+
 		// Init application.
 		struct InitConfig
 		{
@@ -70,15 +99,7 @@ namespace chord
 			std::string iconPath { };
 
 			// Main window init mode.
-			enum class EWindowMode
-			{
-				FullScreenWithoutTile = 0,
-				FullScreenWithTile,
-				Free,
-				FullScreen,
-
-				MAX
-			} windowShowMode = EWindowMode::FullScreenWithTile;
+			EWindowMode windowShowMode = EWindowMode::FullScreenWithTile;
 
 			// Window is resizable
 			bool bResizable = true;
@@ -87,8 +108,8 @@ namespace chord
 			uint32 width  = 800U;
 			uint32 height = 480U;
 
-			// Engine init config.
-			EngineInitConfig engineConfig;
+			// Graphics context init config.
+			GraphicsInitConfig graphicsConfig;
 		};
 		CHORD_NODISCARD bool init(const InitConfig& config);
 		
@@ -108,14 +129,14 @@ namespace chord
 			return  m_name; 
 		}
 
-		inline auto& getEngine()
+		inline auto& getContext()
 		{
-			return *m_engine;
+			return m_context;
 		}
 
-		inline const auto& getEngine() const
+		inline const auto& getContext() const
 		{
-			return *m_engine;
+			return m_context;
 		}
 
 		inline const auto& getWindowData() const

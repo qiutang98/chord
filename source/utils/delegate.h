@@ -159,8 +159,8 @@ namespace chord
 		}
 
 	protected:
-		// Broadcast return used for chain call.
-		void broadcastRet(Args...args, std::function<void(const RetType*)>&& opResult = nullptr)
+		template<typename OpType = size_t>
+		void broadcast(Args...args, std::function<void(const OpType&)>&& opResult = nullptr)
 		{
 			std::shared_lock<std::shared_mutex> lock(m_lock);
 
@@ -168,25 +168,18 @@ namespace chord
 
 			for (auto& event : m_events)
 			{
-				RetType result = event.lambda(std::forward<Args>(args)...);
-				if (opResult != nullptr)
+				if constexpr (std::is_void_v<RetType>)
 				{
-					opResult(&result);
+					event.lambda(std::forward<Args>(args)...);
 				}
-			}
-
-			m_broadcasting--;
-		}
-
-		void broadcast(Args...args)
-		{
-			std::shared_lock<std::shared_mutex> lock(m_lock);
-
-			m_broadcasting++;
-
-			for (auto& event : m_events)
-			{
-				event.lambda(std::forward<Args>(args)...);
+				else
+				{
+					RetType result = event.lambda(std::forward<Args>(args)...);
+					if (opResult != nullptr)
+					{
+						opResult(result);
+					}
+				}
 			}
 
 			m_broadcasting--;

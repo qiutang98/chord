@@ -1,6 +1,10 @@
 #include <application/application.h>
 #include <utils/log.h>
 #include <filesystem>
+#include <utils/thread.h>
+#include <graphics/graphics.h>
+#include <graphics/shader.h>
+#include <graphics/shadercompiler.h>
 
 namespace chord
 {
@@ -20,8 +24,6 @@ namespace chord
 
     void Application::createMainWindow(const InitConfig& config)
     {
-        using ShowModeEnum = InitConfig::EWindowMode;
-
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // Vulkan need disable OpenGL context api.
 		glfwWindowHint(GLFW_RESIZABLE, config.bResizable ? GL_TRUE : GL_FALSE);
 
@@ -32,11 +34,11 @@ namespace chord
 		const GLFWvidmode* mode = glfwGetVideoMode(monitor);
 
 		// Create window for different window type.
-		if (config.windowShowMode == ShowModeEnum::FullScreen)
+		if (config.windowShowMode == EWindowMode::FullScreen)
 		{
 			m_windowData.window = glfwCreateWindow(mode->width, mode->height, config.appName.c_str(), monitor, nullptr);
 		}
-		else if (config.windowShowMode == ShowModeEnum::FullScreenWithoutTile)
+		else if (config.windowShowMode == EWindowMode::FullScreenWithoutTile)
 		{
 			glfwWindowHint(GLFW_RED_BITS,     mode->redBits);
 			glfwWindowHint(GLFW_GREEN_BITS,   mode->greenBits);
@@ -49,13 +51,13 @@ namespace chord
 		else
 		{
 			check(
-				config.windowShowMode == ShowModeEnum::FullScreenWithTile ||
-				config.windowShowMode == ShowModeEnum::Free);
+				config.windowShowMode == EWindowMode::FullScreenWithTile ||
+				config.windowShowMode == EWindowMode::Free);
 
 			auto clampWidth  = std::max(1U, config.width);
 			auto clampHeight = std::max(1U, config.height);
 
-			if (config.windowShowMode == ShowModeEnum::FullScreenWithTile)
+			if (config.windowShowMode == EWindowMode::FullScreenWithTile)
 			{
 				glfwWindowHint(GLFW_MAXIMIZED, GL_TRUE);
 			}
@@ -66,7 +68,7 @@ namespace chord
 			glfwGetWindowSize(m_windowData.window, &m_windowData.width, &m_windowData.height);
 
 			// Center free mode window to center.
-			if (config.windowShowMode == ShowModeEnum::Free)
+			if (config.windowShowMode == EWindowMode::Free)
 			{
 				glfwSetWindowPos(m_windowData.window, (mode->width - m_windowData.width) / 2, (mode->height - m_windowData.height) / 2);
 			}
@@ -95,6 +97,9 @@ namespace chord
     bool Application::init(const InitConfig& config)
     {
         check(!m_bInit);
+        m_runtimePeriod = ERuntimePeriod::Initing;
+
+        ThreadContext::main().init();
 
         // GLFW init.
         if (glfwInit() != GLFW_TRUE)
@@ -154,14 +159,28 @@ namespace chord
         // Temporal update init state.
         m_bInit = true;
 
-        // Create engine.
-        m_engine = std::make_unique<Engine>(*this);
-        m_bInit &= m_engine->init(config.engineConfig);
+        // Graphics context.
+        {
+            graphics::Context::InitConfig contextConfig{ };
+
+            // Hardcode configs.
+            contextConfig.bGLFW = true; // Force enable.
+            contextConfig.pAllocationCallbacks = nullptr;
+
+            // Load from inputs.
+            contextConfig.bDebugUtils = config.graphicsConfig.bDebugUtils;
+            contextConfig.bValidation = config.graphicsConfig.bValidation;
+            contextConfig.bHDR        = config.graphicsConfig.bHDR;
+            contextConfig.bRaytracing = config.graphicsConfig.bRaytracing;
+
+            m_bInit &= m_context.init(contextConfig);
+        }
+
 
         // Broadcast init events if engine succeed init.
         if (m_bInit)
         {
-            onInit.broadcastRet([&](const bool* bResult) { m_bInit &= (*bResult); });
+            onInit.broadcast<bool>([&](const bool& bResult) { m_bInit &= bResult; });
         }
 
         // Return result.
@@ -170,44 +189,61 @@ namespace chord
 
     void Application::loop()
     {
+        m_runtimePeriod = ERuntimePeriod::Ticking;
+
         ApplicationTickData tickData { };
 
         while (m_windowData.bContinue)
         {
             glfwPollEvents();
 
-            // Subsystem tick.
-            m_windowData.bContinue &= m_engine->tick(tickData);
-            m_windowData.bContinue &= glfwWindowShouldClose(m_windowData.window) == GLFW_FALSE;
+            // Graphics context tick.
+            m_windowData.bContinue &= m_context.tick(tickData);
 
+            // Accept glfw close event.
+            m_windowData.bContinue &= (glfwWindowShouldClose(m_windowData.window) == GLFW_FALSE);
             if (!m_windowData.bContinue)
             {
                 // Query events if they prevent exit.
                 if (!onShouldClosed.isEmpty())
                 {
                     // On closed event intercept action and broadcast again.
-                    onShouldClosed.broadcastRet([&](const bool* bExit)
+                    onShouldClosed.broadcast<bool>([&](const bool& bExit)
                     {
-                        m_windowData.bContinue |= !(*bExit);
+                        m_windowData.bContinue |= (!bExit);
                     });
                 }
 
                 // Reupdate window close state.
                 glfwSetWindowShouldClose(m_windowData.window, !m_windowData.bContinue);
             }
+
+            // Flush sync event in main.
+            ThreadContext::main().tick(tickData.tickCount);
+
+            // Update tick count.
+            tickData.tickCount ++;
         }
     }
 
     void Application::release()
     {
-        // Engine before release.
-        m_engine->beforeRelease();
+        m_runtimePeriod = ERuntimePeriod::BeforeReleasing;
+
+        m_context.beforeRelease();
+
+        // Flush sync event in main thread.
+        ThreadContext::main().beforeRelease();
+
+        m_runtimePeriod = ERuntimePeriod::Releasing;
 
         // Broadcast release event.
         onRelease.broadcast();
 
-        // Release engine.
-        m_engine.reset();
+        m_context.release();
+
+        // Flush sync event in main.
+        ThreadContext::main().release();
 
         // Destroy window.
         glfwDestroyWindow(m_windowData.window);

@@ -1,3 +1,4 @@
+#include <graphics/swapchain.h>
 #include <graphics/graphics.h>
 #include <utils/cvar.h>
 #include <application/application.h>
@@ -57,6 +58,7 @@ namespace chord::graphics
 
 	Swapchain::Swapchain()
 	{
+		// NOTE: Current default work in main graphics queue.
 		m_queue = getContext().getMajorGraphicsQueue();
 
 		// Create surface.
@@ -212,15 +214,7 @@ namespace chord::graphics
 				return false;
 			};
 
-			const VkSurfaceFormatKHR k10BitSRGB =
-			{ .format = VK_FORMAT_A2B10G10R10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
-			const VkSurfaceFormatKHR k8BitSRGB =
-			{ .format = VK_FORMAT_B8G8R8A8_SRGB, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
-			const VkSurfaceFormatKHR kScRGB =
-			{ .format = VK_FORMAT_R16G16B16A16_SFLOAT, .colorSpace = VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT };
-			const VkSurfaceFormatKHR kHDR10ST2084 =
-			{ .format = VK_FORMAT_A2B10G10R10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT };
-
+			// HDR first require.
 			if (getContext().isRequiredHDR())
 			{
 				if (isContainFormat(kHDR10ST2084))
@@ -235,6 +229,7 @@ namespace chord::graphics
 				}
 			}
 
+			// Fallback to SDR.
 			if (m_formatType == EFormatType::None)
 			{
 				if (isContainFormat(k10BitSRGB))
@@ -270,32 +265,43 @@ namespace chord::graphics
 			m_extent = actualExtent;
 		}
 
+		// Backbuffer count clamp by hardware.
 		m_backbufferCount = std::clamp(cVarDesiredSwapchainBackBufferCount.get(), caps.minImageCount, caps.maxImageCount);
+
+		// Now create swapchain.
 		m_swapchain = helper::createSwapchain(m_surface, m_backbufferCount, m_surfaceFormat, m_extent, caps.currentTransform, m_presentMode);
 
 		// Get swapchain images.
-		m_swapchainImages.resize(m_backbufferCount);
-		vkGetSwapchainImagesKHR(getContext().getDevice(), m_swapchain, &m_backbufferCount, m_swapchainImages.data());
+		{
+			m_swapchainImages.resize(m_backbufferCount);
+			vkGetSwapchainImagesKHR(getContext().getDevice(), m_swapchain, &m_backbufferCount, m_swapchainImages.data());
+		}
 
 		// Create image views.
 		m_swapchainImageViews.resize(m_backbufferCount);
 		for (auto i = 0; i < m_swapchainImages.size(); i++)
 		{
 			VkImageViewCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			createInfo.pNext = nullptr;
+			createInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			createInfo.pNext    = nullptr;
 			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			createInfo.image = m_swapchainImages[i];
-			createInfo.format = m_surfaceFormat.format;
+			createInfo.image    = m_swapchainImages[i];
+			createInfo.format   = m_surfaceFormat.format;
+
+			// Current don't need swizzle.
 			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
 			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+			// Color bit usage.
 			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			createInfo.subresourceRange.baseMipLevel = 0;
-			createInfo.subresourceRange.levelCount = 1;
+
+			// Basic subresource.
+			createInfo.subresourceRange.baseMipLevel   = 0;
+			createInfo.subresourceRange.levelCount     = 1;
 			createInfo.subresourceRange.baseArrayLayer = 0;
-			createInfo.subresourceRange.layerCount = 1;
+			createInfo.subresourceRange.layerCount     = 1;
 
 			// Create swapchain image view.
 			m_swapchainImageViews[i] = helper::createImageView(createInfo);
@@ -303,17 +309,15 @@ namespace chord::graphics
 
 		// Init present relative context.
 		{
-			m_semaphoresImageAvailable.resize(m_backbufferCount);
-			m_semaphoresRenderFinished.resize(m_backbufferCount);
-
-			m_inFlightFences.resize(m_backbufferCount);
 			m_imagesInFlight.resize(m_backbufferCount);
-
 			for (auto& fence : m_imagesInFlight)
 			{
 				fence = VK_NULL_HANDLE;
 			}
 
+			m_semaphoresImageAvailable.resize(m_backbufferCount);
+			m_semaphoresRenderFinished.resize(m_backbufferCount);
+			m_inFlightFences.resize(m_backbufferCount);
 			for (auto i = 0; i < m_backbufferCount; i++)
 			{
 				m_semaphoresImageAvailable[i] = helper::createSemaphore();
@@ -324,20 +328,16 @@ namespace chord::graphics
 		}
 
 		{
-			m_cmdPool.family = getContext().getQueuesInfo().graphicsFamily.get();
-			m_cmdPool.queue  = getContext().getQueuesInfo().graphcisQueues[0].queue;
-			m_cmdPool.pool = helper::createCommandPool(m_cmdPool.family, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-
 			m_cmdBufferRing.resize(m_backbufferCount);
 			for (auto& buffer : m_cmdBufferRing)
 			{
-				buffer = helper::allocateCommandBuffer(m_cmdPool.pool);
+				buffer = helper::allocateCommandBuffer(getContext().getGraphicsCommandPool().pool());
 			}
 
 			m_cmdSemaphoreRing.resize(m_backbufferCount);
 			for (auto& semaphore : m_cmdSemaphoreRing)
 			{
-				// Default signaled.
+				// Default signaled so first frame can start.
 				semaphore = helper::createSemaphore(VK_FENCE_CREATE_SIGNALED_BIT);
 			}
 		}
@@ -345,12 +345,12 @@ namespace chord::graphics
 
 	void Swapchain::releaseContext()
 	{
-		// Flush queue.
+		// Flush working queue.
 		vkQueueWaitIdle(m_queue);
 
 		for (auto& buffer : m_cmdBufferRing)
 		{
-			vkFreeCommandBuffers(getContext().getDevice(), m_cmdPool.pool, (uint32)m_cmdBufferRing.size(), m_cmdBufferRing.data());
+			vkFreeCommandBuffers(getDevice(), getContext().getGraphicsCommandPool().pool(), (uint32)m_cmdBufferRing.size(), m_cmdBufferRing.data());
 		}
 		m_cmdBufferRing.clear();
 
@@ -360,17 +360,17 @@ namespace chord::graphics
 		}
 		m_cmdSemaphoreRing.clear();
 
-		helper::destroyCommandPool(m_cmdPool.pool);
-
 		// Destroy present relative data.
 		for (auto i = 0; i < m_backbufferCount; i++)
 		{
 			helper::destroySemaphore(m_semaphoresImageAvailable[i]);
 			helper::destroySemaphore(m_semaphoresRenderFinished[i]);
 
+			// Fence destroy.
 			helper::destroyFence(m_inFlightFences[i]);
 		}
 
+		// Destroy swapchain cache image views.
 		for (auto& imageView : m_swapchainImageViews)
 		{
 			helper::destroyImageView(imageView);
@@ -380,26 +380,30 @@ namespace chord::graphics
 
 		// Release tick index.
 		m_backbufferCount = 0;
-		m_imageIndex = 0;
-		m_currentFrame = 0;
+		m_imageIndex      = 0;
+		m_currentFrame    = 0;
 	}
 
 	void Swapchain::recreateContext()
 	{
 		// Need to skip zero size framebuffer case.
-		int32 width = 0, height = 0;
-		Application::get().queryFramebufferSize(width, height);
-
-		// just return if swapchain width or height is 0.
-		if (width == 0 || height == 0)
 		{
-			m_bSwapchainChange = true;
-			return;
+			int32 width = 0, height = 0;
+			Application::get().queryFramebufferSize(width, height);
+
+			// just return if swapchain width or height is 0.
+			if (width == 0 || height == 0)
+			{
+				// Need to mark swapchain change state.
+				// So next time when framebuffer resize we stil know we need to recreate.
+				m_bSwapchainChange = true;
+				return;
+			}
 		}
 
+		// Now recreate context.
 		onBeforeSwapchainRecreate.broadcast();
 		{
-			// Context rebuild.
 			releaseContext();
 			createContext();
 		}

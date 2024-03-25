@@ -7,6 +7,12 @@
 #include <GLFW/glfw3.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
+#include <nameof/nameof.hpp>
+
+#define VMA_VULKAN_VERSION 1003000
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#include <vma/vk_mem_alloc.h>
 
 #include <vector>
 #include <string>
@@ -19,6 +25,15 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <optional>
+#include <queue>
+#include <stack>
+#include <future>
+#include <condition_variable>
+#include <type_traits>
+#include <algorithm>
+#include <chrono>
+#include <codecvt>
+#include <locale>
 
 // GLM math library config.
 // 0. glm force compute on radians.

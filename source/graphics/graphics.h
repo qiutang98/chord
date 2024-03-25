@@ -1,201 +1,64 @@
 #pragma once
 
-#include <utils/log.h>
-#include <utils/subsystem.h>
-#include <utils/delegate.h>
+#include <graphics/common.h>
+#include <graphics/resource.h>
+#include <graphics/swapchain.h>
+#include <graphics/bindless.h>
 
 namespace chord
 {
-	class Window;
+	class ApplicationTickData;
 }
 
 namespace chord::graphics
 {
-	// Cache GPU queue infos.
-	struct GPUQueuesInfo
+	struct PhysicalDeviceFeatures
 	{
-		OptionalUint32 graphicsFamily      { };
-		OptionalUint32 computeFamily       { };
-		OptionalUint32 copyFamily          { };
-		OptionalUint32 sparseBindingFamily { };
-		OptionalUint32 videoDecodeFamily   { };
-		OptionalUint32 videoEncodeFamily   { };
+		PhysicalDeviceFeatures();
 
-		struct Queue
-		{
-			VkQueue queue;
-			float priority;
-		};
+		// Update pNext chain when query or create device.
+		void** stepNextPtr(void** ppNext);
 
-		// Sort by priority, descending order.
-		std::vector<Queue> computeQueues;  
-		std::vector<Queue> copyQueues;     
-		std::vector<Queue> graphcisQueues; 
-		std::vector<Queue> spatialBindingQueues;
-		std::vector<Queue> videoDecodeQueues;
-		std::vector<Queue> videoEncodeQueues;
+		// Core.
+		VkPhysicalDeviceFeatures core10Features {};
+		VkPhysicalDeviceVulkan11Features core11Features { };
+		VkPhysicalDeviceVulkan12Features core12Features { };
+		VkPhysicalDeviceVulkan13Features core13Features { };
+
+		// KHR.
+		VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
+		VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracingPipelineFeatures{ };
+		VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{ };
+
+		// EXT.
+		VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features{ };
+		VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features{ };
 	};
 
-	namespace log
+	struct PhysicalDeviceProperties
 	{
-		extern spdlog::logger& get();
-	}
+		PhysicalDeviceProperties();
+		void** getNextPtr();
 
-	#define LOG_GRAPHICS_TRACE(...) chord_macro_sup_enableLogOnly({ log::get().trace(__VA_ARGS__); })
-	#define LOG_GRAPHICS_INFO(...) chord_macro_sup_enableLogOnly({ log::get().info(__VA_ARGS__); })
-	#define LOG_GRAPHICS_WARN(...) chord_macro_sup_enableLogOnly({ log::get().warn(__VA_ARGS__); })
-	#define LOG_GRAPHICS_ERROR(...) chord_macro_sup_enableLogOnly({ log::get().error(__VA_ARGS__); })
-	#define LOG_GRAPHICS_FATAL(...) chord_macro_sup_enableLogOnly({ log::get().critical(__VA_ARGS__); ::chord::applicationCrash(); })
+		VkPhysicalDeviceMemoryProperties memoryProperties{};
+		VkPhysicalDeviceProperties deviceProperties{ };
+		VkPhysicalDeviceProperties2 deviceProperties2{ };
+		VkPhysicalDeviceSubgroupProperties subgroupProperties{ };
+		VkPhysicalDeviceDescriptorIndexingProperties descriptorIndexingProperties{ };
 
-	static inline auto getNextPtr(auto& v)
-	{
-		return &v.pNext;
-	}
+		// KHR.
+		VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties{ };
+	};
 
-	static inline void stepNextPtr(auto& ptr, auto& v)
-	{
-		*(ptr) = &(v);
-		 (ptr) = &(v.pNext);
-	}
-}
-
-#define checkGraphics(x) chord_macro_sup_checkPrintContent(x, LOG_GRAPHICS_FATAL)
-#define checkGraphicsMsgf(x, ...) chord_macro_sup_checkMsgfPrintContent(x, LOG_GRAPHICS_FATAL, __VA_ARGS__)
-#define ensureGraphicsMsgf(x, ...) chord_macro_sup_ensureMsgfContent(x, LOG_GRAPHICS_ERROR, __VA_ARGS__)
-#define checkVkResult(x) checkGraphics((x) == VK_SUCCESS)
-
-namespace chord::graphics
-{
-	class Swapchain : NonCopyable
+	class BuiltinTextures
 	{
 	public:
-		enum class EFormatType
-		{
-			None = 0,
-			sRGB10Bit,
-			sRGB8Bit,
-			scRGB,
-			ST2084,
-
-			MAX
-		};
-
-		struct SupportDetails
-		{
-			VkSurfaceCapabilitiesKHR capabilities;
-			std::vector<VkSurfaceFormatKHR> surfaceFormats;
-			std::vector<VkPresentModeKHR> presentModes;
-		};
-
-		explicit Swapchain();
-		~Swapchain();
-
-		VkSwapchainKHR getSwapchain() const 
-		{ 
-			return m_swapchain; 
-		}
-
-		const VkExtent2D& getExtent() const
-		{
-			return m_extent;
-		}
-
-		EFormatType getFormatType() const
-		{
-			return m_formatType;
-		}
-
-		uint32 getBackbufferCount() const
-		{
-			return m_backbufferCount;
-		}
-
-		// Acquire next present image, return using image index.
-		uint32 acquireNextPresentImage();
-
-		void markDirty() { m_bSwapchainChange = true; }
-
-		void submit(uint32 count, VkSubmitInfo* infos);
-		void present();
-
-		VkSemaphore getCurrentFrameWaitSemaphore() const;
-		VkSemaphore getCurrentFrameFinishSemaphore() const;
-
-		std::pair<VkCommandBuffer, VkSemaphore> beginFrameCmd(uint64 tickCount) const;
-
-		// Param #0: old dimension, param #1: new dimension.
-		Events<Swapchain> onBeforeSwapchainRecreate;
-
-		// Param #0: old dimension, param #1: new dimension.
-		Events<Swapchain> onAfterSwapchainRecreate;
-
-	private:
-		void createContext();
-		void releaseContext();
-
-		// Context recreate.
-		void recreateContext();
-
-	private:
-		// Working queue.
-		VkQueue m_queue;
-
-		// Vulkan surface.
-		VkSurfaceKHR m_surface = VK_NULL_HANDLE;
-
-		// Vulkan back buffer format type.
-		EFormatType m_formatType = EFormatType::None;
-
-		// Vulkan surface format.
-		VkSurfaceFormatKHR m_surfaceFormat = {};
-
-		// Current swapchain support detail.
-		SupportDetails m_supportDetails;
-
-		// Window swapchain.
-		VkSwapchainKHR m_swapchain = VK_NULL_HANDLE;
-
-		// Own image.
-		std::vector<VkImage> m_swapchainImages = {};
-
-		// Image views.
-		std::vector<VkImageView> m_swapchainImageViews = {};
-
-		// Extent of swapchain.
-		VkExtent2D m_extent = {};
-
-		// Current swapchain present mode.
-		VkPresentModeKHR m_presentMode = {};
-
-		// Ring present realtive info.
-		uint32 m_backbufferCount = 0;
-		uint32 m_imageIndex = 0;
-		uint32 m_currentFrame = 0;
-
-		// Semaphores.
-		std::vector<VkSemaphore> m_semaphoresImageAvailable;
-		std::vector<VkSemaphore> m_semaphoresRenderFinished;
-
-		// Fences.
-		std::vector<VkFence> m_inFlightFences;
-		std::vector<VkFence> m_imagesInFlight;
-
-		// Swapchain dirty need rebuild context.
-		bool m_bSwapchainChange = false;
-
-		// Generic command pool for renderer, commonly is ring style.
-		struct RendererCommandPool
-		{
-			uint32 family = ~0;
-			VkQueue queue = VK_NULL_HANDLE;
-			VkCommandPool pool = VK_NULL_HANDLE;
-		};
-		RendererCommandPool m_cmdPool;
-		std::vector<VkCommandBuffer> m_cmdBufferRing;
-		std::vector<VkSemaphore> m_cmdSemaphoreRing; // Semaphore wait for cmd buffer ring.
+		GPUTextureRef white = nullptr;       // 1x1 RGBA(255,255,255,255)
+		GPUTextureRef transparent = nullptr; // 1x1 RGBA(  0,  0,  0,  0)
+		GPUTextureRef black = nullptr;       // 1x1 RGBA(  0,  0,  0,255) 
 	};
 
-	class Context : public ISubsystem
+	class Context : NonCopyable
 	{
 	public:
 		struct InitConfig
@@ -210,74 +73,15 @@ namespace chord::graphics
 			VkAllocationCallbacks* pAllocationCallbacks = nullptr;
 		};
 
-		explicit Context(const InitConfig& config);
+		explicit Context() = default;
 
-		struct PhysicalDeviceProperties
-		{
-			VkPhysicalDeviceMemoryProperties memoryProperties {};
-			VkPhysicalDeviceProperties deviceProperties { };
-			VkPhysicalDeviceProperties2 deviceProperties2 { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
-			VkPhysicalDeviceSubgroupProperties subgroupProperties { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES };
-			VkPhysicalDeviceDescriptorIndexingProperties descriptorIndexingProperties { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES };
-
-			// KHR.
-			VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR };
-		
-			void** getNextPtr()
-			{
-				auto pNext = graphics::getNextPtr(this->deviceProperties2);
-
-				graphics::stepNextPtr(pNext, this->subgroupProperties);
-				graphics::stepNextPtr(pNext, this->descriptorIndexingProperties);
-				graphics::stepNextPtr(pNext, this->accelerationStructureProperties);
-
-				return pNext;
-			}
-		};
-
-		struct PhysicalDeviceFeatures
-		{
-			// Core.
-			VkPhysicalDeviceFeatures core10Features {};
-			VkPhysicalDeviceVulkan11Features core11Features { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
-			VkPhysicalDeviceVulkan12Features core12Features { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
-			VkPhysicalDeviceVulkan13Features core13Features { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
-
-			// KHR.
-			VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures 
-			{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
-			VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracingPipelineFeatures 
-			{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
-			VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures 
-			{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR };
-
-			// EXT.
-			VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features 
-			{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT };
-			VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features 
-			{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT };
-
-			// Update pNext chain when query or create device.
-			void** stepNextPtr(auto& s)
-			{
-				auto pNext = getNextPtr(s);
-
-				graphics::stepNextPtr(pNext, this->core11Features);
-				graphics::stepNextPtr(pNext, this->core12Features);
-				graphics::stepNextPtr(pNext, this->core13Features);
-				graphics::stepNextPtr(pNext, this->rayQueryFeatures);
-				graphics::stepNextPtr(pNext, this->raytracingPipelineFeatures);
-				graphics::stepNextPtr(pNext, this->accelerationStructureFeatures);
-				graphics::stepNextPtr(pNext, this->extendedDynamicState2Features);
-				graphics::stepNextPtr(pNext, this->extendedDynamicState3Features);
-
-				return pNext;
-			}
-		};
-
+		const auto& getPhysicalDeviceDescriptorIndexingProperties() { return m_physicalDeviceProperties.descriptorIndexingProperties;  }
 		VkInstance getInstance() const { return m_instance; }
 		VkPhysicalDevice getPhysicalDevice() const { return m_physicalDevice; }
 		VkDevice getDevice() const { return m_device; }
+
+		// Find memory type from memory.
+		OptionalUint32 findMemoryType(uint32 typeFilter, VkMemoryPropertyFlags properties) const;
 
 		// Major graphics queue is most importance queue with highest priority.
 		VkQueue getMajorGraphicsQueue() const { return m_gpuQueuesInfo.graphcisQueues[0].queue; }
@@ -291,11 +95,55 @@ namespace chord::graphics
 		// Current graphics support HDR.
 		bool isRequiredHDR() const { return m_initConfig.bHDR; }
 
-	protected:
-		virtual void beforeRelease() override;
-		virtual bool onInit() override;
-		virtual bool onTick(const SubsystemTickData& tickData) override;
-		virtual void onRelease() override;
+		// Current application own bindless manager.
+		auto& getBindlessManger() { return *m_bindlessManager; }
+		const auto& getBindlessManger() const { return *m_bindlessManager; }
+
+		auto& getSwapchain() { return *m_swapchain; }
+		const auto& getSwapchain() const { return *m_swapchain; }
+
+		// All samplers managed by SamplerManager, only one instance.
+		auto& getSamplerManager() { return *m_samplerManager; }
+		const auto& getSamplerManager() const { return *m_samplerManager; }
+
+		// Current application own shader compiler.
+		auto& getShaderCompiler() { return *m_shaderCompiler; }
+		const auto& getShaderCompiler() const { return *m_shaderCompiler; }
+
+		// Vulkan memory allocator handle.
+		VmaAllocator getVMA() const { return m_vmaAllocator; }
+
+		// Engine built textures.
+		const BuiltinTextures& getBuiltinTextures() const { return m_builtinTextures; }
+
+		// Create a stage upload buffer, commonly only used for engine init.
+		GPUBufferRef createStageUploadBuffer(const std::string& name, SizedBuffer data);
+
+		// Sync upload texture, only used for engine init, should not call in actually render pipeline.
+		void syncUploadTexture(GPUTexture& texture, SizedBuffer data);
+
+		// Sync execute command buffer, only used for engine init, should not call in actually render pipeline.
+		void executeImmediately(VkCommandPool commandPool, uint32 family, VkQueue queue, std::function<void(VkCommandBuffer cb, uint32 family, VkQueue queue)>&& func) const;
+
+		// Sync execute command buffer in main graphics queue, only used for engine init, should not call in actually render pipeline.
+		void executeImmediatelyMajorGraphics(std::function<void(VkCommandBuffer cb, uint32 family, VkQueue queue)>&& func) const;
+
+		// Builtin graphics command pool with RESET bit.
+		const CommandPoolResetable& getGraphicsCommandPool() const { return *m_graphicsCommandPool; }
+
+	public:
+		bool init(const InitConfig& config);
+		bool tick(const ApplicationTickData& tickData);
+
+		void beforeRelease();
+		void release();
+
+		// After context basic init will call and clean this event.
+		Events<Context> onInit;
+
+	private:
+		// Sync init builtin textures.
+		void initBuiltinTextures();
 
 	private:
 		InitConfig m_initConfig = { };
@@ -327,15 +175,60 @@ namespace chord::graphics
 		// Vulkan pipeline cache.
 		VkPipelineCache m_pipelineCache = VK_NULL_HANDLE;
 
+		// VMA allocator.
+		VmaAllocator m_vmaAllocator = VK_NULL_HANDLE;
+
 		// Vulkan swapchain.
 		std::unique_ptr<Swapchain> m_swapchain = nullptr;
+		
+		// Vulkan bindless manager.
+		std::unique_ptr<BindlessManager> m_bindlessManager = nullptr;
 
+		// All sampler manager.
+		std::unique_ptr<GPUSamplerManager> m_samplerManager = nullptr;
+
+		// Engine builtin textures.
+		BuiltinTextures m_builtinTextures;
+
+		// Graphics family command pool with RESET bit flag.
+		std::unique_ptr<CommandPoolResetable> m_graphicsCommandPool;
+
+		// Shader compiler of context.
+		std::unique_ptr<ShaderCompilerManager> m_shaderCompiler = nullptr;
+		std::unique_ptr<ShaderLibrary> m_shaderLibrary = nullptr;
 	};
-}
 
-namespace chord::graphics
-{
+	// Helper function save some time.
 	extern Context& getContext();
-	inline VkDevice getDevice() { return getContext().getDevice(); }
-	inline const auto* getAllocationCallbacks() { return getContext().getAllocationCallbacks(); }
+
+	// Helper function save some time.
+	static inline const auto* getAllocationCallbacks() 
+	{ 
+		return getContext().getAllocationCallbacks(); 
+	}
+
+	// Helper function save some time.
+	static inline VkDevice getDevice()
+	{
+		return getContext().getDevice();
+	}
+
+	// Helper function save some time.
+	static inline auto& getBindless()
+	{
+		return getContext().getBindlessManger();
+	}
+
+	// Helper function save some time.
+	static inline auto& getSamplers()
+	{
+		return getContext().getSamplerManager();
+	}
+
+	static inline auto getVMA()
+	{
+		return getContext().getVMA();
+	}
+
+	extern void setResourceName(VkObjectType objectType, uint64 handle, const char* name);
 }

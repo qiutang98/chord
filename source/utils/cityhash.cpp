@@ -20,7 +20,7 @@
 //
 // CityHash, by Geoff Pike and Jyrki Alakuijala
 //
-// This file provides CityHash64() and related functions.
+// This file provides cityhash64() and related functions.
 //
 // It's probably possible to create even faster hash functions by
 // writing a program that systematically explores some of the space of
@@ -120,9 +120,9 @@ static uint64 ShiftMix(uint64 val)
 	return val ^ (val >> 47);
 }
 
-static uint64 HashLen16(uint64 u, uint64 v) 
+uint64 cityhash::HashLen16(uint64 u, uint64 v) 
 {
-	return Hash128to64(uint128(u, v));
+	return hash128to64(uint128(u, v));
 }
 
 static uint64 HashLen0to16(const char* s, size_t len) 
@@ -213,7 +213,7 @@ static uint64 HashLen33to64(const char* s, size_t len)
 	return ShiftMix(r * k0 + vs) * k2;
 }
 
-uint64 cityhash::CityHash64(const char* s, size_t len) 
+uint64 cityhash::cityhash64(const char* s, size_t len) 
 {
 	if (len <= 32) 
 	{
@@ -259,23 +259,23 @@ uint64 cityhash::CityHash64(const char* s, size_t len)
 		HashLen16(v.second, w.second) + x);
 }
 
-uint64 cityhash::CityHash64WithSeed(const char* s, size_t len, uint64 seed) 
+uint64 cityhash::ctyhash64WithSeed(const char* s, size_t len, uint64 seed) 
 {
-	return cityhash::CityHash64WithSeeds(s, len, k2, seed);
+	return cityhash::cityhash64WithSeeds(s, len, k2, seed);
 }
 
-uint64 cityhash::CityHash64WithSeeds(const char* s, size_t len,
+uint64 cityhash::cityhash64WithSeeds(const char* s, size_t len,
 	uint64 seed0, uint64 seed1) 
 {
-	return HashLen16(CityHash64(s, len) - seed0, seed1);
+	return HashLen16(cityhash64(s, len) - seed0, seed1);
 }
 
-// A subroutine for CityHash128().  Returns a decent 128-bit hash for strings
+// A subroutine for cityhash128().  Returns a decent 128-bit hash for strings
 // of any length representable in signed long.  Based on City and Murmur.
 static uint128 CityMurmur(const char* s, size_t len, uint128 seed) 
 {
-	uint64 a = Uint128Low64(seed);
-	uint64 b = Uint128High64(seed);
+	uint64 a = uint128Low64(seed);
+	uint64 b = uint128High64(seed);
 	uint64 c = 0;
 	uint64 d = 0;
 	signed long l = len - 16;
@@ -304,7 +304,7 @@ static uint128 CityMurmur(const char* s, size_t len, uint128 seed)
 	return uint128(a ^ b, HashLen16(b, a));
 }
 
-uint128 cityhash::CityHash128WithSeed(const char* s, size_t len, uint128 seed) 
+uint128 cityhash::cityhash128WithSeed(const char* s, size_t len, uint128 seed) 
 {
 	if (len < 128) 
 	{
@@ -314,15 +314,15 @@ uint128 cityhash::CityHash128WithSeed(const char* s, size_t len, uint128 seed)
 	// We expect len >= 128 to be the common case.  Keep 56 bytes of state:
 	// v, w, x, y, and z.
 	pair<uint64, uint64> v, w;
-	uint64 x = Uint128Low64(seed);
-	uint64 y = Uint128High64(seed);
+	uint64 x = uint128Low64(seed);
+	uint64 y = uint128High64(seed);
 	uint64 z = len * k1;
 	v.first = Rotate(y ^ k1, 49) * k1 + Fetch64(s);
 	v.second = Rotate(v.first, 42) * k1 + Fetch64(s + 8);
 	w.first = Rotate(y + z, 35) * k1 + x;
 	w.second = Rotate(x + Fetch64(s + 88), 53) * k1;
 
-	// This is the same inner loop as CityHash64(), manually unrolled.
+	// This is the same inner loop as cityhash64(), manually unrolled.
 	do 
 	{
 		x = Rotate(x + y + v.first + Fetch64(s + 8), 37) * k1;
@@ -367,24 +367,24 @@ uint128 cityhash::CityHash128WithSeed(const char* s, size_t len, uint128 seed)
 		HashLen16(x + w.second, y + v.second));
 }
 
-uint128 cityhash::CityHash128(const char* s, size_t len) 
+uint128 cityhash::cityhash128(const char* s, size_t len) 
 {
 	if (len >= 16) 
 	{
-		return CityHash128WithSeed(s + 16,
+		return cityhash128WithSeed(s + 16,
 			len - 16,
 			uint128(Fetch64(s) ^ k3,
 				Fetch64(s + 8)));
 	}
 	else if (len >= 8) 
 	{
-		return CityHash128WithSeed(NULL,
+		return cityhash128WithSeed(NULL,
 			0,
 			uint128(Fetch64(s) ^ (len * k0),
 				Fetch64(s + len - 8) ^ k1));
 	}
 	else 
 	{
-		return CityHash128WithSeed(s, len, uint128(k0, k1));
+		return cityhash128WithSeed(s, len, uint128(k0, k1));
 	}
 }

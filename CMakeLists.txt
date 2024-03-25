@@ -9,12 +9,18 @@ set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "cmake")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
 
-## Glob all header and source files in project.
+if(MSVC)
+    ## Glob all header and source files in project.
+    file(GLOB_RECURSE shaderHeaders CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/install/resource/shader/*.*")
+else()
+    file(GLOB_RECURSE shaderHeaders CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/install/resource/shader/*.h")
+endif()
+
 file(GLOB_RECURSE chordHeader CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/source/*.h")
 file(GLOB_RECURSE chordSource CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/source/*.cpp")
 
 ## Add chord framework.
-add_library(chord ${chordHeader} ${chordSource})
+add_library(chord ${chordHeader} ${chordSource} ${shaderHeaders})
 set_property(TARGET chord PROPERTY COMPILE_WARNING_AS_ERROR ON)
 
 ## Alias name for easy use.
@@ -28,12 +34,14 @@ add_subdirectory("${PROJECT_SOURCE_DIR}/external/glfw")
 target_link_libraries(chord PUBLIC 
     Vulkan::Vulkan
     GLFW::GLFW
+    "${PROJECT_SOURCE_DIR}/external/library/dxcompiler.lib"
 )
 
 ## Add include directories.
 target_include_directories(chord PUBLIC 
     "${PROJECT_SOURCE_DIR}/source"
     "${PROJECT_SOURCE_DIR}/external/include"
+    "${PROJECT_SOURCE_DIR}/install/resource"
 )
 
 ## Add pch to accelerate our compile speed.
@@ -45,11 +53,14 @@ groupCMakeFiles(chord)
 
 ## Group source files.
 source_group(TREE "${PROJECT_SOURCE_DIR}/source" PREFIX "source" FILES ${chordHeader} ${chordSource})
+source_group(TREE "${PROJECT_SOURCE_DIR}/install/resource/shader" PREFIX "shader" FILES ${shaderHeaders}) 
 
 # Visual studio incremental build.
 if(MSVC)
     target_compile_options(chord PUBLIC "/ZI")
     target_link_options(chord PUBLIC "/INCREMENTAL")   
+
+    set_source_files_properties(${shaderHeaders} PROPERTIES HEADER_FILE_ONLY TRUE)
 endif()
 
 ## Our applications generate config.

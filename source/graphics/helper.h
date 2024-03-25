@@ -4,6 +4,61 @@
 
 namespace chord::graphics::helper
 {
+	static inline VkImageSubresourceRange buildBasicImageSubresource()
+	{
+		VkImageSubresourceRange range { };
+		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		range.baseMipLevel = 0;
+		range.levelCount = VK_REMAINING_MIP_LEVELS;
+		range.baseArrayLayer = 0;
+		range.layerCount = VK_REMAINING_ARRAY_LAYERS;
+		return range;
+	}
+
+	static inline VkImageCreateInfo buildBasicUploadImageCreateInfo(uint32 texWidth, uint32 texHeight, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM)
+	{
+		VkImageCreateInfo info{};
+		info.sType     = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		info.flags     = {};
+		info.imageType = VK_IMAGE_TYPE_2D;
+		info.format    = format;
+		info.extent.width  = texWidth;
+		info.extent.height = texHeight;
+		info.extent.depth  = 1;
+		info.arrayLayers = 1;
+		info.mipLevels   = 1;
+		info.samples = VK_SAMPLE_COUNT_1_BIT;
+		info.tiling  = VK_IMAGE_TILING_OPTIMAL;
+		info.usage   = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+		info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		return info;
+	}
+
+	static inline VmaAllocationCreateInfo buildVMAUploadImageAllocationCI()
+	{
+		VmaAllocationCreateInfo imageAllocCreateInfo = {};
+		imageAllocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+		imageAllocCreateInfo.flags = VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT;
+
+		return imageAllocCreateInfo;
+	}
+
+	static inline auto createDescriptorPool(const VkDescriptorPoolCreateInfo& poolInfo)
+	{
+		VkDescriptorPool descriptorPool;
+		checkVkResult(vkCreateDescriptorPool(getDevice(), &poolInfo, getAllocationCallbacks(), &descriptorPool));
+		return descriptorPool;
+	}
+
+	static inline auto createDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo& info)
+	{
+		VkDescriptorSetLayout layout;
+		checkVkResult(vkCreateDescriptorSetLayout(getDevice(), &info, getAllocationCallbacks(), &layout));
+		return layout;
+	}
+
 	static inline auto createTimelineSemaphore(uint32 initialValue = 0)
 	{
 		VkSemaphoreTypeCreateInfo timelineCI{ };
@@ -24,7 +79,9 @@ namespace chord::graphics::helper
 
 	static inline auto createCommandPool(
 		uint32 family,
-		VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT)
+		VkCommandPoolCreateFlags flags = 
+			VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | 
+			VK_COMMAND_POOL_CREATE_TRANSIENT_BIT)
 	{
 		VkCommandPoolCreateInfo ci{ };
 		ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -203,6 +260,24 @@ namespace chord::graphics::helper
 		{
 			vkDestroyShaderModule(getDevice(), m, getAllocationCallbacks());
 			m = VK_NULL_HANDLE;
+		}
+	}
+
+	static inline void destroyDescriptorPool(VkDescriptorPool& pool)
+	{
+		if (pool != VK_NULL_HANDLE)
+		{
+			vkDestroyDescriptorPool(getDevice(), pool, getAllocationCallbacks());
+			pool = VK_NULL_HANDLE;
+		}
+	}
+
+	static inline void destroyDescriptorSetLayout(VkDescriptorSetLayout& l)
+	{
+		if (l != VK_NULL_HANDLE)
+		{
+			vkDestroyDescriptorSetLayout(getDevice(), l, getAllocationCallbacks());
+			l = VK_NULL_HANDLE;
 		}
 	}
 
