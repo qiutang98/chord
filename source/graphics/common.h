@@ -54,6 +54,94 @@ namespace chord::graphics
 		std::vector<Queue> videoEncodeQueues;
 	};
 
+	// Trait create info type to support memory hash.
+	struct PipelineShaderStageCreateInfo
+	{
+		uint64 hash() const
+		{
+			uint64 hash = std::hash<const char*>{}(pName);
+			hash = hashCombine(hash, uint64(module));
+			hash = hashCombine(hash, uint64(flags));
+			hash = hashCombine(hash, uint64(stage));
+
+			return hash;
+		}
+
+		const char* pName;
+		VkShaderModule module;
+		VkPipelineShaderStageCreateFlags flags;
+		VkShaderStageFlagBits stage;
+	};
+
+	struct GraphicsPipelineCreateInfo
+	{
+		uint64 hash() const
+		{
+			uint64 hash = hashCombine(pushConstantSize, uint64(topology));
+
+			hash = hashCombine(hash, uint64(depthFormat));
+			hash = hashCombine(hash, uint64(stencilFormat));
+
+			for (auto& format : attachmentFormats)
+			{
+				hash = hashCombine(hash, uint64(format));
+			}
+
+			for (auto& stage : pipelineStages)
+			{
+				hash = hashCombine(hash, stage.hash());
+			}
+
+			return hash;
+		}
+
+		std::vector<PipelineShaderStageCreateInfo> pipelineStages;
+		std::vector<VkFormat> attachmentFormats;
+
+		VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+		VkFormat stencilFormat = VK_FORMAT_UNDEFINED;
+		uint32 pushConstantSize = 0;
+		VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	};
+
+	struct SamplerCreateInfo
+	{
+		VkSamplerCreateFlags    flags;
+		VkFilter                magFilter;
+		VkFilter                minFilter;
+		VkSamplerMipmapMode     mipmapMode;
+		VkSamplerAddressMode    addressModeU;
+		VkSamplerAddressMode    addressModeV;
+		VkSamplerAddressMode    addressModeW;
+		float                   mipLodBias;
+		VkBool32                anisotropyEnable;
+		float                   maxAnisotropy;
+		VkBool32                compareEnable;
+		VkCompareOp             compareOp;
+		float                   minLod;
+		float                   maxLod;
+		VkBorderColor           borderColor;
+		VkBool32                unnormalizedCoordinates;
+	};
+
+	class PipelineLayoutManager : NonCopyable
+	{
+	public:
+		~PipelineLayoutManager();
+
+		VkPipelineLayout getLayout(
+			uint32 setLayoutCount,
+			const VkDescriptorSetLayout* pSetLayouts,
+			uint32 pushConstantRangeCount,
+			const VkPushConstantRange* pPushConstantRanges);
+
+	private:
+		void clear();
+
+	private:
+		std::map<uint64, OptionalVkPipelineLayout> m_layouts;
+	};
+
 	class CommandPoolResetable : NonCopyable
 	{
 	private:

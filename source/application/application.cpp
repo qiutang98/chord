@@ -3,19 +3,12 @@
 #include <filesystem>
 #include <utils/thread.h>
 #include <graphics/graphics.h>
-#include <graphics/shader.h>
-#include <graphics/shadercompiler.h>
+#include <shader/shader.h>
+#include <shader/compiler.h>
+#include <ui/ui.h>
 
 namespace chord
 {
-    static void resizeCallBack(GLFWwindow* window, int width, int height)
-    {
-        auto data = reinterpret_cast<WindowData*>(glfwGetWindowUserPointer(window));
-
-        data->width = width;
-        data->height = height;
-    }
-
     Application& Application::get()
     {
         static Application app{ };

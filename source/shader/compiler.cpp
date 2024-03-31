@@ -1,8 +1,8 @@
-#include <graphics/shader.h>
+#include <shader/shader.h>
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
 #include <utils/threadpool.h>
-#include <graphics/shadercompiler.h>
+#include <shader/compiler.h>
 #include <utils/thread.h>
 
 #ifdef _WIN32
@@ -27,15 +27,22 @@ namespace chord::graphics
 
 	void ShaderCompileEnvironment::buildArgs(ShaderCompileArguments& out) const
 	{
+		// Spv.
+		out.push_back("-spirv");
+		out.push_back("-fvk-allow-rwstructuredbuffer-arrays");
+
+		// Included path.
+		out.push_back("-I"); out.push_back("resource/shader");
+
 		// Entry.
-		out.push_back("-E"); out.push_back(m_entry);
+		out.push_back("-E"); out.push_back(m_metaInfo.entry);
 
 		// Target profile.
 		out.push_back("-T");
-		switch (m_shaderStage)
+		switch (m_metaInfo.stage)
 		{
-		case EShaderStage::Vertex:  out.push_back("ps_6_8"); break;
-		case EShaderStage::Pixel:   out.push_back("vs_6_8"); break;
+		case EShaderStage::Vertex:  out.push_back("vs_6_8"); break;
+		case EShaderStage::Pixel:   out.push_back("ps_6_8"); break;
 		case EShaderStage::Compute: out.push_back("cs_6_8"); break;
 		case EShaderStage::Mesh:    out.push_back("ms_6_8"); break;
 		case EShaderStage::Amplify: out.push_back("as_6_8"); break;
@@ -110,10 +117,10 @@ namespace chord::graphics
 			bool bStripDebug = false;
 			bool bStripRelfection = false;
 
-			std::vector<LPCWSTR> compilationArguments(args.size());
+			std::vector<std::wstring> wstrArguments(args.size());
 			for (auto i = 0; i < args.size(); i++)
 			{
-				compilationArguments[i] = toWstring(args[i]).c_str();
+				wstrArguments[i] = std::wstring(args[i].begin(), args[i].end());
 
 				// If strip debug, we have pdb info.
 				if (args[i] == "-Qstrip_debug") { bStripDebug = true; }
@@ -122,15 +129,30 @@ namespace chord::graphics
 				if (args[i] == "-Qstrip_reflect") { bStripRelfection = true; }
 			}
 
-			const HRESULT hr = dxcompiler->Compile(&sourceBuffer,
+			std::vector<LPCWSTR> compilationArguments(args.size());
+			for (auto i = 0; i < args.size(); i++)
+			{
+				compilationArguments[i] = wstrArguments[i].c_str();
+			}
+
+			HRESULT hr = dxcompiler->Compile(&sourceBuffer,
 				compilationArguments.data(),
 				static_cast<uint32>(compilationArguments.size()),
 				includeHandler.Get(),
 				IID_PPV_ARGS(&compiledShaderBuffer));
+			if (FAILED(hr))
+			{
+				result.bSuccess = false;
+			}
 
 			// Get compilation errors (if any).
 			Microsoft::WRL::ComPtr<IDxcBlobUtf8> errors{};
-			compiledShaderBuffer->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(errors.GetAddressOf()), nullptr);
+			hr = compiledShaderBuffer->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(errors.GetAddressOf()), nullptr);
+			if (FAILED(hr))
+			{
+				result.bSuccess = false;
+			}
+
 			if (errors && errors->GetStringLength() > 0)
 			{
 				const LPCSTR errorMessage = errors->GetStringPointer();
@@ -140,19 +162,22 @@ namespace chord::graphics
 				result.bSuccess = false;
 			}
 
-			if (FAILED(hr))
-			{
-				result.bSuccess = false;
-			}
+
 
 			// Shader compile success, copy output to result.
 			if (result.bSuccess)
 			{
 				Microsoft::WRL::ComPtr<IDxcBlob> shaderObject;
-				compiledShaderBuffer->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(shaderObject.GetAddressOf()), nullptr);
-
-				result.shader.resize(shaderObject->GetBufferSize());
-				memcpy(result.shader.data(), shaderObject->GetBufferPointer(), result.shader.size());
+				hr = compiledShaderBuffer->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(shaderObject.GetAddressOf()), nullptr);
+				if (FAILED(hr))
+				{
+					result.bSuccess = false;
+				}
+				else
+				{
+					result.shader.resize(shaderObject->GetBufferSize());
+					memcpy(result.shader.data(), shaderObject->GetBufferPointer(), result.shader.size());
+				}
 			}
 
 			// PDB
@@ -160,20 +185,32 @@ namespace chord::graphics
 			{
 				Microsoft::WRL::ComPtr<IDxcBlob> debugData;
 				Microsoft::WRL::ComPtr<IDxcBlobUtf16> debugDataPath;
-				compiledShaderBuffer->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(debugData.GetAddressOf()), debugDataPath.GetAddressOf());
-
-				result.pdb.resize(debugData->GetBufferSize());
-				memcpy(result.pdb.data(), debugData->GetBufferPointer(), result.pdb.size());
+				hr = compiledShaderBuffer->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(debugData.GetAddressOf()), debugDataPath.GetAddressOf());
+				if (FAILED(hr))
+				{
+					result.bSuccess = false;
+				}
+				else
+				{
+					result.pdb.resize(debugData->GetBufferSize());
+					memcpy(result.pdb.data(), debugData->GetBufferPointer(), result.pdb.size());
+				}
 			}
 
 			// Reflection
 			if (result.bSuccess && bStripRelfection)
 			{
 				Microsoft::WRL::ComPtr<IDxcBlob> reflectionData;
-				compiledShaderBuffer->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(reflectionData.GetAddressOf()), nullptr);
-
-				result.reflection.resize(reflectionData->GetBufferSize());
-				memcpy(result.reflection.data(), reflectionData->GetBufferPointer(), result.reflection.size());
+				hr = compiledShaderBuffer->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(reflectionData.GetAddressOf()), nullptr);
+				if (FAILED(hr))
+				{
+					result.bSuccess = false;
+				}
+				else
+				{
+					result.reflection.resize(reflectionData->GetBufferSize());
+					memcpy(result.reflection.data(), reflectionData->GetBufferPointer(), result.reflection.size());
+				}
 			}
 		}
 	};
@@ -184,7 +221,7 @@ namespace chord::graphics
 
 
 	ShaderCompilerManager::ShaderCompilerManager(uint32 freeCount, uint32 desiredMaxCompileThreadCount)
-		: Super(L"ShaderCompiler", freeCount, desiredMaxCompileThreadCount)
+		: Super(L"ShaderCompiler", freeCount, desiredMaxCompileThreadCount, [this]() { this->worker(); })
 	{
 
 	}

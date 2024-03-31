@@ -84,6 +84,6 @@ namespace chord::graphics
 		}
 
 	protected:
-		virtual void worker() override;
+		void worker();
 	};
 }

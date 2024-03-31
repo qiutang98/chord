@@ -1,50 +1,48 @@
 #include "viewer.h"
-#include <graphics/shader.h>
-
+#include <shader/shader.h>
+#include <ui/ui.h>
 namespace viewer
 {
 	using namespace chord;
 	using namespace chord::graphics;
 
-
-	enum class ETestMode
+	class ImGuiDrawVS : public GlobalShader
 	{
-		sd,
-		fag,
+	public:
+		DECLARE_SUPER_TYPE(GlobalShader);
 
-		MAX
+		static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId) 
+		{ 
+		
+		}
+
+		static bool shouldCompilePermutation(int32 PermutationId) 
+		{
+			return true; 
+		}
 	};
 
-	class svUseWave   : SHADER_VARIANT_BOOL("USE_WAVE");
-	class svTileDim   : SHADER_VARIANT_INT("TILE_SIZE_MODE", 4);
-	class svLightMode : SHADER_VARIANT_ENUM("LIGHT_MODE", ETestMode);
-	class svWaveSize  : SHADER_VARIANT_SPARSE_INT("WAVE_SIZE", 16, 8, 2);
+	class ImGuiDrawPS : public GlobalShader
+	{
+	public:
+		DECLARE_SUPER_TYPE(GlobalShader);
 
-	using FPermutation = TShaderVariantVector<svUseWave, svTileDim, svLightMode, svWaveSize>;
+		static bool shouldCompilePermutation(int32 PermutationId)
+		{
+			return true;
+		}
+
+		static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId)
+		{
+
+		}
+	};
+
+	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawVS, "resource/shader/imgui.hlsl", "mainVS", EShaderStage::Vertex);
+	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawPS, "resource/shader/imgui.hlsl", "mainPS", EShaderStage::Pixel);
 
 	void init()
 	{
-		FPermutation test;
-		LOG_INFO(test.kCount);
-
-		test.set<svUseWave>(false);
-		test.set<svTileDim>(3);
-		test.set<svLightMode>(ETestMode::fag);
-		test.set<svWaveSize>(8);
-
-		ShaderCompileEnvironment env;
-		test.modifyCompileEnvironment(env);
-
-		test.get<svTileDim>();
-
-		auto a = test.kCount;
-		auto b = test.toId();
-
-		FPermutation c;
-		c = FPermutation::fromId(test.kCount);
-
-		check(c == test);
-
 		CVarSystem::get().getCVarCheck<std::string>("r.log.file.name")->set("editor/editor");
 
 		{
@@ -61,8 +59,6 @@ namespace viewer
 
 			check(Application::get().init(config));
 		}
-
-
 	}
 
 	void release()

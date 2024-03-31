@@ -1,39 +1,35 @@
 #pragma once
 
-enum class ESetSlot
+namespace chord
 {
-    // Coomon bindless set.
-    Bindless = 0,
+    // Whole application used one set which host in BindlessManager.
+    // 
+    enum class EBindingType
+    {
+        // StructuredBuffer<T>
+        // RWStructuredBuffer<T>
+        // ByteAddressBuffer
+        // RWByteAddressBuffer
+        // RWBuffer<T>
+        // Buffer<T>
+        BindlessStorageBuffer = 0, 
 
-    // Global perframe bind set.
-    Perframe = 1,
+        // ConstantBuffer<T>
+        BindlessUniformBuffer,
 
-    // Optional reflected push set, per pass.
-    PerPass = 2,
+        // Texture2D<T>
+        // Texture3D<T>
+        // TextureCube<T>
+        BindlessSampledImage, 
 
-    // Optional reflected push set, per batch.
-    PerBatch = 3,
+        // RWTexture2D<T>
+        // RWTexture3D<T>
+        BindlessStorageImage, 
 
-    MAX 
-};
+        // SamplerState
+        // SamplerComparisonState
+        BindlessSampler,   
 
-enum class EBindingType
-{
-    // StructuredBuffer<T>/RWStructuredBuffer<T>/ByteAddressBuffer/RWByteAddressBuffer
-    // NOTE: DXC spir-V current no support bindless RWStructuredBuffer<T>.
-    StorageBuffer = 0,
-
-    // ConstantBuffer<T>
-    UniformBuffer,
-
-    // Texture2D/Texture3D/TextureCube
-    SampledImage,
-
-    // RWTexture2D<T>/RWTexture3D<T>
-    StorageImage,
-
-    // SamplerState/SamplerComparisonState
-    Sampler,
-
-    MAX
-};
+        MAX
+    };
+}

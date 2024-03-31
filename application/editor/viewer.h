@@ -8,7 +8,7 @@
 #include <utils/cvar.h>
 #include <utils/log.h>
 #include <graphics/graphics.h>
-#include <graphics/shader.h>
+#include <shader/shader.h>
 
 namespace viewer
 {

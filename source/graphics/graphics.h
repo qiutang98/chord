@@ -4,10 +4,12 @@
 #include <graphics/resource.h>
 #include <graphics/swapchain.h>
 #include <graphics/bindless.h>
+#include <graphics/pipeline.h>
 
 namespace chord
 {
 	class ApplicationTickData;
+	class ImGuiManager;
 }
 
 namespace chord::graphics
@@ -33,6 +35,8 @@ namespace chord::graphics
 		// EXT.
 		VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features{ };
 		VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features{ };
+
+		VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT vertexInputDynamicStateFeatures { };
 	};
 
 	struct PhysicalDeviceProperties
@@ -79,6 +83,7 @@ namespace chord::graphics
 		VkInstance getInstance() const { return m_instance; }
 		VkPhysicalDevice getPhysicalDevice() const { return m_physicalDevice; }
 		VkDevice getDevice() const { return m_device; }
+		VkPipelineCache getPipelineCache() const { return m_pipelineCache; }
 
 		// Find memory type from memory.
 		OptionalUint32 findMemoryType(uint32 typeFilter, VkMemoryPropertyFlags properties) const;
@@ -110,6 +115,9 @@ namespace chord::graphics
 		auto& getShaderCompiler() { return *m_shaderCompiler; }
 		const auto& getShaderCompiler() const { return *m_shaderCompiler; }
 
+		auto& getShaderLibrary() { return *m_shaderLibrary; }
+		const auto& getShaderLibrary() const { return *m_shaderLibrary; }
+
 		// Vulkan memory allocator handle.
 		VmaAllocator getVMA() const { return m_vmaAllocator; }
 
@@ -130,6 +138,14 @@ namespace chord::graphics
 
 		// Builtin graphics command pool with RESET bit.
 		const CommandPoolResetable& getGraphicsCommandPool() const { return *m_graphicsCommandPool; }
+
+		const auto& getPipelineLayoutManager() const { return *m_pipelineLayoutManager; }
+		auto& getPipelineLayoutManager() { return *m_pipelineLayoutManager; }
+
+		const auto& getPipelineContainer() const { return *m_pipelineContainer; }
+		auto& getPipelineContainer() { return *m_pipelineContainer; }
+
+		void waitDeviceIdle() const;
 
 	public:
 		bool init(const InitConfig& config);
@@ -196,6 +212,9 @@ namespace chord::graphics
 		// Shader compiler of context.
 		std::unique_ptr<ShaderCompilerManager> m_shaderCompiler = nullptr;
 		std::unique_ptr<ShaderLibrary> m_shaderLibrary = nullptr;
+		std::unique_ptr<PipelineLayoutManager> m_pipelineLayoutManager = nullptr;
+		std::unique_ptr<PipelineContainer> m_pipelineContainer = nullptr;
+		std::unique_ptr<ImGuiManager> m_imguiManager = nullptr;
 	};
 
 	// Helper function save some time.

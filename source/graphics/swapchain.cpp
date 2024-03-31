@@ -1,7 +1,6 @@
 #include <graphics/swapchain.h>
 #include <graphics/graphics.h>
 #include <utils/cvar.h>
-#include <application/application.h>
 #include <graphics/helper.h>
 
 namespace chord::graphics
@@ -56,7 +55,8 @@ namespace chord::graphics
 		return VK_PRESENT_MODE_FIFO_KHR;
 	}
 
-	Swapchain::Swapchain()
+	Swapchain::Swapchain(GLFWwindow* window)
+		: m_window(window)
 	{
 		// NOTE: Current default work in main graphics queue.
 		m_queue = getContext().getMajorGraphicsQueue();
@@ -64,7 +64,7 @@ namespace chord::graphics
 		// Create surface.
 		checkVkResult(glfwCreateWindowSurface(
 			getContext().getInstance(),
-			Application::get().getWindowData().window, 
+			window,
 			getContext().getAllocationCallbacks(), &m_surface));
 
 		// Create swapchain relative context.
@@ -163,17 +163,6 @@ namespace chord::graphics
 		return m_semaphoresRenderFinished[m_currentFrame];
 	}
 
-	std::pair<VkCommandBuffer, VkSemaphore> Swapchain::beginFrameCmd(uint64 tickCount) const
-	{
-		const auto tickIndexModBackbufferCount = tickCount % m_backbufferCount;
-		VkCommandBuffer cmd = m_cmdBufferRing[tickIndexModBackbufferCount];
-
-		helper::resetCommandBuffer(cmd);
-		helper::beginCommandBuffer(cmd);
-
-		return { cmd, m_cmdSemaphoreRing[tickIndexModBackbufferCount]};
-	}
-
 	void Swapchain::createContext()
 	{
 		// Query current details.
@@ -232,7 +221,7 @@ namespace chord::graphics
 			// Fallback to SDR.
 			if (m_formatType == EFormatType::None)
 			{
-				if (isContainFormat(k10BitSRGB))
+				if (isContainFormat(k10BitSRGB) && false)
 				{
 					m_formatType = EFormatType::sRGB10Bit;
 					m_surfaceFormat = k10BitSRGB;
@@ -255,7 +244,7 @@ namespace chord::graphics
 		else
 		{
 			int width, height;
-			Application::get().queryFramebufferSize(width, height);
+			glfwGetFramebufferSize(m_window, &width, &height);
 
 			VkExtent2D actualExtent = { static_cast<uint32>(width), static_cast<uint32>(height) };
 
@@ -326,39 +315,12 @@ namespace chord::graphics
 				m_inFlightFences[i] = helper::createFence(VK_FENCE_CREATE_SIGNALED_BIT);
 			}
 		}
-
-		{
-			m_cmdBufferRing.resize(m_backbufferCount);
-			for (auto& buffer : m_cmdBufferRing)
-			{
-				buffer = helper::allocateCommandBuffer(getContext().getGraphicsCommandPool().pool());
-			}
-
-			m_cmdSemaphoreRing.resize(m_backbufferCount);
-			for (auto& semaphore : m_cmdSemaphoreRing)
-			{
-				// Default signaled so first frame can start.
-				semaphore = helper::createSemaphore(VK_FENCE_CREATE_SIGNALED_BIT);
-			}
-		}
 	}
 
 	void Swapchain::releaseContext()
 	{
 		// Flush working queue.
 		vkQueueWaitIdle(m_queue);
-
-		for (auto& buffer : m_cmdBufferRing)
-		{
-			vkFreeCommandBuffers(getDevice(), getContext().getGraphicsCommandPool().pool(), (uint32)m_cmdBufferRing.size(), m_cmdBufferRing.data());
-		}
-		m_cmdBufferRing.clear();
-
-		for (auto& semaphore : m_cmdSemaphoreRing)
-		{
-			helper::destroySemaphore(semaphore);
-		}
-		m_cmdSemaphoreRing.clear();
 
 		// Destroy present relative data.
 		for (auto i = 0; i < m_backbufferCount; i++)
@@ -389,7 +351,7 @@ namespace chord::graphics
 		// Need to skip zero size framebuffer case.
 		{
 			int32 width = 0, height = 0;
-			Application::get().queryFramebufferSize(width, height);
+			glfwGetFramebufferSize(m_window, &width, &height);
 
 			// just return if swapchain width or height is 0.
 			if (width == 0 || height == 0)

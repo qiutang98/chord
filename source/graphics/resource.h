@@ -16,7 +16,7 @@ namespace chord::graphics
 			OptionalUint32 index; // Index in bindless set.
 		};
 
-		Sampler getSampler(VkSamplerCreateInfo info);
+		Sampler getSampler(SamplerCreateInfo info);
 
 		// Point mipmap filter & point.
 		Sampler pointClampEdge();

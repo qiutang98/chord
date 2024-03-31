@@ -4,7 +4,7 @@
 #include <utils/noncopyable.h>
 #include <utils/optional.h>
 #include <graphics/graphics.h>
-#include <graphics/shaderpermutation.h>
+#include <shader/permutation.h>
 #include <utils/threadpool.h>
 
 namespace chord::graphics
@@ -25,8 +25,12 @@ namespace chord::graphics
 			MAX
 		};
 
-		explicit ShaderModule(SizedBuffer buffer);
+		explicit ShaderModule(SizedBuffer buffer, const GlobalShaderRegisteredInfo& metaInfo);
 		virtual ~ShaderModule();
+
+		const GlobalShaderRegisteredInfo& getMetaInfo() const { return m_metaInfo; }
+
+		PipelineShaderStageCreateInfo getShaderStageCreateInfo() const;
 
 		VkShaderModule get() const
 		{
@@ -64,8 +68,9 @@ namespace chord::graphics
 		void clear();
 
 	protected:
-		mutable std::mutex m_lock;
+		const GlobalShaderRegisteredInfo& m_metaInfo;
 
+		mutable std::mutex m_lock;
 		ECompileState m_compileState = ECompileState::MAX;
 
 		// Cache shader modules.
@@ -73,18 +78,20 @@ namespace chord::graphics
 	};
 	using ShaderModuleRef = std::shared_ptr<ShaderModule>;
 
-	struct GlobalShaderRegisteredInfo
-	{
-		std::string shaderFilePath;
-		std::string entry;
-		EShaderStage stage;
-		int32 permutationCount;
-	};
+
 
 	extern uint64 getShaderModuleHash(int32 permutationId, const GlobalShaderRegisteredInfo& info);
 
 	struct ShaderPermutationCompileInfo
 	{
+		explicit ShaderPermutationCompileInfo(const GlobalShaderRegisteredInfo& info, int32 inPermutationId)
+			: env(info)
+			, hash(getShaderModuleHash(inPermutationId, info))
+			, permutationId(inPermutationId)
+		{
+
+		}
+
 		ShaderCompileEnvironment env;
 		uint64 hash;
 		int32 permutationId;
@@ -92,6 +99,35 @@ namespace chord::graphics
 
 	class ShaderPermutationBatchCompile
 	{
+	private:
+		template<typename ShaderType>
+		void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId)
+		{
+			if constexpr (std::is_invocable_v<decltype(&ShaderType::modifyCompileEnvironment), ShaderCompileEnvironment&, int32>)
+			{
+				ShaderType::modifyCompileEnvironment(o, PermutationId);
+			}
+			else
+			{
+				static_assert(requires { typename ShaderType::Super; });
+				modifyCompileEnvironment<ShaderType::Super>(o, PermutationId);
+			}
+		}
+
+		template<typename ShaderType>
+		bool shouldCompilePermutation(int32 PermutationId)
+		{
+			if constexpr (std::is_invocable_v<decltype(&ShaderType::shouldCompilePermutation), int32>)
+			{
+				static_assert(std::is_same_v<std::invoke_result_t<decltype(&ShaderType::shouldCompilePermutation), int32>, bool>);
+				return ShaderType::shouldCompilePermutation(PermutationId);
+			}
+			else
+			{
+				static_assert(requires { typename ShaderType::Super; });
+				return shouldCompilePermutation<ShaderType::Super>(PermutationId);
+			}
+		}
 	public:
 		explicit ShaderPermutationBatchCompile(const GlobalShaderRegisteredInfo& info)
 			: m_registedInfo(info)
@@ -99,37 +135,51 @@ namespace chord::graphics
 
 		}
 
-		template<typename Permutation>
+		// Add one shader permutation.
+		template<typename ShaderType, typename Permutation>
 		auto& add(const Permutation& permutation)
 		{
-			ShaderPermutationCompileInfo info { };
+			int32 permutationId = permutation.toId();
+			if (shouldCompilePermutation<ShaderType>(permutationId))
+			{
+				ShaderPermutationCompileInfo info(m_registedInfo, permutationId);
 
-			info.permutationId = permutation.toId();
-			info.hash = getShaderModuleHash(info.permutationId, m_registedInfo);
+				// Shader level modified environment.
+				modifyCompileEnvironment<ShaderType>(info.env, permutationId);
 
-			// Modify compilation environment.
-			permutation.modifyCompileEnvironment(info.env);
+				// Permutation level modified compile environment.
+				permutation.modifyCompileEnvironment(info.env);
 
-			// Add batch.
-			m_batches.push_back(std::move(info));
+				// Add batch.
+				m_batches.push_back(std::move(info));
+			}
+
 			return *this;
 		}
 
+		// Add one default shader.
+		template <typename ShaderType>
 		auto& addDummy()
 		{
-			ShaderPermutationCompileInfo info{ };
+			ShaderPermutationCompileInfo info(m_registedInfo, 0);
 
-			info.permutationId = 0;
-			info.hash = getShaderModuleHash(info.permutationId, m_registedInfo);
+			// Shader level modified environment.
+			modifyCompileEnvironment<ShaderType>(info.env, 0);
 
 			// Add batch.
 			m_batches.push_back(std::move(info));
+
 			return *this;
 		}
 
 		const auto& getBatches() const
 		{
 			return m_batches;
+		}
+
+		const auto& getRegisteredInfo() const
+		{
+			return m_registedInfo;
 		}
 
 	private:
@@ -171,8 +221,10 @@ namespace chord::graphics
 	{
 	public:
 		// 
-		static void modifyCompileEnvironment(ShaderCompileEnvironment& o);
+		static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId) { }
 
+		// Can used to discard some impossible permutation composite.
+		static bool shouldCompilePermutation(int32 PermutationId) { return true; }
 	};
 
 
@@ -181,10 +233,12 @@ namespace chord::graphics
 	{
 		template<class ShaderType>
 		friend class GlobalShaderRegister;
-	public:
 
+	public:
 		static GlobalShaderRegisterTable& get();
+
 		const auto& getTable() const { return m_registeredShaders; }
+		const auto& getBatchCompile() const { return m_batchCompile; }
 
 	private:
 		GlobalShaderRegisterTable() = default;
@@ -193,23 +247,18 @@ namespace chord::graphics
 		std::vector<ShaderPermutationBatchCompile> m_batchCompile;
 	};
 
-	template<typename T>
-	concept has_some_type = requires { typename T::Permutation; };
-
 	template<class ShaderType>
 	class GlobalShaderRegister : NonCopyable
 	{
 	public:
-		GlobalShaderRegister(const char* file, const char* entry, EShaderStage stage)
+		explicit GlobalShaderRegister(const char* name, const char* file, const char* entry, EShaderStage stage)
 		{
 			auto& table   = GlobalShaderRegisterTable::get().m_registeredShaders;
 			auto& batches = GlobalShaderRegisterTable::get().m_batchCompile;
 
 			const auto& typeHash = getTypeHash<ShaderType>();
-			const auto  registerInfo = GlobalShaderRegisteredInfo{ .entry = entry, .shaderFilePath = file, .stage = stage };
-
 			// Register global shader meta info.
-			table[typeHash] = registerInfo;
+			table[typeHash] = GlobalShaderRegisteredInfo{ .shaderName = name, .shaderFilePath = file, .entry = entry, .stage = stage };
 
 			// Fetch all shader permutations.
 			if constexpr (requires { typename ShaderType::Permutation; })
@@ -217,35 +266,36 @@ namespace chord::graphics
 				using Permutation = ShaderType::Permutation;
 				constexpr uint32 permutationCount = Permutation::kCount;
 
-				ShaderPermutationBatchCompile batch(registerInfo);
+				ShaderPermutationBatchCompile batch(table[typeHash]);
 				for (auto i = 0; i < permutationCount; i++)
 				{
-					batch.add(Permutation::fromId(i));
+					batch.add<ShaderType, Permutation>(Permutation::fromId(i));
 				}
 				batches.push_back(std::move(batch));
 			}
 			else
 			{
-				ShaderPermutationBatchCompile batch(registerInfo);
-				batch.addDummy();
+				ShaderPermutationBatchCompile batch(table[typeHash]);
+				batch.addDummy<ShaderType>();
 
 				batches.push_back(std::move(batch));
 			}
 		}
 	};
-	#define IMPLEMENT_GLOBAL_SHADER(type, file, entry, stage) namespace { const static GlobalShaderRegister<type> o(file, entry, stage); }
-		
+	#define IMPLEMENT_GLOBAL_SHADER(Type, File, Entry, Stage) static GlobalShaderRegister<Type> chord_hiden_obj_##Type(#Type, File, Entry, Stage);
 
 	// All shader cache library.
 	class ShaderLibrary : NonCopyable
 	{
 	public:
+		void init();
+
 		// Get shader file.
 		std::shared_ptr<ShaderFile> getShaderFile(const std::string& path);
 
 		// Get shader with permutation.
 		template<typename ShaderType, typename PermutationType = int32>
-		std::shared_ptr<ShaderModule> getShader(PermutationType permutation = 0) const
+		std::shared_ptr<ShaderModule> getShader(PermutationType permutation = 0)
 		{
 			const auto& globalShaderTable = GlobalShaderRegisterTable::get().getTable();
 			const auto& typeHash = getTypeHash<ShaderType>();

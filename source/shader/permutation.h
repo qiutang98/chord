@@ -90,17 +90,30 @@ namespace chord::graphics
 			return seed;
 		}
 
-	
 		const auto& getInstructions() const { return m_instruction; }
 
 	private:
 		std::set<std::string> m_instruction;
 	};
 
+	struct GlobalShaderRegisteredInfo
+	{
+		std::string shaderName;
+		std::string shaderFilePath;
+		std::string entry;
+		EShaderStage stage;
+	};
+
 	// Shader compile environment.
 	class ShaderCompileEnvironment
 	{
 	public:
+		explicit ShaderCompileEnvironment(const GlobalShaderRegisteredInfo& info)
+			: m_metaInfo(info)
+		{
+
+		}
+
 		void setDefine(const std::string& name, const std::string& v) { m_definitions.setDefine(name, v); }
 		void setDefine(const std::string& name, bool   v) { m_definitions.setDefine(name, v); }
 		void setDefine(const std::string& name, int32  v) { m_definitions.setDefine(name, v); }
@@ -110,20 +123,15 @@ namespace chord::graphics
 		const auto& getDefinitions() const { return m_definitions; }
 		const auto& getInstructions() const { return m_instructions; }
 
-		const auto& getName() const { return m_name; }
-		const auto& getEntry() const { return m_entry; }
-		const auto  getShaderStage() const { return m_shaderStage; }
+		const auto& getName() const { return m_metaInfo.shaderFilePath; }
+		const auto& getEntry() const { return m_metaInfo.entry; }
+		const auto  getShaderStage() const { return m_metaInfo.stage; }
 
+		const GlobalShaderRegisteredInfo& getMetaInfo() const { return m_metaInfo; }
 		void buildArgs(ShaderCompileArguments& out) const;
 
 	private:
-		std::string m_name;
-
-		// Shader entry.
-		std::string m_entry;
-
-		// Shader stage.
-		EShaderStage m_shaderStage;
+		const GlobalShaderRegisteredInfo& m_metaInfo;
 
 		// Additional define.
 		ShaderCompileDefinitions m_definitions;

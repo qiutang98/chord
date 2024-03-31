@@ -236,6 +236,39 @@ namespace chord::graphics::helper
 		}
 	}
 
+	static inline void dynamicStateGeneralSet(VkCommandBuffer commandBuffer)
+	{
+		vkCmdSetCullMode(commandBuffer, VK_CULL_MODE_NONE);
+		vkCmdSetFrontFace(commandBuffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+		vkCmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+		vkCmdSetRasterizationSamplesEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT);
+
+		vkCmdSetDepthTestEnable(commandBuffer, VK_FALSE);
+		vkCmdSetDepthWriteEnable(commandBuffer, VK_FALSE);
+		vkCmdSetDepthBoundsTestEnable(commandBuffer, VK_FALSE);
+		vkCmdSetDepthBiasEnable(commandBuffer, VK_FALSE);
+		vkCmdSetDepthClampEnableEXT(commandBuffer, VK_FALSE);
+		vkCmdSetDepthCompareOp(commandBuffer, VK_COMPARE_OP_ALWAYS);
+
+		vkCmdSetStencilTestEnable(commandBuffer, VK_FALSE);
+		vkCmdSetStencilOp(commandBuffer,
+			VK_STENCIL_FACE_FRONT_AND_BACK,
+			VK_STENCIL_OP_KEEP,
+			VK_STENCIL_OP_KEEP,
+			VK_STENCIL_OP_KEEP,
+			VK_COMPARE_OP_ALWAYS);
+
+		vkCmdSetLogicOpEnableEXT(commandBuffer, VK_FALSE);
+		vkCmdSetLogicOpEXT(commandBuffer, VK_LOGIC_OP_NO_OP);
+
+		VkColorComponentFlags colorWriteMask =
+			VK_COLOR_COMPONENT_R_BIT |
+			VK_COLOR_COMPONENT_G_BIT |
+			VK_COLOR_COMPONENT_B_BIT |
+			VK_COLOR_COMPONENT_A_BIT;
+		vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorWriteMask);
+	}
+
 	static inline void destroySemaphore(VkSemaphore& s)
 	{
 		if (s != VK_NULL_HANDLE)

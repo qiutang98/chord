@@ -33,7 +33,7 @@ namespace chord::graphics
 		};
 
 	public:
-		explicit Swapchain();
+		explicit Swapchain(GLFWwindow* window);
 		~Swapchain();
 
 		VkSwapchainKHR getSwapchain() const
@@ -51,9 +51,19 @@ namespace chord::graphics
 			return m_formatType;
 		}
 
+		VkSurfaceFormatKHR getSurfaceFormat() const
+		{
+			return m_surfaceFormat;
+		}
+
 		uint32 getBackbufferCount() const
 		{
 			return m_backbufferCount;
+		}
+
+		std::pair<VkImage, VkImageView> getImage(uint32 index) const
+		{
+			return { m_swapchainImages.at(index), m_swapchainImageViews.at(index) };
 		}
 
 		// Acquire next present image, return using image index.
@@ -72,8 +82,6 @@ namespace chord::graphics
 		VkSemaphore getCurrentFrameWaitSemaphore() const;
 		VkSemaphore getCurrentFrameFinishSemaphore() const;
 
-		std::pair<VkCommandBuffer, VkSemaphore> beginFrameCmd(uint64 tickCount) const;
-
 		// Call this event when swapchain prepare to recreate.
 		Events<Swapchain> onBeforeSwapchainRecreate;
 
@@ -88,6 +96,8 @@ namespace chord::graphics
 		void recreateContext();
 
 	private:
+		GLFWwindow* m_window;
+
 		// Working queue.
 		VkQueue m_queue;
 
@@ -133,12 +143,6 @@ namespace chord::graphics
 
 		// Swapchain dirty need rebuild context.
 		bool m_bSwapchainChange = false;
-
-		// Generic command buffer ring for renderer.
-		std::vector<VkCommandBuffer> m_cmdBufferRing;
-
-		// Semaphore wait for command buffer ring.
-		std::vector<VkSemaphore> m_cmdSemaphoreRing; 
 	};
 
 }

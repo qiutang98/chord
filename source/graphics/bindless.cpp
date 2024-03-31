@@ -10,11 +10,11 @@ namespace chord::graphics
 		const auto& indexingProps = getContext().getPhysicalDeviceDescriptorIndexingProperties();
 
 		// Configs init.
-		m_bindingConfigs[static_cast<uint32>(EBindingType::StorageBuffer)] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 500000u, indexingProps.maxDescriptorSetUpdateAfterBindStorageBuffers };
-		m_bindingConfigs[static_cast<uint32>(EBindingType::UniformBuffer)] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 500000u, indexingProps.maxDescriptorSetUpdateAfterBindUniformBuffers };
-		m_bindingConfigs[static_cast<uint32>(EBindingType::SampledImage)]  = { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  500000u, indexingProps.maxDescriptorSetUpdateAfterBindSampledImages  };
-		m_bindingConfigs[static_cast<uint32>(EBindingType::StorageImage)]  = { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  500000u, indexingProps.maxDescriptorSetUpdateAfterBindStorageImages  };
-		m_bindingConfigs[static_cast<uint32>(EBindingType::Sampler)]       = { VK_DESCRIPTOR_TYPE_SAMPLER,        100000u, indexingProps.maxDescriptorSetUpdateAfterBindSamplers       };
+		m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessStorageBuffer)] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 500000u, indexingProps.maxDescriptorSetUpdateAfterBindStorageBuffers };
+		m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessUniformBuffer)] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 500000u, indexingProps.maxDescriptorSetUpdateAfterBindUniformBuffers };
+		m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessSampledImage)]  = { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  500000u, indexingProps.maxDescriptorSetUpdateAfterBindSampledImages  };
+		m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessStorageImage)]  = { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  500000u, indexingProps.maxDescriptorSetUpdateAfterBindStorageImages  };
+		m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessSampler)]       = { VK_DESCRIPTOR_TYPE_SAMPLER,        100000u, indexingProps.maxDescriptorSetUpdateAfterBindSamplers       };
 
 		// Range clamp.
 		for (auto& config : m_bindingConfigs)
@@ -118,15 +118,15 @@ namespace chord::graphics
 		VkWriteDescriptorSet write { };
 		write.sType  = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		write.dstSet          = m_set;
-		write.descriptorType  = m_bindingConfigs[static_cast<uint32>(EBindingType::Sampler)].type;
-		write.dstBinding      = static_cast<uint32>(EBindingType::Sampler);
+		write.descriptorType  = m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessSampler)].type;
+		write.dstBinding      = static_cast<uint32>(EBindingType::BindlessSampler);
 		write.pImageInfo      = &imageInfo;
 		write.descriptorCount = 1;
-		write.dstArrayElement = requireIndex(EBindingType::Sampler);
+		write.dstArrayElement = requireIndex(EBindingType::BindlessSampler);
 
 		vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
 
-		return write.descriptorCount;
+		return write.dstArrayElement;
 	}
 
 	BindlessIndex BindlessManager::registerSRV(VkImageView view)
@@ -139,15 +139,15 @@ namespace chord::graphics
 		VkWriteDescriptorSet write{ };
 		write.sType  = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		write.dstSet = m_set;
-		write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::SampledImage)].type;
-		write.dstBinding = static_cast<uint32>(EBindingType::SampledImage);
+		write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessSampledImage)].type;
+		write.dstBinding = static_cast<uint32>(EBindingType::BindlessSampledImage);
 		write.pImageInfo = &imageInfo;
 		write.descriptorCount = 1;
-		write.dstArrayElement = requireIndex(EBindingType::SampledImage);
+		write.dstArrayElement = requireIndex(EBindingType::BindlessSampledImage);
 
 		vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
 
-		return write.descriptorCount;
+		return write.dstArrayElement;
 	}
 
 	void BindlessManager::freeSRV(BindlessIndex& index, ImageView fallback)
@@ -162,8 +162,8 @@ namespace chord::graphics
 			VkWriteDescriptorSet  write{};
 			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			write.dstSet = m_set;
-			write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::SampledImage)].type;
-			write.dstBinding = static_cast<uint32>(EBindingType::SampledImage);
+			write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessSampledImage)].type;
+			write.dstBinding = static_cast<uint32>(EBindingType::BindlessSampledImage);
 			write.pImageInfo = &imageInfo;
 			write.descriptorCount = 1;
 			write.dstArrayElement = index.get();
@@ -171,7 +171,7 @@ namespace chord::graphics
 			vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
 		}
 
-		freeIndex(EBindingType::SampledImage, index.get());
+		freeIndex(EBindingType::BindlessSampledImage, index.get());
 		index = { };
 	}
 
@@ -185,15 +185,15 @@ namespace chord::graphics
 		VkWriteDescriptorSet write{ };
 		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		write.dstSet = m_set;
-		write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::StorageImage)].type;
-		write.dstBinding = static_cast<uint32>(EBindingType::StorageImage);
+		write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessStorageImage)].type;
+		write.dstBinding = static_cast<uint32>(EBindingType::BindlessStorageImage);
 		write.pImageInfo = &imageInfo;
 		write.descriptorCount = 1;
-		write.dstArrayElement = requireIndex(EBindingType::StorageImage);
+		write.dstArrayElement = requireIndex(EBindingType::BindlessStorageImage);
 
 		vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
 
-		return write.descriptorCount;
+		return write.dstArrayElement;
 	}
 
 	void BindlessManager::freeUAV(BindlessIndex& index, ImageView fallback)
@@ -208,8 +208,8 @@ namespace chord::graphics
 			VkWriteDescriptorSet  write{};
 			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			write.dstSet = m_set;
-			write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::StorageImage)].type;
-			write.dstBinding = static_cast<uint32>(EBindingType::StorageImage);
+			write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessStorageImage)].type;
+			write.dstBinding = static_cast<uint32>(EBindingType::BindlessStorageImage);
 			write.pImageInfo = &imageInfo;
 			write.descriptorCount = 1;
 			write.dstArrayElement = index.get();
@@ -217,7 +217,7 @@ namespace chord::graphics
 			vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
 		}
 
-		freeIndex(EBindingType::StorageImage, index.get());
+		freeIndex(EBindingType::BindlessStorageImage, index.get());
 		index = { };
 	}
 

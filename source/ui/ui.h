@@ -4,14 +4,16 @@
 #include <utils/noncopyable.h>
 #include <utils/delegate.h>
 #include <graphics/resource.h>
+#include <graphics/pipeline.h>
+#include <ui/imgui/imgui.h>
 
 namespace chord
 {
-	class UIManager : NonCopyable
+	class ImGuiManager : NonCopyable
 	{
 	public:
-		void init();
-		void release();
+		explicit ImGuiManager();
+		~ImGuiManager();
 
 		// Call this function when frame start ui logic.
 		void newFrame();
@@ -31,21 +33,18 @@ namespace chord
 		// It update remainder windows.
 		void updateRemainderWindows();
 
-		// Get command buffer in frame index.
-		VkCommandBuffer getCommandBuffer(uint32 index) const
-		{
-			return m_commandBuffers.at(index);
-		}
+		// Get command buffer in frame index, auto increment when no enough.
+		VkCommandBuffer getCommandBuffer(uint32 index);
 
 	private:
 		// Setup font relative resource.
-		void setupFont();
+		void setupFont(uint32 fontSize, float dpiScale);
 
 		// Update ui style.
 		void updateStyle();
 
-		// Imgui render pass build and release.
-		void buildRenderResource();
+		// Render imgui draw data.
+		void renderDrawData(VkCommandBuffer commandBuffer, void* drawData,  graphics::IPipelineRef pipeline);
 
 	private:
 		// Delegate handle cache when swapchain rebuild.
@@ -57,7 +56,19 @@ namespace chord
 		// UI backbuffer clear value.
 		math::vec4 m_clearColor = { 0.45f, 0.55f, 0.60f, 1.00f };
 
-		// Font texture rasterize with base size.
-		graphics::GPUTextureRef m_fontAtlasTexture = nullptr;
+		std::string m_iniFileStorePath;
+
+		struct FontAtlas
+		{
+			graphics::GPUTextureRef texture = nullptr;
+			float dpiScale = 0.0f;
+			ImGuiStyle style;
+			ImFontAtlas atlas; // Need to call clear when release.
+		};
+		std::map<uint32, FontAtlas> m_fontAtlasTextures;
+
+		// Cache main atlas when init.
+		ImFontAtlas* m_mainAtlas;
+		ImGuiStyle m_mainStyle;
 	};
 }

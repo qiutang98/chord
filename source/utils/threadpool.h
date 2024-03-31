@@ -35,6 +35,19 @@ namespace chord
 
 		}
 
+		void combine(FutureCollection&& other)
+		{
+			if (futures.empty()) 
+			{ 
+				futures = std::move(other.futures); 
+			}
+			else
+			{
+				futures.reserve(futures.size() + other.futures.size());
+				std::move(std::begin(other.futures), std::end(other.futures), std::back_inserter(futures));
+			}
+		}
+
 		CHORD_NODISCARD inline std::vector<T> get()
 		{
 			std::vector<T> results(futures.size());
@@ -80,8 +93,10 @@ namespace chord
 	class IGenericThreadPool : NonCopyable
 	{
 	public:
-		explicit IGenericThreadPool(const std::wstring& name, uint32 leftFreeThreadCount, uint32 hopeMaxThreadCount)
+		explicit IGenericThreadPool(const std::wstring& name, uint32 leftFreeThreadCount, uint32 hopeMaxThreadCount,
+			std::function<void()>&& worker)
 			: m_name(name)
+			, m_worker(worker)
 		{
 			m_threadCount = chord::computeThreadCount(leftFreeThreadCount, hopeMaxThreadCount);
 			m_threads = std::make_unique<std::thread[]>(m_threadCount);
@@ -165,8 +180,6 @@ namespace chord
 		}
 
 	protected:
-		virtual void worker() = 0;
-
 		// Generic loop body helper function.
 		void loop(std::function<void(const TaskType&)>&& executor)
 		{
@@ -210,7 +223,7 @@ namespace chord
 			m_bRuning = true;
 			for (uint32 i = 0; i < m_threadCount; i++)
 			{
-				m_threads[i] = std::thread([this]() { this->worker(); });
+				m_threads[i] = std::thread([this]() { if (m_worker) { m_worker(); } });
 				namedThread(m_threads[i], std::format(L"{} #{}", m_name, i));
 			}
 		}
@@ -247,6 +260,9 @@ namespace chord
 		std::wstring m_name;
 		uint32 m_threadCount = 0;
 		std::unique_ptr<std::thread[]> m_threads = nullptr;
+
+	private:
+		std::function<void()> m_worker = nullptr;
 	};
 
 	template<typename...A>
@@ -258,7 +274,7 @@ namespace chord
 		using TaskType = std::function<void()>;
 
 		explicit ThreadPool(const std::wstring& name, uint32 leftFreeThreadCount, uint32 hopeMaxThreadCount = ~0)
-			: LambdaThreadPool<>(name, leftFreeThreadCount, hopeMaxThreadCount)
+			: LambdaThreadPool<>(name, leftFreeThreadCount, hopeMaxThreadCount, [this]() { worker(); })
 		{
 
 		}
@@ -358,7 +374,7 @@ namespace chord
 		}
 
 	protected:
-		virtual void worker() override
+		void worker()
 		{
 			loop([](const TaskType&) { TaskType(); });
 		}

@@ -18,6 +18,14 @@ namespace chord::graphics
 		void freeSRV(BindlessIndex& index, ImageView fallback);
 		void freeUAV(BindlessIndex& index, ImageView fallback);
 
+		const VkDescriptorSetLayout& getSetLayout() const { return m_setLayout; }
+		const VkDescriptorSet& getSet() const { return m_set; }
+
+		void bind(VkCommandBuffer cmd, VkPipelineBindPoint bindPoint, VkPipelineLayout layout) const
+		{
+			vkCmdBindDescriptorSets(cmd, bindPoint, layout, 0, 1, &m_set, 0, nullptr);
+		}
+
 	private:
 		uint32 requireIndex(EBindingType type);
 		void freeIndex(EBindingType type, uint32 index);

@@ -55,6 +55,9 @@ namespace chord::graphics
 		}
 		sTotalGPUTextureDeviceSize -= getSize();
 
+		ImageView fallbackView = bAppReleasing ? ImageView { } :
+			getContext().getBuiltinTextures().white->requireView(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D, false, false);
+
 		// Destroy cached image views.
 		for (auto& pair : m_views)
 		{
@@ -63,14 +66,12 @@ namespace chord::graphics
 			{
 				if (view.SRV.isValid())
 				{
-					unimplemented();
-					getBindless().freeSRV(view.SRV, {});
+					getBindless().freeSRV(view.SRV, fallbackView);
 				}
 
 				if (view.UAV.isValid())
 				{
-					unimplemented();
-					getBindless().freeUAV(view.UAV, {});
+					getBindless().freeUAV(view.UAV, fallbackView);
 				}
 
 				vkDestroyImageView(getDevice(), view.handle.get(), getAllocationCallbacks());

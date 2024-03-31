@@ -34,6 +34,7 @@ add_subdirectory("${PROJECT_SOURCE_DIR}/external/glfw")
 target_link_libraries(chord PUBLIC 
     Vulkan::Vulkan
     GLFW::GLFW
+    "${PROJECT_SOURCE_DIR}/external/library/freetype.lib"
     "${PROJECT_SOURCE_DIR}/external/library/dxcompiler.lib"
 )
 

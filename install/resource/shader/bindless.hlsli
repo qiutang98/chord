@@ -29,14 +29,12 @@
 #define T_BINDLESS_NAMED_RESOURCE(Type, DataType) CHORD_T_BINDLESS##Type##DataType
 #define   BINDLESS_NAMED_RESOURCE(Type) CHORD_BINDLESS##Type
 
-#define T_BINDLESS_DECLARE(Type, Binding, DataType) [[vk::binding(Binding, (int)ESetSlot::Bindless)]] Type<DataType> T_BINDLESS_NAMED_RESOURCE(Type, DataType)[];
-#define   BINDLESS_DECLARE(Type, Binding) [[vk::binding(Binding, (int)ESetSlot::Bindless)]] Type BINDLESS_NAMED_RESOURCE(Type)[];
+// Declare of type.
+#define T_BINDLESS_DECLARE(Type, Binding, DataType) [[vk::binding(Binding, 0)]] Type<DataType> T_BINDLESS_NAMED_RESOURCE(Type, DataType)[];
+#define   BINDLESS_DECLARE(Type, Binding) [[vk::binding(Binding, 0)]] Type BINDLESS_NAMED_RESOURCE(Type)[];
 
-// Helper macro to load all template type.
-#define TBindless(Type, DataType, Index) T_BINDLESS_NAMED_RESOURCE(Type, DataType)[NonUniformResourceIndex(Index)]
-#define  Bindless(Type, Index) BINDLESS_NAMED_RESOURCE(Type)[NonUniformResourceIndex(Index)]
-
-
+/////////////////////////////////////////////////////////////////////////////////////////
+// Texture area.
 #define T_BINDLESS_TEXTURE_FORMAT_DECLARE(Type, Binding) \
     T_BINDLESS_DECLARE(Type, Binding, float ) \
     T_BINDLESS_DECLARE(Type, Binding, float2) \
@@ -49,43 +47,88 @@
     T_BINDLESS_DECLARE(Type, Binding, int   ) \
     T_BINDLESS_DECLARE(Type, Binding, int2  ) \
     T_BINDLESS_DECLARE(Type, Binding, int3  ) \
-    T_BINDLESS_DECLARE(Type, Binding, int4  ) \
+    T_BINDLESS_DECLARE(Type, Binding, int4  )
 
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture2D,   (int)EBindingType::SampledImage)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture3D,   (int)EBindingType::SampledImage)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(TextureCube, (int)EBindingType::SampledImage)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture2D, (int)EBindingType::StorageImage)
-T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture3D, (int)EBindingType::StorageImage)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture2D,   (int)chord::EBindingType::BindlessSampledImage)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture3D,   (int)chord::EBindingType::BindlessSampledImage)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(TextureCube, (int)chord::EBindingType::BindlessSampledImage)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture2D, (int)chord::EBindingType::BindlessStorageImage)
+T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture3D, (int)chord::EBindingType::BindlessStorageImage)
 
 #undef T_BINDLESS_TEXTURE_FORMAT_DECLARE
+/////////////////////////////////////////////////////////////////////////////////////////
 
-#define T_BINDLESS_STRUCTURED_BUFFER_DECLARE(Type) T_BINDLESS_DECLARE(StructuredBuffer, (int)EBindingType::StorageBuffer, Type)
+////////////////////////////////////////////////////////////////////////////////////////
+// RWBuffer/Buffer area. 
+#define T_BINDLESS_BUFFER_DECLARE(Type)  \
+    T_BINDLESS_DECLARE(Buffer,   (int)chord::EBindingType::BindlessStorageBuffer, Type) \
+    T_BINDLESS_DECLARE(RWBuffer, (int)chord::EBindingType::BindlessStorageBuffer, Type)
 
-// NOTE: I event don't understand why dxc still don't support bindless RW buffer :(
-// https://github.com/microsoft/DirectXShaderCompiler/issues/5440
-// [[vk::binding((int)EBindingType::StorageBuffer, (int)ESetSlot::Bindless)]] RWStructuredBuffer<Type> BindlessRWStructuredBuffer##Type[];
+T_BINDLESS_BUFFER_DECLARE(float)
+T_BINDLESS_BUFFER_DECLARE(float2)
+T_BINDLESS_BUFFER_DECLARE(float3)
+T_BINDLESS_BUFFER_DECLARE(float4)
 
-#define T_BINDLESS_CONSTATNT_BUFFER_DECLARE(Type) T_BINDLESS_DECLARE(ConstantBuffer, (int)EBindingType::UniformBuffer, Type)
+// Int type structural buffer declare.
+T_BINDLESS_BUFFER_DECLARE(int)
+T_BINDLESS_BUFFER_DECLARE(int2)
+T_BINDLESS_BUFFER_DECLARE(int3)
+T_BINDLESS_BUFFER_DECLARE(int4)
 
+// Uint type structural buffer declare.
+T_BINDLESS_BUFFER_DECLARE(uint)
+T_BINDLESS_BUFFER_DECLARE(uint2)
+T_BINDLESS_BUFFER_DECLARE(uint3)
+T_BINDLESS_BUFFER_DECLARE(uint4)
+
+#undef T_BINDLESS_BUFFER_DECLARE
+
+////////////////////////////////////////////////////////////////////////////////////////
+
+#define T_BINDLESS_STRUCTURED_BUFFER_DECLARE(Type) \
+    T_BINDLESS_DECLARE(StructuredBuffer,   (int)chord::EBindingType::BindlessStorageBuffer, Type) \
+    T_BINDLESS_DECLARE(RWStructuredBuffer, (int)chord::EBindingType::BindlessStorageBuffer, Type) 
+
+#define T_BINDLESS_CONSTATNT_BUFFER_DECLARE(Type) \
+    T_BINDLESS_DECLARE(ConstantBuffer, (int)chord::EBindingType::BindlessUniformBuffer, Type)
+
+// Float type structural buffer declare.
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(float)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(float2)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(float3)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(float4)
 
+// Int type structural buffer declare.
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(int)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(int2)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(int3)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(int4)
 
+// Uint type structural buffer declare.
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(uint)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(uint2)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(uint3)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(uint4)
 
 // ByteAddressBuffer don't care type. 
-BINDLESS_DECLARE(ByteAddressBuffer, (int)EBindingType::StorageBuffer)
-BINDLESS_DECLARE(RWByteAddressBuffer, (int)EBindingType::StorageBuffer)
+BINDLESS_DECLARE(ByteAddressBuffer, (int)chord::EBindingType::BindlessStorageBuffer)
+BINDLESS_DECLARE(RWByteAddressBuffer, (int)chord::EBindingType::BindlessStorageBuffer)
 
 // SamplerState don't care type.
-BINDLESS_DECLARE(SamplerState, (int)EBindingType::Sampler)
-BINDLESS_DECLARE(SamplerComparisonState, (int)EBindingType::Sampler)
+BINDLESS_DECLARE(SamplerState, (int)chord::EBindingType::BindlessSampler)
+BINDLESS_DECLARE(SamplerComparisonState, (int)chord::EBindingType::BindlessSampler)
+
+// Helper macro to load all template type.
+#define TBindless(Type, DataType, Index) T_BINDLESS_NAMED_RESOURCE(Type, DataType)[NonUniformResourceIndex(Index)]
+#define  Bindless(Type, Index) BINDLESS_NAMED_RESOURCE(Type)[NonUniformResourceIndex(Index)]
+
+// Other type array:
+// 
+// T_BINDLESS_CONSTATNT_BUFFER_DECLARE()
+// T_BINDLESS_STRUCTURED_BUFFER_DECLARE()
+// 
+// Usage:
+//
+// TBindless(ConstantBuffer, ...)
+// TBindless(StructuredBuffer, ...)
+// TBindless(RWStructuredBuffer, ...)

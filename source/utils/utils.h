@@ -59,18 +59,18 @@
 #if CHORD_DEBUG
 	#define chord_macro_sup_debugOnly(x) x
 	#define chord_macro_sup_checkPrintContent(x, p) \
-	{ if(!(x)) { p("Check content '{3}' failed in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, #x); } }
+	do { if(!(x)) { p("Check content '{3}' failed in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, #x); } } while(0)
 
 	#define chord_macro_sup_checkMsgfPrintContent(x, p, ...) \
-	{ if(!(x)) { p("Assert content '{4}' failed with message: '{3}' in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); } }
+	do { if(!(x)) { p("Assert content '{4}' failed with message: '{3}' in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); } } while(0)
 #else
 	#define chord_macro_sup_debugOnly(x)
-	#define chord_macro_sup_checkPrintContent(x, p) { if(!(x)) { p("Check content '{0}' failed.", #x); } }
-	#define chord_macro_sup_checkMsgfPrintContent(x, p, ...) { if(!(x)) { p("Assert content '{0}' failed with message '{1}'.", #x, __VA_ARGS__); } }
+	#define chord_macro_sup_checkPrintContent(x, p) do { if(!(x)) { p("Check content '{0}' failed.", #x); } } while(0)
+	#define chord_macro_sup_checkMsgfPrintContent(x, p, ...) do { if(!(x)) { p("Assert content '{0}' failed with message '{1}'.", #x, __VA_ARGS__); } } while(0)
 #endif
 
 #define chord_macro_sup_ensureMsgfContent(x, p, ...) \
-{ static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' failed with message '{3}' in function '{1}' at line #{0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); chord::debugBreak(); } }
+do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' failed with message '{3}' in function '{1}' at line #{0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); chord::debugBreak(); } } while(0)
 
 #define chord_macro_sup_checkEntryContent(x) x("Check entry in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__)
 #define chord_macro_sup_unimplementedContent(x) x("Unimplemented code entry in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__)
@@ -83,6 +83,8 @@
     static inline bool operator  !(T  a) { return uint32_t(a) == 0; }             \
     static inline bool operator ==(T a, uint32_t b) { return uint32_t(a) == b; }  \
     static inline bool operator !=(T a, uint32_t b) { return uint32_t(a) != b; }
+
+#define DECLARE_SUPER_TYPE(Parent) using Super = Parent
 
 namespace chord
 {
@@ -166,6 +168,22 @@ namespace chord
 		void clear();
 	};
 
+	template<typename T, size_t Dim>
+	class StaticArray
+	{
+	public:
+		void push(const T& inT) { m_data[m_size] = inT; m_size ++; }
+		const bool empty() const { return m_size == 0; }
+		const auto size() const { return m_size; }
+
+		const auto& getArray() const { return m_data; }
+		const T* data() const { return m_size > 0 ? m_data.data() : nullptr; }
+
+	private:
+		size_t m_size = 0;
+		std::array<T, Dim> m_data = {};
+	};
+
 	// CPU cache line size, set 64 bytes here.
 	constexpr uint32 kCpuCachelineSize = 64;
 
@@ -232,13 +250,12 @@ namespace chord
 	extern void namedThread(std::thread& t, const std::wstring& name);
 	extern void namedCurrentThread(const std::wstring& name);
 
-	static inline std::wstring toWstring(const std::string& stringToConvert)
-	{
-		std::wstring wideString =
-			std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(stringToConvert);
-		return wideString;
-	}
-
 	extern bool loadFile(const std::filesystem::path& path, std::vector<char>& binData, const char* mode);
 	extern bool storeFile(const std::filesystem::path& path, const uint8* ptr, uint32 size, const char* mode);
+
+	static inline uint64 hashCombine(uint64 lhs, uint64 rhs)
+	{
+		lhs ^= rhs + 0x9e3779b9 + (lhs << 6) + (lhs >> 2);
+		return lhs;
+	}
 }

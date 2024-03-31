@@ -11,8 +11,9 @@
 #include <graphics/swapchain.h>
 #include <graphics/bindless.h>
 #include <graphics/resource.h>
-#include <graphics/shadercompiler.h>
-#include <graphics/shader.h>
+#include <shader/compiler.h>
+#include <shader/shader.h>
+#include <ui/ui.h>
 
 namespace chord::graphics
 {
@@ -156,6 +157,7 @@ namespace chord::graphics
 		// EXT.
 		extendedDynamicState3Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
 		extendedDynamicState2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
+		vertexInputDynamicStateFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT;
 	}
 
 	void** PhysicalDeviceFeatures::stepNextPtr(void** ppNext)
@@ -168,6 +170,7 @@ namespace chord::graphics
 		graphics::stepNextPtr(ppNext, this->accelerationStructureFeatures);
 		graphics::stepNextPtr(ppNext, this->extendedDynamicState2Features);
 		graphics::stepNextPtr(ppNext, this->extendedDynamicState3Features);
+		graphics::stepNextPtr(ppNext, this->vertexInputDynamicStateFeatures);
 
 		return ppNext;
 	}
@@ -206,6 +209,11 @@ namespace chord::graphics
 		vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
 		return std::make_shared<GPUBuffer>(name, ci, vmaAllocInfo, data);
+	}
+
+	void Context::waitDeviceIdle() const
+	{
+		vkDeviceWaitIdle(m_device);
 	}
 
 	bool Context::init(const InitConfig& inputConfig)
@@ -542,8 +550,10 @@ namespace chord::graphics
 				enableIfExist(nullptr, VK_KHR_MAINTENANCE1_EXTENSION_NAME, "Maintenance1", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, "PushDescriptor", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, "MemoryBudge", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
-				
-
+				enableIfExist(nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, "ExtendDynamicState", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME, "ExtendDynamicState2", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, "ExtendDynamicState3", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME, "VertexInputDynamicState", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				// GLFW
 				enableIfExist(&m_initConfig.bGLFW, VK_KHR_SWAPCHAIN_EXTENSION_NAME, "GLFW", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 
@@ -620,10 +630,17 @@ namespace chord::graphics
 
 					// EXT dynamic state2.
 					FORCE_ENABLE(extendedDynamicState2Features.extendedDynamicState2LogicOp);
+					FORCE_ENABLE(extendedDynamicState2Features.extendedDynamicState2);
 
 					// EXT dynamic state3
 					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3DepthClampEnable);
 					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3PolygonMode);
+					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3RasterizationSamples);
+					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3ColorBlendEnable);
+					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation);
+					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3ColorWriteMask);
+					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3LogicOpEnable);
+					FORCE_ENABLE(vertexInputDynamicStateFeatures.vertexInputDynamicState);
 				}
 				#undef FORCE_ENABLE
 
@@ -790,15 +807,16 @@ namespace chord::graphics
 				checkVkResult(vmaCreateAllocator(&allocatorInfo, &m_vmaAllocator));
 			}
 
-			// Create bindless manager.
-			{
-				m_bindlessManager = std::make_unique<BindlessManager>();
-			}
+			m_bindlessManager = std::make_unique<BindlessManager>();
+			m_pipelineLayoutManager = std::make_unique<PipelineLayoutManager>();
+			m_pipelineContainer = std::make_unique<PipelineContainer>();
 
 			// Shader compiler.
 			{
 				m_shaderCompiler = std::make_unique<ShaderCompilerManager>(sFreeShaderCompilerThreadCount, sDesiredShaderCompilerThreadCount);
 				m_shaderLibrary = std::make_unique<ShaderLibrary>();
+
+				m_shaderLibrary->init();
 			}
 
 			{
@@ -809,8 +827,11 @@ namespace chord::graphics
 
 			// Create swapchain.
 			{
-				m_swapchain = std::make_unique<Swapchain>();
+				m_swapchain = std::make_unique<Swapchain>(Application::get().getWindowData().window);
 			}
+
+			// Imgui manager init.
+			m_imguiManager = std::make_unique<ImGuiManager>();
 		}
 
 		return true;
@@ -818,48 +839,55 @@ namespace chord::graphics
 
 	bool Context::tick(const ApplicationTickData& tickData)
 	{
-		const bool bMainMinimized = Application::get().isFramebufferZeroSize();
+		// Imgui new frame.
+		m_imguiManager->newFrame();
 
-		auto [contextCmd, contextWaitSemaphore] = m_swapchain->beginFrameCmd(tickData.tickCount);
 		{
-			// Record.
-		}
-		helper::endCommandBuffer(contextCmd);
+			// Some imgui logic here.
 
-		if (bMainMinimized)
-		{
-			// Submit to queue.
 		}
-		else
+
+		// ImGui prepare render data.
+		m_imguiManager->render();
+
+		const bool bMainMinimized = m_imguiManager->isMainMinimized();
+		if (!bMainMinimized)
 		{
 			// Acquire next present image.
 			uint32 backBufferIndex = m_swapchain->acquireNextPresentImage();
 
-			// Submit and present fence.
+			// Record ui render.
+			m_imguiManager->renderFrame(backBufferIndex);
+
+			auto frameStartSemaphore = m_swapchain->getCurrentFrameWaitSemaphore();
+
+			// UI cmd submit.
 			{
-				VkPipelineStageFlags kWaitFlags = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
-
-				VkSemaphore waitSemaphores[] =
-				{ 
-					m_swapchain->getCurrentFrameWaitSemaphore(), 
-					contextWaitSemaphore 
+				std::vector<VkSemaphore> imguiWaitSemaphores =
+				{
+					frameStartSemaphore,
 				};
 
-				VkSemaphore signalSemaphores[] =
-				{ 
-					m_swapchain->getCurrentFrameFinishSemaphore() 
+				std::vector<VkSemaphore> imguiSignalSemaphores =
+				{
+					m_swapchain->getCurrentFrameFinishSemaphore()
 				};
 
-				helper::SubmitInfo contextCmdSubmitInfo{ };
-				contextCmdSubmitInfo.setWaitStage(&kWaitFlags)
-					.setWaitSemaphore(waitSemaphores, countof(waitSemaphores))
-					.setSignalSemaphore(signalSemaphores, countof(waitSemaphores))
-					.setCommandBuffer(&contextCmd, 1);
+				VkPipelineStageFlags kUiWaitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
-				std::vector<VkSubmitInfo> infosRawSubmit{ contextCmdSubmitInfo };
+				helper::SubmitInfo imGuiCmdSubmitInfo{ };
+				VkCommandBuffer imguiCmdBuffer = m_imguiManager->getCommandBuffer(backBufferIndex);
+				imGuiCmdSubmitInfo.setWaitStage(&kUiWaitFlags)
+					.setWaitSemaphore(imguiWaitSemaphores.data(), imguiWaitSemaphores.size())
+					.setSignalSemaphore(imguiSignalSemaphores.data(), imguiSignalSemaphores.size())
+					.setCommandBuffer(&imguiCmdBuffer, 1);
+
+				std::vector<VkSubmitInfo> infosRawSubmit{ imGuiCmdSubmitInfo };
 				m_swapchain->submit((uint32)infosRawSubmit.size(), infosRawSubmit.data());
 			}
 		}
+
+		m_imguiManager->updateRemainderWindows();
 
 		if (!bMainMinimized)
 		{
@@ -890,6 +918,8 @@ namespace chord::graphics
 
 	void Context::release()
 	{
+		m_imguiManager.reset();
+
 		// Swapchain.
 		m_swapchain.reset();
 
@@ -899,9 +929,12 @@ namespace chord::graphics
 		// Clear shader compiler.
 		m_shaderLibrary.reset();
 		m_shaderCompiler.reset();
+		m_samplerManager.reset();
 
 		// Release bindless manager resources.
 		m_bindlessManager.reset();
+		m_pipelineLayoutManager.reset();
+		m_pipelineContainer.reset();
 
 		// Clear VMA.
 		if (m_vmaAllocator != VK_NULL_HANDLE)

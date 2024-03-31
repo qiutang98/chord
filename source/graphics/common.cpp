@@ -1,6 +1,7 @@
 #include <graphics/common.h>
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
+#include <utils/cityhash.h>
 
 namespace chord::graphics
 {
@@ -16,6 +17,64 @@ namespace chord::graphics
 	CommandPoolResetable::~CommandPoolResetable()
 	{
 		helper::destroyCommandPool(m_pool);
+	}
+
+
+	PipelineLayoutManager::~PipelineLayoutManager()
+	{
+		clear();
+	}
+
+	VkPipelineLayout PipelineLayoutManager::getLayout(
+		uint32 setLayoutCount,
+		const VkDescriptorSetLayout* pSetLayouts,
+		uint32 pushConstantRangeCount,
+		const VkPushConstantRange* pPushConstantRanges)
+	{
+		VkPipelineLayoutCreateInfo ci{ };
+		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+		ci.setLayoutCount = setLayoutCount;
+		ci.pSetLayouts = pSetLayouts;
+		ci.pushConstantRangeCount = pushConstantRangeCount;
+		ci.pPushConstantRanges = pPushConstantRanges;
+
+		uint64 hash = hashCombine(ci.setLayoutCount, ci.flags);
+		for (int32 i = 0; i < ci.setLayoutCount; i++)
+		{
+			hash = hashCombine(hash, (uint64)ci.pSetLayouts[i]);
+		}
+
+		hash = hashCombine(hash, ci.pushConstantRangeCount);
+		for (int32 i = 0; i < ci.pushConstantRangeCount; i++)
+		{
+			const auto& pushConstRange = ci.pPushConstantRanges[i];
+			hash = hashCombine(hash, cityhash::cityhash64((const char*)(&pushConstRange), sizeof(pushConstRange)));
+		}
+
+		if (!m_layouts[hash].isValid())
+		{
+			VkPipelineLayout layout;
+			checkVkResult(vkCreatePipelineLayout(getDevice(), &ci, getAllocationCallbacks(), &layout));
+
+			m_layouts[hash] = layout;
+		}
+
+		return m_layouts[hash].get();
+	}
+
+	void PipelineLayoutManager::clear()
+	{
+		for (auto& pair : m_layouts)
+		{
+			if (pair.second.isValid())
+			{
+				vkDestroyPipelineLayout(getDevice(), pair.second.get(), getAllocationCallbacks());
+				pair.second = {};
+			}
+		}
+
+		m_layouts.clear();
 	}
 }
 
