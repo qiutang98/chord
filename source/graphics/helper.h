@@ -291,7 +291,7 @@ namespace chord::graphics::helper
 		VkRenderingAttachmentInfo attachment{ };
 
 		attachment.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-		attachment.imageLayout = bDepth ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		attachment.imageLayout = bDepth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 		return attachment;
 	}

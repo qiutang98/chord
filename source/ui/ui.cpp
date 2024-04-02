@@ -406,9 +406,12 @@ namespace chord
 			}
 
 			auto renderInfo = helper::renderingInfo();
-			renderInfo.renderArea = VkRect2D{ .offset {0,0}, .extent = extent };
-			renderInfo.colorAttachmentCount = 1;
-			renderInfo.pColorAttachments    = &backBufferAttachment;
+			{
+				renderInfo.renderArea = VkRect2D{ .offset {0,0}, .extent = extent };
+				renderInfo.colorAttachmentCount = 1;
+				renderInfo.pColorAttachments = &backBufferAttachment;
+			}
+
 
 			vkCmdBeginRendering(cmd, &renderInfo);
 			{
