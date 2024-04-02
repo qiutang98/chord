@@ -29,10 +29,6 @@ namespace chord
 		// It record render command.
 		void renderFrame(uint32 backBufferIndex);
 
-		// Call this after renderFrame() call.
-		// It update remainder windows.
-		void updateRemainderWindows();
-
 		// Get command buffer in frame index, auto increment when no enough.
 		VkCommandBuffer getCommandBuffer(uint32 index);
 

@@ -12,7 +12,7 @@
 #include <graphics/pipeline.h>
 #include <ui/imgui/imgui_internal.h>
 namespace chord
-{
+{ 
 	using namespace graphics;
 
 	static bool bEnableDocking = false;
@@ -43,14 +43,14 @@ namespace chord
 		"UI config file path saved path relative application.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static std::string sUIFontFilePath = "resource/font/deng.ttf";
+	static std::string sUIFontFilePath = "resource/font/微软雅黑.ttf";
 	static AutoCVarRef<std::string> cVarsUIFontFilePath(
 		"r.ui.font",
 		sUIFontFilePath,
 		"ImGui font file path.",
 		EConsoleVarFlags::ReadOnly); 
 
-	static float sUIFontSize = 16.0f;
+	static float sUIFontSize = 17.0f;
 	static AutoCVarRef<float> cVarsUIFontSize(
 		"r.ui.font.size", 
 		sUIFontSize, 
@@ -146,47 +146,18 @@ namespace chord
 		ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, 0.0f);
 
 		colors[ImGuiCol_BorderShadow] = ImVec4(0.1f, 0.1f, 0.0f, 0.39f);
-		style.WindowBorderSize = 1;
-		style.ChildBorderSize = 1;
-		style.PopupBorderSize = 1;
-		style.FrameBorderSize = 1;
-		style.TabBorderSize = 1;
-		style.WindowRounding = 0;
-		style.ChildRounding = 0;
-		style.FrameRounding = 3;
-		style.PopupRounding = 0;
-		style.ScrollbarRounding = 0;
-		style.GrabRounding = 0;
-		style.LogSliderDeadzone = 0;
-		style.TabRounding = 0;
 
 		ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
 		ImGui::GetIO().ConfigWindowsResizeFromEdges = true;
 
 		style.AntiAliasedLines = true;
 		style.WindowMenuButtonPosition = ImGuiDir_Left;
-		style.PopupRounding = 3;
 
 		style.WindowPadding = ImVec2(4, 4);
-		style.FramePadding = ImVec2(6, 4);
-		style.ItemSpacing = ImVec2(6, 2);
+		style.FramePadding  = ImVec2(6, 4);
+		style.ItemSpacing   = ImVec2(6, 2);
 
 		style.ScrollbarSize = 18;
-
-		style.WindowBorderSize = 1;
-		style.ChildBorderSize = 1;
-		style.PopupBorderSize = 1;
-		style.FrameBorderSize = 1;
-
-		style.WindowRounding = 3;
-		style.ChildRounding = 3;
-		style.FrameRounding = 0;
-		style.ScrollbarRounding = 2;
-		style.GrabRounding = 0;
-
-		style.TabBorderSize = 0;
-		style.TabRounding = 3;
-		style.WindowRounding = 0.0f;
 
 		colors[ImGuiCol_BorderShadow] = ImVec4(0.1f, 0.1f, 0.0f, 0.39f);
 		style.WindowBorderSize = 1;
@@ -202,12 +173,9 @@ namespace chord
 		style.GrabRounding = 2;
 		style.GrabMinSize = 8;
 		style.LogSliderDeadzone = 0;
-		style.TabRounding = 0;
-
+		style.TabRounding = 12;
 		style.SliderThickness = 0.3f;
 		style.SliderContrast = 1.0f;
-
-
 	}
 
 	// Imgui draw relative.
@@ -379,8 +347,6 @@ namespace chord
 
 	void ImGuiManager::render()
 	{
-		ImGui::ShowDemoWindow();
-
 		ImGui::Render();
 	}
 
@@ -406,11 +372,11 @@ namespace chord
 			barrier.oldLayout = oldLayout;
 			barrier.newLayout = newLayout;
 			barrier.image = image;
-			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			barrier.subresourceRange.baseMipLevel = 0;
-			barrier.subresourceRange.levelCount = 1;
+			barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+			barrier.subresourceRange.baseMipLevel   = 0;
+			barrier.subresourceRange.levelCount     = 1;
 			barrier.subresourceRange.baseArrayLayer = 0;
-			barrier.subresourceRange.layerCount = 1;
+			barrier.subresourceRange.layerCount     = 1;
 			barrier.srcAccessMask = srcAccessMask;
 			barrier.dstAccessMask = dstAccessMask;
 
@@ -425,36 +391,24 @@ namespace chord
 				? swapchain.getSurfaceFormat().format
 				: VK_FORMAT_R8G8B8A8_SRGB;
 
-			auto vertexShader = getContext().getShaderLibrary().getShader<ImGuiDrawVS>();
-			auto pixelShader = getContext().getShaderLibrary().getShader<ImGuiDrawPS>();
-
-			GraphicsPipelineCreateInfo pipelineCI{ };
-			pipelineCI.pipelineStages.push_back(vertexShader->getShaderStageCreateInfo());
-			pipelineCI.pipelineStages.push_back(pixelShader->getShaderStageCreateInfo());
-			pipelineCI.attachmentFormats.push_back(uiBackBufferFormat);
-			pipelineCI.pushConstantSize = sizeof(ImGuiDrawPushConsts);
-
+			const auto pipelineCI = GraphicsPipelineCreateInfo::build<ImGuiDrawVS, ImGuiDrawPS>({ uiBackBufferFormat });
 			auto graphicsPipeline = getContext().getPipelineContainer().graphics("ImGuiDraw", pipelineCI);
 
 			// Transition image to attachment layout.
 			transitionImageLayout(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-			VkRenderingAttachmentInfo backBufferAttachment { };
+			auto backBufferAttachment = helper::renderingAttachmentInfo(false);
 			{
-				backBufferAttachment.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
 				backBufferAttachment.imageView   = view;
-				backBufferAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 				backBufferAttachment.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
 				backBufferAttachment.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
-				backBufferAttachment.clearValue  = VkClearValue{ .color = { 0.0f, 0.0f, 0.0f, 1.0f } };
+				backBufferAttachment.clearValue  = VkClearValue{ .color = { 57.0f / 255.0f, 197.0f / 255.0f, 187.0f / 255.0f, 1.0f } };
 			}
 
-			VkRenderingInfo renderInfo { };
-			renderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR;
+			auto renderInfo = helper::renderingInfo();
 			renderInfo.renderArea = VkRect2D{ .offset {0,0}, .extent = extent };
-			renderInfo.layerCount = 1;
 			renderInfo.colorAttachmentCount = 1;
-			renderInfo.pColorAttachments = &backBufferAttachment;
+			renderInfo.pColorAttachments    = &backBufferAttachment;
 
 			vkCmdBeginRendering(cmd, &renderInfo);
 			{
@@ -466,18 +420,6 @@ namespace chord
 			transitionImageLayout(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		}
 		helper::endCommandBuffer(cmd);
-	}
-
-	void ImGuiManager::updateRemainderWindows()
-	{
-		ImGuiIO& io = ImGui::GetIO();
-
-		// Update and Render additional Platform Windows
-		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-		{
-			ImGui::UpdatePlatformWindows();
-			ImGui::RenderPlatformWindowsDefault();
-		}
 	}
 
 	bool ImGuiManager::isMainMinimized()
@@ -492,20 +434,16 @@ namespace chord
 			float xscale, yscale;
 			glfwGetWindowContentScale((GLFWwindow*)ImGui::GetMainViewport()->PlatformHandle, &xscale, &yscale);
 
-			uint32 fontSize = getFontSize(xscale);
-
 			// Still no produce, need create new one.
+			uint32 fontSize = getFontSize(xscale);
 			if (m_fontAtlasTextures[fontSize].texture == nullptr)
 			{
 				setupFont(fontSize, xscale);
 			}
 
-			// Update using fonts.
 			ImGui::GetIO().Fonts = &m_fontAtlasTextures[fontSize].atlas;
-
 			ImGui::GetStyle() = m_fontAtlasTextures[fontSize].style;
 		}
-
 
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
@@ -616,6 +554,7 @@ namespace chord
 		{
 			pipeline->bind(commandBuffer);
 
+			// Set general dynamic states.
 			helper::dynamicStateGeneralSet(commandBuffer);
 
 			if (drawData->TotalVtxCount > 0)
@@ -623,36 +562,17 @@ namespace chord
 				VkBuffer vertexBuffers[1] = { *rb.verticesBuffer };
 				VkDeviceSize vertexOffset[1] = { 0 };
 				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, vertexOffset);
-
 				vkCmdBindIndexBuffer(commandBuffer, *rb.indicesBuffer, 0, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 			
-				VkVertexInputBindingDescription2EXT binding{};
-				binding.sType     = VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT;
-				binding.binding   = 0;
-				binding.stride    = sizeof(ImDrawVert);
-				binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-				binding.divisor   = 1;
+				const auto binding = helper::vertexInputBindingDescription2EXT(sizeof(ImDrawVert));
+				const VkVertexInputAttributeDescription2EXT attributes[3] =
+				{
+					helper::vertexInputAttributeDescription2EXT(0, VK_FORMAT_R32G32_SFLOAT,  IM_OFFSETOF(ImDrawVert, pos), binding.binding),
+					helper::vertexInputAttributeDescription2EXT(1, VK_FORMAT_R32G32_SFLOAT,  IM_OFFSETOF(ImDrawVert, uv),  binding.binding),
+					helper::vertexInputAttributeDescription2EXT(2, VK_FORMAT_R8G8B8A8_UNORM, IM_OFFSETOF(ImDrawVert, col), binding.binding),
+				};
 
-				VkVertexInputAttributeDescription2EXT attributes[3];
-				attributes[0].sType    = VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT;
-				attributes[0].binding  = binding.binding;
-				attributes[0].location = 0;
-				attributes[0].format   = VK_FORMAT_R32G32_SFLOAT;
-				attributes[0].offset   = IM_OFFSETOF(ImDrawVert, pos);
-
-				attributes[1].sType    = VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT;
-				attributes[1].binding  = binding.binding;
-				attributes[1].location = 1;
-				attributes[1].format   = VK_FORMAT_R32G32_SFLOAT;
-				attributes[1].offset   = IM_OFFSETOF(ImDrawVert, uv);
-
-				attributes[2].sType    = VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT;
-				attributes[2].binding  = binding.binding;
-				attributes[2].location = 2;
-				attributes[2].format   = VK_FORMAT_R8G8B8A8_UNORM;
-				attributes[2].offset   = IM_OFFSETOF(ImDrawVert, col);
-
-				vkCmdSetVertexInputEXT(commandBuffer, 1, &binding, 3, attributes);
+				vkCmdSetVertexInputEXT(commandBuffer, 1, &binding, countof(attributes), attributes);
 			}
 
 			VkBool32 bEnableBlend = VK_TRUE;
@@ -667,16 +587,7 @@ namespace chord
 			vkCmdSetColorBlendEquationEXT(commandBuffer, 0, 1, &ext);
 
 			// Setup viewport:
-			{
-				VkViewport viewport;
-				viewport.x = 0;
-				viewport.y = 0;
-				viewport.width  = (float)fbWidth;
-				viewport.height = (float)fbHeight;
-				viewport.minDepth = 0.0f;
-				viewport.maxDepth = 1.0f;
-				vkCmdSetViewportWithCount(commandBuffer, 1, &viewport);
-			}
+			helper::setViewport(commandBuffer, fbWidth, fbHeight);
 
 			// Setup scale and translation:
 			// Our visible imgui space lies from drawData->DisplayPps (top left) to drawData->DisplayPos+data_data->DisplaySize (bottom right). 
@@ -691,7 +602,8 @@ namespace chord
 			pushConst.textureId = ImGui::GetIO().Fonts->TexID;
 			pushConst.bFont = true;
 			pushConst.samplerId = getSamplers().linearClampEdge().index.get();
-			vkCmdPushConstants(commandBuffer, pipeline->getPipelineLayout(), VK_SHADER_STAGE_ALL_GRAPHICS, 0, sizeof(pushConst), &pushConst);
+
+			pipeline->pushConst(commandBuffer, pushConst);
 		}
 
 		// Will project scissor/clipping rectangles into framebuffer space
@@ -724,23 +636,17 @@ namespace chord
 				}
 
 				// Apply scissor/clipping rectangle
-				VkRect2D scissor { };
-				scissor.offset.x = (int32)(clipMin.x);
-				scissor.offset.y = (int32)(clipMin.y);
-				scissor.extent.width = (uint32)(clipMax.x - clipMin.x);
-				scissor.extent.height = (uint32)(clipMax.y - clipMin.y);
-				vkCmdSetScissorWithCount(commandBuffer, 1, &scissor);
+				helper::setScissor(commandBuffer, { int32(clipMin.x), int32(clipMin.y) }, { uint32(clipMax.x - clipMin.x), uint32(clipMax.y - clipMin.y) });
 
-			
 				const auto copyPushConst = pushConst;
 
-				// Update push const if change.
+				// Update push const texture id and font.
 				pushConst.textureId = pcmd->TextureId;
 				pushConst.bFont = (pcmd->TextureId == ImGui::GetIO().Fonts->TexID);
 
 				if (copyPushConst != pushConst)
 				{
-					vkCmdPushConstants(commandBuffer, pipeline->getPipelineLayout(), VK_SHADER_STAGE_ALL_GRAPHICS, 0, sizeof(pushConst), &pushConst);
+					pipeline->pushConst(commandBuffer, pushConst);
 				}
 
 				vkCmdDrawIndexed(commandBuffer, pcmd->ElemCount, 1, pcmd->IdxOffset + globalIdxOffset, pcmd->VtxOffset + globalVtxOffset, 0);
@@ -749,8 +655,8 @@ namespace chord
 			globalVtxOffset += cmdList->VtxBuffer.Size;
 		}
 
-		VkRect2D scissor = { { 0, 0 }, { (uint32)fbWidth, (uint32)fbHeight } };
-		vkCmdSetScissorWithCount(commandBuffer, 1, &scissor);
+		// Scissor reset.
+		helper::setScissor(commandBuffer, { 0, 0 }, { (uint32)fbWidth, (uint32)fbHeight });
 	}
 }
 

@@ -191,12 +191,15 @@ namespace chord
 			std::vector<std::filesystem::path> pendingFiles = {};
 
 			auto checkDeleted = finalPath.parent_path();
-			for (const auto& dirEntry : std::filesystem::recursive_directory_iterator(checkDeleted))
+			if (std::filesystem::exists(checkDeleted))
 			{
-				const auto& path = dirEntry.path();
-				if (shouldDeleteLogInDisk(path))
+				for (const auto& dirEntry : std::filesystem::recursive_directory_iterator(checkDeleted))
 				{
-					pendingFiles.push_back(path);
+					const auto& path = dirEntry.path();
+					if (shouldDeleteLogInDisk(path))
+					{
+						pendingFiles.push_back(path);
+					}
 				}
 			}
 

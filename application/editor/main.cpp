@@ -6,41 +6,6 @@ namespace viewer
 	using namespace chord;
 	using namespace chord::graphics;
 
-	class ImGuiDrawVS : public GlobalShader
-	{
-	public:
-		DECLARE_SUPER_TYPE(GlobalShader);
-
-		static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId) 
-		{ 
-		
-		}
-
-		static bool shouldCompilePermutation(int32 PermutationId) 
-		{
-			return true; 
-		}
-	};
-
-	class ImGuiDrawPS : public GlobalShader
-	{
-	public:
-		DECLARE_SUPER_TYPE(GlobalShader);
-
-		static bool shouldCompilePermutation(int32 PermutationId)
-		{
-			return true;
-		}
-
-		static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId)
-		{
-
-		}
-	};
-
-	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawVS, "resource/shader/imgui.hlsl", "mainVS", EShaderStage::Vertex);
-	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawPS, "resource/shader/imgui.hlsl", "mainPS", EShaderStage::Pixel);
-
 	void init()
 	{
 		CVarSystem::get().getCVarCheck<std::string>("r.log.file.name")->set("editor/editor");

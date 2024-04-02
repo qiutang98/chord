@@ -73,37 +73,6 @@ namespace chord::graphics
 		VkShaderStageFlagBits stage;
 	};
 
-	struct GraphicsPipelineCreateInfo
-	{
-		uint64 hash() const
-		{
-			uint64 hash = hashCombine(pushConstantSize, uint64(topology));
-
-			hash = hashCombine(hash, uint64(depthFormat));
-			hash = hashCombine(hash, uint64(stencilFormat));
-
-			for (auto& format : attachmentFormats)
-			{
-				hash = hashCombine(hash, uint64(format));
-			}
-
-			for (auto& stage : pipelineStages)
-			{
-				hash = hashCombine(hash, stage.hash());
-			}
-
-			return hash;
-		}
-
-		std::vector<PipelineShaderStageCreateInfo> pipelineStages;
-		std::vector<VkFormat> attachmentFormats;
-
-		VkFormat depthFormat = VK_FORMAT_UNDEFINED;
-		VkFormat stencilFormat = VK_FORMAT_UNDEFINED;
-		uint32 pushConstantSize = 0;
-		VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	};
-
 	struct SamplerCreateInfo
 	{
 		VkSamplerCreateFlags    flags;

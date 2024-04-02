@@ -236,21 +236,90 @@ namespace chord::graphics::helper
 		}
 	}
 
+	static inline VkVertexInputBindingDescription2EXT vertexInputBindingDescription2EXT(
+		uint32 stride,
+		uint32 binding = 0,
+		VkVertexInputRate inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+		uint32 divisor = 1)
+	{
+		VkVertexInputBindingDescription2EXT ext { };
+		ext.sType     = VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT;
+		ext.binding   = binding;
+		ext.stride    = stride;
+		ext.inputRate = inputRate;
+		ext.divisor   = divisor;
+		return ext;
+	}
+
+	static inline VkVertexInputAttributeDescription2EXT vertexInputAttributeDescription2EXT(
+		uint32 location,
+		VkFormat format,
+		uint32 offset,
+		uint32 binding = 0)
+	{
+		VkVertexInputAttributeDescription2EXT ext{};
+		ext.sType    = VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT;
+		ext.binding  = binding;
+		ext.location = location;
+		ext.format   = format;
+		ext.offset   = offset;
+		return ext;
+	}
+
+	static inline void setViewport(VkCommandBuffer cmd, int32 width, int32 height)
+	{
+		VkViewport viewport;
+		viewport.x = 0;
+		viewport.y = 0;
+
+		viewport.width  = (float)width;
+		viewport.height = (float)height;
+
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewportWithCount(cmd, 1, &viewport);
+	}
+
+	static inline void setScissor(VkCommandBuffer cmd, const VkOffset2D& offset, const VkExtent2D& extent)
+	{
+		const VkRect2D scissor { .offset = offset, .extent = extent };
+		vkCmdSetScissorWithCount(cmd, 1, &scissor);
+	}
+
+	static inline VkRenderingAttachmentInfo renderingAttachmentInfo(bool bDepth)
+	{
+		VkRenderingAttachmentInfo attachment{ };
+
+		attachment.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+		attachment.imageLayout = bDepth ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		return attachment;
+	}
+
+	static inline VkRenderingInfo renderingInfo()
+	{
+		VkRenderingInfo renderInfo { };
+		renderInfo.sType      = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR;
+		renderInfo.layerCount = 1;
+
+		return renderInfo;
+	}
+
 	static inline void dynamicStateGeneralSet(VkCommandBuffer commandBuffer)
 	{
-		vkCmdSetCullMode(commandBuffer, VK_CULL_MODE_NONE);
-		vkCmdSetFrontFace(commandBuffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-		vkCmdSetPolygonModeEXT(commandBuffer, VK_POLYGON_MODE_FILL);
+		vkCmdSetCullMode(commandBuffer,                VK_CULL_MODE_NONE);
+		vkCmdSetPolygonModeEXT(commandBuffer,          VK_POLYGON_MODE_FILL);
 		vkCmdSetRasterizationSamplesEXT(commandBuffer, VK_SAMPLE_COUNT_1_BIT);
+		vkCmdSetFrontFace(commandBuffer,               VK_FRONT_FACE_COUNTER_CLOCKWISE);
 
-		vkCmdSetDepthTestEnable(commandBuffer, VK_FALSE);
-		vkCmdSetDepthWriteEnable(commandBuffer, VK_FALSE);
+		vkCmdSetDepthTestEnable(commandBuffer,       VK_FALSE);
+		vkCmdSetDepthWriteEnable(commandBuffer,      VK_FALSE);
 		vkCmdSetDepthBoundsTestEnable(commandBuffer, VK_FALSE);
-		vkCmdSetDepthBiasEnable(commandBuffer, VK_FALSE);
-		vkCmdSetDepthClampEnableEXT(commandBuffer, VK_FALSE);
+		vkCmdSetDepthBiasEnable(commandBuffer,       VK_FALSE);
+		vkCmdSetDepthClampEnableEXT(commandBuffer,   VK_FALSE);
 		vkCmdSetDepthCompareOp(commandBuffer, VK_COMPARE_OP_ALWAYS);
 
-		vkCmdSetStencilTestEnable(commandBuffer, VK_FALSE);
+		vkCmdSetStencilTestEnable(commandBuffer,     VK_FALSE);
 		vkCmdSetStencilOp(commandBuffer,
 			VK_STENCIL_FACE_FRONT_AND_BACK,
 			VK_STENCIL_OP_KEEP,
@@ -258,7 +327,7 @@ namespace chord::graphics::helper
 			VK_STENCIL_OP_KEEP,
 			VK_COMPARE_OP_ALWAYS);
 
-		vkCmdSetLogicOpEnableEXT(commandBuffer, VK_FALSE);
+		vkCmdSetLogicOpEnableEXT(commandBuffer,      VK_FALSE);
 		vkCmdSetLogicOpEXT(commandBuffer, VK_LOGIC_OP_NO_OP);
 
 		VkColorComponentFlags colorWriteMask =

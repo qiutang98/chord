@@ -219,7 +219,6 @@ namespace chord::graphics
 	#error "Shader compiler current only implement windows."
 #endif 
 
-
 	ShaderCompilerManager::ShaderCompilerManager(uint32 freeCount, uint32 desiredMaxCompileThreadCount)
 		: Super(L"ShaderCompiler", freeCount, desiredMaxCompileThreadCount, [this]() { this->worker(); })
 	{

@@ -51,7 +51,7 @@ namespace chord::graphics
 
 	namespace debugUtils
 	{
-		static int32 sGraphicsDebugUtilsLevel = 1;
+		static int32 sGraphicsDebugUtilsLevel = 3;
 		static AutoCVarRef<int32> cVarGraphicsDebugUtilsLevel(
 			"r.graphics.debugUtils.level",
 			sGraphicsDebugUtilsLevel,
@@ -335,26 +335,41 @@ namespace chord::graphics
 				LOG_GRAPHICS_INFO("Instance extension enabled #{0}: '{1}'.", i, extensions[i]);
 			}
 
+
+
+
 			// Instance info.
 			VkInstanceCreateInfo instanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
+			auto pNext = getNextPtr(instanceInfo);
+
 			instanceInfo.pApplicationInfo = &appInfo;
 			instanceInfo.enabledExtensionCount = static_cast<uint32>(extensions.size());
 			instanceInfo.ppEnabledExtensionNames = extensions.data();
 			instanceInfo.enabledLayerCount = static_cast<uint32>(layers.size());
 			instanceInfo.ppEnabledLayerNames = layers.data();
 
-			VkDebugUtilsMessengerCreateInfoEXT debugUtilsCreateInfo{ };
-
-			// Instance create info pNext chain.
+			std::vector<VkValidationFeatureEnableEXT> enabledValidationLayers = {};
+			if (m_initConfig.bDebugUtils && m_initConfig.bValidation)
 			{
-				auto pNext = getNextPtr(instanceInfo);
+				enabledValidationLayers.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
+			};
 
-				if (m_initConfig.bDebugUtils)
-				{
-					debugUtilsCreateInfo = debugUtils::configMessengerCreateInfo(m_initConfig);
-					stepNextPtr(pNext, debugUtilsCreateInfo);
-				}
+			VkValidationFeaturesEXT validationFeatures{};
+			stepNextPtr(pNext, validationFeatures);
+
+			validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+			validationFeatures.pEnabledValidationFeatures     = enabledValidationLayers.data();
+			validationFeatures.enabledValidationFeatureCount  = (uint32)enabledValidationLayers.size();
+			validationFeatures.pDisabledValidationFeatures    = nullptr;
+			validationFeatures.disabledValidationFeatureCount = 0;
+
+			VkDebugUtilsMessengerCreateInfoEXT debugUtilsCreateInfo{ };
+			if (m_initConfig.bDebugUtils)
+			{
+				debugUtilsCreateInfo = debugUtils::configMessengerCreateInfo(m_initConfig);
+				stepNextPtr(pNext, debugUtilsCreateInfo);
 			}
+
 
 			// create vulkan instance.
 			if (vkCreateInstance(&instanceInfo, m_initConfig.pAllocationCallbacks, &m_instance) != VK_SUCCESS)
@@ -554,6 +569,8 @@ namespace chord::graphics
 				enableIfExist(nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME, "ExtendDynamicState2", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, "ExtendDynamicState3", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME, "VertexInputDynamicState", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME, "ShaderNonSemanticInfo", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+
 				// GLFW
 				enableIfExist(&m_initConfig.bGLFW, VK_KHR_SWAPCHAIN_EXTENSION_NAME, "GLFW", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 
@@ -844,7 +861,7 @@ namespace chord::graphics
 
 		{
 			// Some imgui logic here.
-
+			ImGui::ShowDemoWindow();
 		}
 
 		// ImGui prepare render data.
@@ -885,12 +902,7 @@ namespace chord::graphics
 				std::vector<VkSubmitInfo> infosRawSubmit{ imGuiCmdSubmitInfo };
 				m_swapchain->submit((uint32)infosRawSubmit.size(), infosRawSubmit.data());
 			}
-		}
 
-		m_imguiManager->updateRemainderWindows();
-
-		if (!bMainMinimized)
-		{
 			m_swapchain->present();
 		}
 

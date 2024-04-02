@@ -16,85 +16,7 @@ namespace chord::graphics
 	// Generate shader module hash by permutation id and meta info id.
 	uint64 graphics::getShaderModuleHash(int32 permutationId, const GlobalShaderRegisteredInfo& info)
 	{
-		// Hash base from permutation type.
-		uint64 hash = uint64(int64(std::numeric_limits<int32>::max()) + int64(permutationId) + 1);
-
-		// Hash combine shader file last edit time.
-		auto ftime = std::format("{}", std::filesystem::last_write_time(info.shaderFilePath));
-		hash = cityhash::ctyhash64WithSeed(ftime.data(), ftime.size(), hash);
-
-		// Hash combine shader file path.
-		hash = cityhash::ctyhash64WithSeed(info.shaderFilePath.data(), info.shaderFilePath.size(), hash);
-
-		// Hash combine shader entry name and stage type.
-		hash = cityhash::cityhash64WithSeeds(info.entry.data(), info.entry.size(), hash, uint64(info.stage));
-
-		return hash;
-	}
-
-	void spirvReflect(SizedBuffer buffer)
-	{
-		if (!buffer.isValid())
-		{
-			return;
-		}
-
-		// Generate reflection data for a shader
-		SpvReflectShaderModule moduleReflect;
-		SpvReflectResult result = spvReflectCreateShaderModule(buffer.size, buffer.ptr, &moduleReflect);
-		check(result == SPV_REFLECT_RESULT_SUCCESS);
-
-
-		{
-			// Go through each enumerate to examine it
-			uint32 count = 0;
-
-			{
-				result = spvReflectEnumerateDescriptorSets(&moduleReflect, &count, NULL);
-				check(result == SPV_REFLECT_RESULT_SUCCESS);
-				std::vector<SpvReflectDescriptorSet*> sets(count);
-				result = spvReflectEnumerateDescriptorSets(&moduleReflect, &count, sets.data());
-				check(result == SPV_REFLECT_RESULT_SUCCESS);
-
-
-			}
-
-			{
-				result = spvReflectEnumerateDescriptorBindings(&moduleReflect, &count, NULL);
-				check(result == SPV_REFLECT_RESULT_SUCCESS);
-				std::vector<SpvReflectDescriptorBinding*> bindings(count);
-				result = spvReflectEnumerateDescriptorBindings(&moduleReflect, &count, bindings.data());
-				check(result == SPV_REFLECT_RESULT_SUCCESS);
-			}
-
-
-
-			result = spvReflectEnumerateInterfaceVariables(&moduleReflect, &count, NULL);
-			check(result == SPV_REFLECT_RESULT_SUCCESS);
-			std::vector<SpvReflectInterfaceVariable*> interface_variables(count);
-			result = spvReflectEnumerateInterfaceVariables(&moduleReflect, &count, interface_variables.data());
-			check(result == SPV_REFLECT_RESULT_SUCCESS);
-
-			result = spvReflectEnumerateInputVariables(&moduleReflect, &count, NULL);
-			check(result == SPV_REFLECT_RESULT_SUCCESS);
-			std::vector<SpvReflectInterfaceVariable*> input_variables(count);
-			result = spvReflectEnumerateInputVariables(&moduleReflect, &count, input_variables.data());
-			check(result == SPV_REFLECT_RESULT_SUCCESS);
-			result = spvReflectEnumerateOutputVariables(&moduleReflect, &count, NULL);
-			check(result == SPV_REFLECT_RESULT_SUCCESS);
-			std::vector<SpvReflectInterfaceVariable*> output_variables(count);
-			result = spvReflectEnumerateOutputVariables(&moduleReflect, &count, output_variables.data());
-			check(result == SPV_REFLECT_RESULT_SUCCESS);
-
-			result = spvReflectEnumeratePushConstantBlocks(&moduleReflect, &count, NULL);
-			check(result == SPV_REFLECT_RESULT_SUCCESS);
-			std::vector<SpvReflectBlockVariable*> push_constant(count);
-			result = spvReflectEnumeratePushConstantBlocks(&moduleReflect, &count, push_constant.data());
-			check(result == SPV_REFLECT_RESULT_SUCCESS);
-		}
-
-		// Destroy the reflection data when no longer required.
-		spvReflectDestroyShaderModule(&moduleReflect);
+		return hashCombine(info.getHash(), permutationId);
 	}
 
 	ShaderModule::ShaderModule(SizedBuffer buffer, const GlobalShaderRegisteredInfo& metaInfo)
@@ -148,8 +70,34 @@ namespace chord::graphics
 			// Assign result.
 			m_shader = shaderModule;
 
-			// Reflect shader meta datas.
-			spirvReflect(buffer);
+			// Generate reflection data for a shader
+			{
+				SpvReflectShaderModule moduleReflect;
+				SpvReflectResult result = spvReflectCreateShaderModule(buffer.size, buffer.ptr, &moduleReflect);
+				check(result == SPV_REFLECT_RESULT_SUCCESS);
+
+				uint32 count = 0;
+
+				// Push const.
+				{
+					result = spvReflectEnumeratePushConstantBlocks(&moduleReflect, &count, NULL);
+					check(result == SPV_REFLECT_RESULT_SUCCESS);
+					if (count > 0)
+					{
+						// Generally all shader only exist one push const.
+						check(count == 1);
+
+						std::vector<SpvReflectBlockVariable*> pushConstant(count);
+						result = spvReflectEnumeratePushConstantBlocks(&moduleReflect, &count, pushConstant.data());
+						check(result == SPV_REFLECT_RESULT_SUCCESS);
+
+						m_pushConstSize = pushConstant[0]->size;
+					}
+				}
+
+				// Destroy the reflection data when no longer required.
+				spvReflectDestroyShaderModule(&moduleReflect);
+			}
 
 			// Update compile state to ready.
 			m_compileState = ECompileState::Ready;
@@ -244,10 +192,15 @@ namespace chord::graphics
 				{
 					// Create shader temp save folder if no exist.
 					const auto saveFolder = batch.tempStorePath.parent_path();
-					if (!std::filesystem::exists(saveFolder))
 					{
-						std::filesystem::create_directory(saveFolder);
+						static std::mutex createFolderMutex;
+						std::lock_guard lock(createFolderMutex);
+						if (!std::filesystem::exists(saveFolder))
+						{
+							std::filesystem::create_directories(saveFolder);
+						}
 					}
+
 					// Try store compile file in temp path.
 					storeFile(batch.tempStorePath, compileResult.shader.data(), compileResult.shader.size(), "wb");
 

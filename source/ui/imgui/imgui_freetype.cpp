@@ -4,7 +4,7 @@
 // Get the latest version at https://github.com/ocornut/imgui/tree/master/misc/freetype
 // Original code by @vuhdo (Aleksei Skriabin). Improvements by @mikesart. Maintained since 2019 by @ocornut.
 
-// CHANGELOG
+// CHANGELOG 
 // (minor and older changes stripped away, please see git history for details)
 //  2023/01/04: fixed a packing issue which in some occurrences would prevent large amount of glyphs from being packed correctly.
 //  2021/08/23: fixed crash when FT_Render_Glyph() fails to render a glyph and returns NULL.
@@ -25,7 +25,7 @@
 //  2017/08/26: cleanup, optimizations, support for ImFontConfig::RasterizerFlags, ImFontConfig::RasterizerMultiply.
 //  2017/08/16: imported from https://github.com/Vuhdo/imgui_freetype into http://www.github.com/ocornut/imgui_club, updated for latest changes in ImFontAtlas, minor tweaks.
 
-// About Gamma Correct Blending:
+// About Gamma Correct Blending: 
 // - FreeType assumes blending in linear space rather than gamma space.
 // - See https://www.freetype.org/freetype2/docs/reference/ft2-base_interface.html#FT_Render_Glyph
 // - For correct results you need to be using sRGB and convert to linear space in the pixel shader output.
@@ -52,7 +52,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"                  // warning: unknown option after '#pragma GCC diagnostic' kind
 #pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
-#pragma GCC diagnostic ignored "-Wsubobject-linkage"        // warning: 'xxxx' has a field ‘xxxx?whose type uses the anonymous namespace
+#pragma GCC diagnostic ignored "-Wsubobject-linkage"        // warning: 'xxxx' has a field ï¿½xxxx?whose type uses the anonymous namespace
 #endif
 
 //-------------------------------------------------------------------------

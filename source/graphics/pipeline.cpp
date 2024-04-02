@@ -2,6 +2,7 @@
 #include <graphics/pipeline.h>
 #include <graphics/helper.h>
 #include <utils/cityhash.h>
+#include <shader/shader.h>
 
 namespace chord::graphics
 {
@@ -43,8 +44,10 @@ namespace chord::graphics
 		VK_DYNAMIC_STATE_BLEND_CONSTANTS
 	};
 
-	IPipeline::IPipeline(const std::string& name)
+	IPipeline::IPipeline(const std::string& name, uint32 pushConstSize, VkShaderStageFlags shaderStageFlags)
 		: m_name(name)
+		, m_pushConstSize(pushConstSize)
+		, m_shaderStageFlags(shaderStageFlags)
 	{
 
 	}
@@ -67,28 +70,28 @@ namespace chord::graphics
 	}
 
 	GraphicsPipeline::GraphicsPipeline(const std::string& name, const GraphicsPipelineCreateInfo& ci)
-		: IPipeline(name)
+		: IPipeline(name, ci.pushConstantSize, ci.shaderStageFlags)
 	{
 		// Dynamic render pass state.
 		VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{ };
 		pipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 		pipelineRenderingCreateInfo.colorAttachmentCount = static_cast<uint32>(ci.attachmentFormats.size());
 		pipelineRenderingCreateInfo.pColorAttachmentFormats = ci.attachmentFormats.data();
-		pipelineRenderingCreateInfo.depthAttachmentFormat = ci.depthFormat;
+		pipelineRenderingCreateInfo.depthAttachmentFormat   = ci.depthFormat;
 		pipelineRenderingCreateInfo.stencilAttachmentFormat = ci.stencilFormat;
 
 		// Dynamic state.
 		VkPipelineDynamicStateCreateInfo dynamicState{};
 		dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 		dynamicState.dynamicStateCount = static_cast<uint32>(kGraphicsPipelineDynamicStates.size());
-		dynamicState.pDynamicStates = kGraphicsPipelineDynamicStates.data();
+		dynamicState.pDynamicStates    = kGraphicsPipelineDynamicStates.data();
 
 		// Add push const if exist.
 		VkPushConstantRange pushConstantRange{};
 		if (ci.pushConstantSize > 0)
 		{
-			pushConstantRange.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
-			pushConstantRange.size = ci.pushConstantSize;
+			pushConstantRange.stageFlags = ci.shaderStageFlags;
+			pushConstantRange.size       = ci.pushConstantSize;
 		}
 
 		VkPipelineInputAssemblyStateCreateInfo assemblyState{ };

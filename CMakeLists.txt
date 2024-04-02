@@ -9,6 +9,9 @@ set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "cmake")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
 
+add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
+add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+
 if(MSVC)
     ## Glob all header and source files in project.
     file(GLOB_RECURSE shaderHeaders CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/install/resource/shader/*.*")
@@ -56,12 +59,17 @@ groupCMakeFiles(chord)
 source_group(TREE "${PROJECT_SOURCE_DIR}/source" PREFIX "source" FILES ${chordHeader} ${chordSource})
 source_group(TREE "${PROJECT_SOURCE_DIR}/install/resource/shader" PREFIX "shader" FILES ${shaderHeaders}) 
 
-# Visual studio incremental build.
 if(MSVC)
+    ## Visual studio incremental build.
     target_compile_options(chord PUBLIC "/ZI")
     target_link_options(chord PUBLIC "/INCREMENTAL")   
 
+    ## Only include hlsl as text file.
     set_source_files_properties(${shaderHeaders} PROPERTIES HEADER_FILE_ONLY TRUE)
+  
+    ## Cmake force utf-8.
+    add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
+    add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 endif()
 
 ## Our applications generate config.

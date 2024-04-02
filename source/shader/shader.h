@@ -64,8 +64,11 @@ namespace chord::graphics
 
 		void create(SizedBuffer buffer);
 
+		uint32 getPushConstSize() const { return m_pushConstSize; }
+
 	protected:
 		void clear();
+
 
 	protected:
 		const GlobalShaderRegisteredInfo& m_metaInfo;
@@ -75,6 +78,9 @@ namespace chord::graphics
 
 		// Cache shader modules.
 		OptionalVkShaderModule m_shader;
+
+		// Shader module push const size.
+		uint32 m_pushConstSize = 0;
 	};
 	using ShaderModuleRef = std::shared_ptr<ShaderModule>;
 
@@ -243,7 +249,7 @@ namespace chord::graphics
 	private:
 		GlobalShaderRegisterTable() = default;
 		
-		std::unordered_map<size_t, GlobalShaderRegisteredInfo> m_registeredShaders;
+		std::unordered_map<size_t, std::unique_ptr<GlobalShaderRegisteredInfo>> m_registeredShaders;
 		std::vector<ShaderPermutationBatchCompile> m_batchCompile;
 	};
 
@@ -257,8 +263,11 @@ namespace chord::graphics
 			auto& batches = GlobalShaderRegisterTable::get().m_batchCompile;
 
 			const auto& typeHash = getTypeHash<ShaderType>();
+			check(table[typeHash] == nullptr);
+
 			// Register global shader meta info.
-			table[typeHash] = GlobalShaderRegisteredInfo{ .shaderName = name, .shaderFilePath = file, .entry = entry, .stage = stage };
+			table[typeHash] = std::make_unique<GlobalShaderRegisteredInfo>(name, file, entry, stage);
+			const auto& ref = *table[typeHash];
 
 			// Fetch all shader permutations.
 			if constexpr (requires { typename ShaderType::Permutation; })
@@ -266,7 +275,7 @@ namespace chord::graphics
 				using Permutation = ShaderType::Permutation;
 				constexpr uint32 permutationCount = Permutation::kCount;
 
-				ShaderPermutationBatchCompile batch(table[typeHash]);
+				ShaderPermutationBatchCompile batch(ref);
 				for (auto i = 0; i < permutationCount; i++)
 				{
 					batch.add<ShaderType, Permutation>(Permutation::fromId(i));
@@ -275,7 +284,7 @@ namespace chord::graphics
 			}
 			else
 			{
-				ShaderPermutationBatchCompile batch(table[typeHash]);
+				ShaderPermutationBatchCompile batch(ref);
 				batch.addDummy<ShaderType>();
 
 				batches.push_back(std::move(batch));
@@ -301,13 +310,10 @@ namespace chord::graphics
 			const auto& typeHash = getTypeHash<ShaderType>();
 
 			// Find global shader info.
-			const GlobalShaderRegisteredInfo& info = globalShaderTable.at(typeHash);
-
-			// Now get shader file.
-			auto shaderFile = getShaderFile(info.shaderFilePath);
+			const auto& info = *globalShaderTable.at(typeHash);
 
 			// Now get permutation.
-			return shaderFile->getShaderModule(info, permutation);
+			return getShaderFile(info.shaderFilePath)->getShaderModule(info, permutation);
 		}
 
 	private:
@@ -315,5 +321,83 @@ namespace chord::graphics
 
 	private:
 		std::map<uint64, std::shared_ptr<ShaderFile>> m_shaderFiles;
+	};
+
+	class GraphicsPipelineCreateInfo
+	{
+	private:
+		explicit GraphicsPipelineCreateInfo(
+			std::vector<PipelineShaderStageCreateInfo>&& stages, 
+			std::vector<VkFormat>&& attachments, 
+			uint32 pushConstSize,
+			VkFormat inDepthFormat,
+			VkFormat inStencilFormat,
+			VkPrimitiveTopology inTopology,
+			VkShaderStageFlags inShaderStageFlags)
+			: pipelineStages(stages)
+			, attachmentFormats(attachments)
+			, pushConstantSize(pushConstSize)
+			, depthFormat(inDepthFormat)
+			, stencilFormat(inStencilFormat)
+			, topology(inTopology)
+			, shaderStageFlags(inShaderStageFlags)
+		{
+
+		}
+
+
+	public:
+		template<typename VertexShader, typename PixelShader>
+		static GraphicsPipelineCreateInfo build(
+			std::vector<VkFormat>&& attachments,
+			VkFormat inDepthFormat         = VK_FORMAT_UNDEFINED,
+			VkFormat inStencilFormat       = VK_FORMAT_UNDEFINED,
+			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+		{
+			auto vertexShader = getContext().getShaderLibrary().getShader<VertexShader>();
+			auto pixelShader  = getContext().getShaderLibrary().getShader<PixelShader>();
+
+			// We always share push const, so should use max size.
+			const uint32 pushConstantSize = math::max(vertexShader->getPushConstSize(), pixelShader->getPushConstSize());
+			
+			return GraphicsPipelineCreateInfo(
+				{  vertexShader->getShaderStageCreateInfo(), pixelShader->getShaderStageCreateInfo() },
+				std::move(attachments),
+				pushConstantSize,
+				inDepthFormat,
+				inStencilFormat,
+				inTopology,
+				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		}
+
+		uint64 hash() const
+		{
+			uint64 hash = hashCombine(pushConstantSize, uint64(topology));
+
+			hash = hashCombine(hash, uint64(depthFormat));
+			hash = hashCombine(hash, uint64(stencilFormat));
+
+			for (auto& format : attachmentFormats)
+			{
+				hash = hashCombine(hash, uint64(format));
+			}
+
+			for (auto& stage : pipelineStages)
+			{
+				hash = hashCombine(hash, stage.hash());
+			}
+
+			return hash;
+		}
+
+
+		const std::vector<PipelineShaderStageCreateInfo> pipelineStages;
+		const std::vector<VkFormat> attachmentFormats;
+
+		const VkShaderStageFlags shaderStageFlags;
+		const uint32 pushConstantSize;
+		const VkFormat depthFormat;
+		const VkFormat stencilFormat;
+		const VkPrimitiveTopology topology;
 	};
 }

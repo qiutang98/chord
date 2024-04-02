@@ -15,13 +15,13 @@ CHORD_PUSHCONST(ImGuiDrawPushConsts, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
 
-#include "bindless.hlsli"
+#include "bindless.hlsli" 
 
-struct VSIn
+struct VSIn 
 {
     [[vk::location(0)]] float2 pos : POSITION;
     [[vk::location(1)]] float2 uv  : TEXCOORD0;
-    [[vk::location(2)]] float4 col : COLOR0;
+    [[vk::location(2)]] float4 col : COLOR0; 
 
 };
 
@@ -60,7 +60,16 @@ float4 mainPS(VS2PS input) : SV_Target
     SamplerState inputSampler = Bindless(SamplerState, pushConsts.samplerId);
     
     float4 sampleColor = inputTexture.Sample(inputSampler, input.uv);
-           sampleColor = pushConsts.bFont ? sampleColor.rrrr : sampleColor;
+    if (pushConsts.bFont)
+    {
+        // Only r8 store all data.
+        sampleColor = sampleColor.r;
+    }
+    else 
+    {
+        // We assume the input color can do correct color IO.
+        // eg: linear rec709 store in unorm, srgb store in _srgb, so the hardware can convert color correctly. 
+    }
     
     // ImGui color default in gamma rec709.
     float4 lerpColor = input.col;
