@@ -84,8 +84,6 @@ namespace chord::graphics
 	};
 	using ShaderModuleRef = std::shared_ptr<ShaderModule>;
 
-
-
 	extern uint64 getShaderModuleHash(int32 permutationId, const GlobalShaderRegisteredInfo& info);
 
 	struct ShaderPermutationCompileInfo
@@ -325,7 +323,8 @@ namespace chord::graphics
 
 	class GraphicsPipelineCreateInfo
 	{
-	private:
+	public:
+		// Hide construct function, only compute this pipeline ci from build function.
 		explicit GraphicsPipelineCreateInfo(
 			std::vector<PipelineShaderStageCreateInfo>&& stages, 
 			std::vector<VkFormat>&& attachments, 
@@ -345,43 +344,16 @@ namespace chord::graphics
 
 		}
 
-
-	public:
-		template<typename VertexShader, typename PixelShader>
-		static GraphicsPipelineCreateInfo build(
-			std::vector<VkFormat>&& attachments,
-			VkFormat inDepthFormat         = VK_FORMAT_UNDEFINED,
-			VkFormat inStencilFormat       = VK_FORMAT_UNDEFINED,
-			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-		{
-			auto vertexShader = getContext().getShaderLibrary().getShader<VertexShader>();
-			auto pixelShader  = getContext().getShaderLibrary().getShader<PixelShader>();
-
-			// We always share push const, so should use max size.
-			const uint32 pushConstantSize = math::max(vertexShader->getPushConstSize(), pixelShader->getPushConstSize());
-			
-			return GraphicsPipelineCreateInfo(
-				{  vertexShader->getShaderStageCreateInfo(), pixelShader->getShaderStageCreateInfo() },
-				std::move(attachments),
-				pushConstantSize,
-				inDepthFormat,
-				inStencilFormat,
-				inTopology,
-				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		}
-
 		uint64 hash() const
 		{
 			uint64 hash = hashCombine(pushConstantSize, uint64(topology));
-
-			hash = hashCombine(hash, uint64(depthFormat));
-			hash = hashCombine(hash, uint64(stencilFormat));
+				   hash = hashCombine(hash, uint64(depthFormat));
+				   hash = hashCombine(hash, uint64(stencilFormat));
 
 			for (auto& format : attachmentFormats)
 			{
 				hash = hashCombine(hash, uint64(format));
 			}
-
 			for (auto& stage : pipelineStages)
 			{
 				hash = hashCombine(hash, stage.hash());
@@ -390,14 +362,40 @@ namespace chord::graphics
 			return hash;
 		}
 
-
+		// Member of the structure, remember add hash combine in hash function.
 		const std::vector<PipelineShaderStageCreateInfo> pipelineStages;
 		const std::vector<VkFormat> attachmentFormats;
-
 		const VkShaderStageFlags shaderStageFlags;
 		const uint32 pushConstantSize;
 		const VkFormat depthFormat;
 		const VkFormat stencilFormat;
 		const VkPrimitiveTopology topology;
 	};
+
+
+	template<class VertexShader, class PixelShader>
+	IPipelineRef Context::graphicsPipe(
+		const std::string& name, 
+		std::vector<VkFormat>&& attachments, 
+		VkFormat inDepthFormat, 
+		VkFormat inStencilFormat,
+		VkPrimitiveTopology inTopology)
+	{
+		auto vertexShader = getShaderLibrary().getShader<VertexShader>();
+		auto pixelShader  = getShaderLibrary().getShader<PixelShader>();
+
+		// We always share push const, so should use max size.
+		const uint32 pushConstantSize = math::max(vertexShader->getPushConstSize(), pixelShader->getPushConstSize());
+
+		const auto graphicsCi = GraphicsPipelineCreateInfo(
+			{ vertexShader->getShaderStageCreateInfo(), pixelShader->getShaderStageCreateInfo() },
+			std::move(attachments),
+			pushConstantSize,
+			inDepthFormat,
+			inStencilFormat,
+			inTopology,
+			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+		return getPipelineContainer().graphics(name, graphicsCi);
+	}
 }

@@ -1,7 +1,5 @@
 #include <utils/log.h>
 
-#include <spdlog/sinks/stdout_color_sinks.h>
-
 #include <string>
 #include <filesystem>
 #include <iostream>
@@ -106,20 +104,8 @@ namespace chord
 		check(m_loggerCache->m_callbacks.remove(handle));
 	}
 
-	LoggerSystem::LoggerSystem()
+	void LoggerSystem::updateLogFile()
 	{
-		// Basic sinks.
-		m_logSinks.emplace_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
-
-		// Cache sinks.
-		m_logSinks.emplace_back(std::make_shared<LogCacheSink<std::mutex>>()); 		
-
-		// Set format.
-		for (auto& sink : m_logSinks)
-		{
-			sink->set_pattern(cVarLogPrintFormat.get());
-		}
-
 		// Create save folder for log if no exist.
 		const auto saveFolder = std::filesystem::path(cVarLogFileOutputFolder.get());
 		if (!std::filesystem::exists(saveFolder))
@@ -184,7 +170,6 @@ namespace chord
 		const auto saveFilePath = cVarLogFileName.get() + serializeTimePoint(now, "_%Y_%m_%d_%H_%M_%S") + ".log";
 		const auto finalPath = saveFolder / saveFilePath;
 
-
 		// Delete old log files out of day.
 		if (cVarLogFileDelete.get())
 		{
@@ -214,9 +199,42 @@ namespace chord
 				const auto name = finalPath.stem().string();
 				check(std::regex_search(name, kLogNamePattern));
 			}
-			m_logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(finalPath.string().c_str(), true));
-			m_logSinks.back()->set_pattern(cVarLogFileFormat.get());
+
+			m_fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(finalPath.string().c_str(), true);
+			m_fileSink->set_pattern(cVarLogFileFormat.get());
+
+			if (m_fileDestSink)
+			{
+				std::vector<spdlog::sink_ptr> nextSinks({ m_fileSink });
+				m_fileDestSink->set_sinks(nextSinks);
+			}
+			else
+			{
+				std::vector<spdlog::sink_ptr> initialSinks({ m_fileSink });
+				m_fileDestSink = std::make_shared<spdlog::sinks::dist_sink_mt>(initialSinks);
+				m_logSinks.push_back(m_fileDestSink);
+			}
+
 		}
+	}
+
+	LoggerSystem::LoggerSystem()
+	{
+		// Basic sinks.
+		m_logSinks.emplace_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+
+		// Cache sinks.
+		m_loggerCache = std::make_shared<LogCacheSink<std::mutex>>();
+		m_logSinks.emplace_back(m_loggerCache);
+
+		// Set format.
+		for (auto& sink : m_logSinks)
+		{
+			sink->set_pattern(cVarLogPrintFormat.get());
+		}
+
+		// Log file.
+		updateLogFile();
 
 		// Register a default logger for basic usage.
 		m_defaultLogger = registerLogger("Default");

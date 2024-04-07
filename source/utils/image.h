@@ -31,9 +31,9 @@ namespace chord
 		auto getHeight() const { return m_height; }
 		auto getComponent() const { return m_component; }
 		auto getRequiredComponent() const { return m_requiredComponent; }
-
+		uint32 getSize() const { return m_width * m_height * m_requiredComponent; }
 		const auto* getPixels() const { return m_pixels.data(); }
-
+		SizedBuffer getSizeBuffer() const { return SizedBuffer(getSize(), (void*)getPixels()); }
 		bool isEmpty() const { return m_pixels.empty(); }
 	};
 }

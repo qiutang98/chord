@@ -1,8 +1,8 @@
-#include "base.h"
+#include "colorspace.h"
 
 struct ImGuiDrawPushConsts
 {
-    CHORD_DEFAULT_COMPARE(ImGuiDrawPushConsts);
+    CHORD_DEFAULT_COMPARE_ARCHIVE(ImGuiDrawPushConsts);
 
     float2 scale;
     float2 translate;
@@ -43,17 +43,6 @@ VS2PS mainVS(VSIn input)
     return output;
 };
 
-float3 rec709GammaDecode(float3 gammaRec709)
-{
-    return lerp(gammaRec709 / 12.92, pow((gammaRec709 + .055) / 1.055, 2.4), step(0.04045, gammaRec709));
-}
-
-float3 rec709GammaEncode(float3 linearRec709)
-{
-    return lerp(12.92 * linearRec709, 1.055 * pow(linearRec709, 0.41666) - 0.055, step(0.0031308, linearRec709));
-}
-
-
 float4 mainPS(VS2PS input) : SV_Target
 {
     Texture2D<float4> inputTexture = TBindless(Texture2D, float4, pushConsts.textureId);
@@ -73,7 +62,7 @@ float4 mainPS(VS2PS input) : SV_Target
     
     // ImGui color default in gamma rec709.
     float4 lerpColor = input.col;
-    lerpColor.xyz = rec709GammaDecode(lerpColor.xyz);
+    lerpColor.xyz = chord::rec709GammaDecode(lerpColor.xyz);
     
     // Default in linearRec709, UI always draw in SRGB color buffer, so just output use hardware convert is fine.
     return lerpColor * sampleColor;

@@ -32,6 +32,11 @@ namespace chord
 		// Get command buffer in frame index, auto increment when no enough.
 		VkCommandBuffer getCommandBuffer(uint32 index);
 
+		float dpiScale() const
+		{
+			return m_dpiScale;
+		}
+
 	private:
 		// Setup font relative resource.
 		void setupFont(uint32 fontSize, float dpiScale);
@@ -40,7 +45,7 @@ namespace chord
 		void updateStyle();
 
 		// Render imgui draw data.
-		void renderDrawData(VkCommandBuffer commandBuffer, void* drawData,  graphics::IPipelineRef pipeline);
+		void renderDrawData(uint32 backBufferIndex, VkCommandBuffer commandBuffer, void* drawData,  graphics::IPipelineRef pipeline);
 
 	private:
 		// Delegate handle cache when swapchain rebuild.
@@ -48,23 +53,34 @@ namespace chord
 
 		// Common buffers ring.
 		std::vector<VkCommandBuffer> m_commandBuffers;
+		struct RenderBuffers
+		{
+			graphics::HostVisibleGPUBufferRef verticesBuffer = nullptr;
+			graphics::HostVisibleGPUBufferRef indicesBuffer  = nullptr;
+		};
+		std::vector<RenderBuffers> m_frameRenderBuffers;
 
 		// UI backbuffer clear value.
 		math::vec4 m_clearColor = { 0.45f, 0.55f, 0.60f, 1.00f };
 
+		// UI ini layout config file store path.
 		std::string m_iniFileStorePath;
 
 		struct FontAtlas
 		{
-			graphics::GPUTextureRef texture = nullptr;
 			float dpiScale = 0.0f;
-			ImGuiStyle style;
+			graphics::GPUTextureRef texture = nullptr;
+
+			ImGuiStyle  style; // Style which scale by dpi.
 			ImFontAtlas atlas; // Need to call clear when release.
 		};
 		std::map<uint32, FontAtlas> m_fontAtlasTextures;
 
 		// Cache main atlas when init.
 		ImFontAtlas* m_mainAtlas;
-		ImGuiStyle m_mainStyle;
+		ImGuiStyle   m_mainStyle;
+
+		// Current active dpi scale.
+		float m_dpiScale = 0.0f;
 	};
 }

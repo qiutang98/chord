@@ -43,7 +43,7 @@ namespace chord
 		"UI config file path saved path relative application.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static std::string sUIFontFilePath = "resource/font/微软雅黑.ttf";
+	static std::string sUIFontFilePath = "resource/font/full_chinese.ttf";
 	static AutoCVarRef<std::string> cVarsUIFontFilePath(
 		"r.ui.font",
 		sUIFontFilePath,
@@ -55,6 +55,13 @@ namespace chord
 		"r.ui.font.size", 
 		sUIFontSize, 
 		"UI font base size.",
+		EConsoleVarFlags::ReadOnly);
+
+	static std::string sUIFontIconFilePath = "resource/font/segmdl2.ttf";
+	static AutoCVarRef<std::string> cVarsUIFontIconFilePath(
+		"r.ui.font.icon",
+		sUIFontIconFilePath,
+		"ImGui icon font file path.",
 		EConsoleVarFlags::ReadOnly);
 
 	class ImGuiDrawVS : public GlobalShader
@@ -149,16 +156,12 @@ namespace chord
 
 		ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
 		ImGui::GetIO().ConfigWindowsResizeFromEdges = true;
-
 		style.AntiAliasedLines = true;
 		style.WindowMenuButtonPosition = ImGuiDir_Left;
-
 		style.WindowPadding = ImVec2(4, 4);
 		style.FramePadding  = ImVec2(6, 4);
 		style.ItemSpacing   = ImVec2(6, 2);
-
 		style.ScrollbarSize = 18;
-
 		colors[ImGuiCol_BorderShadow] = ImVec4(0.1f, 0.1f, 0.0f, 0.39f);
 		style.WindowBorderSize = 1;
 		style.ChildBorderSize = 1;
@@ -177,20 +180,6 @@ namespace chord
 		style.SliderThickness = 0.3f;
 		style.SliderContrast = 1.0f;
 	}
-
-	// Imgui draw relative.
-	struct ImGuiViewportData
-	{
-		// Frame index.
-		uint32 index;
-
-		struct RenderBuffers
-		{
-			GPUBufferRef verticesBuffer;
-			GPUBufferRef indicesBuffer;
-		};
-		std::vector<RenderBuffers> frameRenderBuffers;
-	};
 
 	uint32 getFontSize(float dpiScale)
 	{
@@ -238,17 +227,23 @@ namespace chord
 
 		// Add font atlas to fit all.
 		{
+			m_mainAtlas = io.Fonts; // Just cache main fonts.
+
 			int monitorsCount = 0;
 			GLFWmonitor** glfwMonitors = glfwGetMonitors(&monitorsCount);
+
+			for(int32 index = monitorsCount -1; index >= 0; index --)
 			{
 				float xScale, yScale;
-				glfwGetMonitorContentScale(glfwMonitors[0], &xScale, &yScale);
+				glfwGetMonitorContentScale(glfwMonitors[index], &xScale, &yScale);
 
 				int32 fontSize = getFontSize(xScale);
 				setupFont(fontSize, xScale);
 
-				m_mainAtlas = io.Fonts; // Just cache main fonts.
-				io.Fonts = &m_fontAtlasTextures[fontSize].atlas;
+				if (index == 0)
+				{
+					io.Fonts = &m_fontAtlasTextures[fontSize].atlas;
+				}
 			}
 		}
 
@@ -258,9 +253,6 @@ namespace chord
 
 			// We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
 			io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  
-
-			// Register main viewport data.
-			ImGui::GetMainViewport()->RendererUserData = new ImGuiViewportData();
 		}
 	}
 
@@ -277,11 +269,25 @@ namespace chord
 	// Setup font for IMGUI windows.
 	void ImGuiManager::setupFont(uint32 fontSize, float dpiScale)
 	{
-		check(m_fontAtlasTextures[fontSize].texture == nullptr);
+		if (m_fontAtlasTextures[fontSize].texture != nullptr)
+		{
+			return;
+		}
+
 		ImFontAtlas* fonts = &m_fontAtlasTextures[fontSize].atlas;
 
 		// Load font data to memory.
 		fonts->AddFontFromFileTTF(sUIFontFilePath.c_str(), fontSize, NULL, fonts->GetGlyphRangesChineseFull());
+
+		{
+			static const ImWchar iconsRanges[] = { 0xe001, 0xF8B3, 0 };
+			ImFontConfig iconsConfig;
+			iconsConfig.MergeMode  = true;
+			iconsConfig.PixelSnapH = true;
+			iconsConfig.GlyphOffset = math::vec2(0.0f, 4.0f) * dpiScale;
+			fonts->AddFontFromFileTTF(sUIFontIconFilePath.c_str(), fontSize, &iconsConfig, iconsRanges);
+		}
+
 		fonts->Build();
 
 		// Upload atlas to GPU, sync.
@@ -317,6 +323,7 @@ namespace chord
 		{
 			for (auto& fontPair : m_fontAtlasTextures)
 			{
+				fontPair.second.atlas.Locked = false;
 				fontPair.second.atlas.Clear();
 			}
 
@@ -331,13 +338,6 @@ namespace chord
 			uint32(m_commandBuffers.size()),
 			m_commandBuffers.data());
 		m_commandBuffers.clear();
-
-		// Cleanup main viewport data.
-		{
-			auto* vd = (ImGuiViewportData*)ImGui::GetMainViewport()->RendererUserData;
-			delete vd;
-			ImGui::GetMainViewport()->RendererUserData = nullptr;
-		}
 
 		// Release glfw backend.
 		ImGui_ImplGlfw_Shutdown();
@@ -391,8 +391,7 @@ namespace chord
 				? swapchain.getSurfaceFormat().format
 				: VK_FORMAT_R8G8B8A8_SRGB;
 
-			const auto pipelineCI = GraphicsPipelineCreateInfo::build<ImGuiDrawVS, ImGuiDrawPS>({ uiBackBufferFormat });
-			auto graphicsPipeline = getContext().getPipelineContainer().graphics("ImGuiDraw", pipelineCI);
+			auto graphicsPipeline = getContext().graphicsPipe<ImGuiDrawVS, ImGuiDrawPS>("ImGuiDraw", { uiBackBufferFormat });
 
 			// Transition image to attachment layout.
 			transitionImageLayout(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -415,7 +414,7 @@ namespace chord
 
 			vkCmdBeginRendering(cmd, &renderInfo);
 			{
-				renderDrawData(cmd, (void*)ImGui::GetDrawData(), graphicsPipeline);
+				renderDrawData(backBufferIndex, cmd, (void*)ImGui::GetDrawData(), graphicsPipeline);
 			}
 			vkCmdEndRendering(cmd);
 
@@ -437,15 +436,13 @@ namespace chord
 			float xscale, yscale;
 			glfwGetWindowContentScale((GLFWwindow*)ImGui::GetMainViewport()->PlatformHandle, &xscale, &yscale);
 
-			// Still no produce, need create new one.
+			m_dpiScale = xscale;
+
 			uint32 fontSize = getFontSize(xscale);
-			if (m_fontAtlasTextures[fontSize].texture == nullptr)
-			{
-				setupFont(fontSize, xscale);
-			}
+			setupFont(fontSize, xscale);
 
 			ImGui::GetIO().Fonts = &m_fontAtlasTextures[fontSize].atlas;
-			ImGui::GetStyle() = m_fontAtlasTextures[fontSize].style;
+			ImGui::GetStyle()    =  m_fontAtlasTextures[fontSize].style;
 		}
 
 		ImGui_ImplGlfw_NewFrame();
@@ -473,7 +470,7 @@ namespace chord
 		return (size + alignment - 1) & ~(alignment - 1);
 	}
 
-	void ImGuiManager::renderDrawData(VkCommandBuffer commandBuffer, void* drawDataInput, IPipelineRef pipeline)
+	void ImGuiManager::renderDrawData(uint32 backBufferIndex, VkCommandBuffer commandBuffer, void* drawDataInput, IPipelineRef pipeline)
 	{
 		auto* drawData = (ImDrawData*)drawDataInput;
 
@@ -488,18 +485,11 @@ namespace chord
 			return;
 		}
 
-		// Allocate array to store enough vertex/index buffers. Each unique viewport gets its own storage.
-		auto* vRD = (ImGuiViewportData*)drawData->OwnerViewport->RendererUserData;
-		if (vRD->frameRenderBuffers.empty())
+		while (m_frameRenderBuffers.size() <= backBufferIndex)
 		{
-			vRD->index = 0;
-			vRD->frameRenderBuffers.resize(imageCount);
+			m_frameRenderBuffers.push_back({});
 		}
-		check(vRD->frameRenderBuffers.size() == imageCount);
-
-		// frame loop increment.
-		vRD->index = (vRD->index + 1) % imageCount;
-		auto& rb = vRD->frameRenderBuffers[vRD->index];
+		auto& rb = m_frameRenderBuffers.at(backBufferIndex);
 
 		// Upload vertex/index buffer.
 		if (drawData->TotalVtxCount > 0)
@@ -507,20 +497,16 @@ namespace chord
 			auto vertexSize = alignImGuiBufferSize(drawData->TotalVtxCount * sizeof(ImDrawVert), 256);
 			auto indexSize  = alignImGuiBufferSize(drawData->TotalIdxCount * sizeof(ImDrawIdx),  256);
 			{
-				VkBufferCreateInfo bufferCI{ };
+				VkBufferCreateInfo bufferCI { };
 				bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 				bufferCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-				VmaAllocationCreateInfo allocCI{};
-				allocCI.usage = VMA_MEMORY_USAGE_AUTO;
-				allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
 				// Create or resize the vertex/index buffers.
 				if (!rb.verticesBuffer || rb.verticesBuffer->getSize() < vertexSize)
 				{
 					bufferCI.size = vertexSize;
 					bufferCI.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-					rb.verticesBuffer = std::make_shared<GPUBuffer>("ImGuiVertices", bufferCI, allocCI);
+					rb.verticesBuffer = std::make_shared<HostVisibleGPUBuffer>("ImGuiVertices", bufferCI);
 				}
 
 				if (!rb.indicesBuffer || rb.indicesBuffer->getSize() < indexSize)
@@ -528,7 +514,7 @@ namespace chord
 					bufferCI.size = indexSize;
 					bufferCI.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 
-					rb.indicesBuffer = std::make_shared<GPUBuffer>("ImGuiIndices", bufferCI, allocCI);
+					rb.indicesBuffer = std::make_shared<HostVisibleGPUBuffer>("ImGuiIndices", bufferCI);
 				}
 			}
 
@@ -546,8 +532,8 @@ namespace chord
 					idxDst += cmdList->IdxBuffer.Size;
 				}
 
-				rb.verticesBuffer->flush(vertexSize, 0);
-				rb.indicesBuffer->flush(indexSize, 0);
+				rb.verticesBuffer->flush();
+				rb.indicesBuffer->flush();
 			}
 			rb.verticesBuffer->unmap();
 			rb.indicesBuffer->unmap();
@@ -604,7 +590,7 @@ namespace chord
 
 			pushConst.textureId = ImGui::GetIO().Fonts->TexID;
 			pushConst.bFont = true;
-			pushConst.samplerId = getSamplers().linearClampEdge().index.get();
+			pushConst.samplerId = getSamplers().linearClampBorder0000MipPoint().index.get();
 
 			pipeline->pushConst(commandBuffer, pushConst);
 		}
@@ -662,4 +648,3 @@ namespace chord
 		helper::setScissor(commandBuffer, { 0, 0 }, { (uint32)fbWidth, (uint32)fbHeight });
 	}
 }
-

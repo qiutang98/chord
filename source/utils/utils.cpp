@@ -6,6 +6,8 @@
 	#include <consoleapi3.h>
 #endif
 
+const chord::uint32 chord::kAssetVersion = 0;
+
 void chord::setConsoleTitle(const std::string& title)
 {
 	std::cout << "\033]0;" << title.c_str() << "\007";

@@ -196,7 +196,7 @@ namespace chord::graphics
 		return pNext;
 	}
 
-	GPUBufferRef Context::createStageUploadBuffer(const std::string& name, SizedBuffer data)
+	HostVisibleGPUBufferRef Context::createStageUploadBuffer(const std::string& name, SizedBuffer data)
 	{
 		VkBufferCreateInfo ci{ };
 		ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -204,16 +204,17 @@ namespace chord::graphics
 		ci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 		ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		VmaAllocationCreateInfo vmaAllocInfo = {};
-		vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-		vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-		return std::make_shared<GPUBuffer>(name, ci, vmaAllocInfo, data);
+		return std::make_shared<HostVisibleGPUBuffer>(name, ci, data);
 	}
 
 	void Context::waitDeviceIdle() const
 	{
 		vkDeviceWaitIdle(m_device);
+	}
+
+	float Context::dpiScale() const
+	{
+		return m_imguiManager->dpiScale();
 	}
 
 	bool Context::init(const InitConfig& inputConfig)
@@ -859,10 +860,7 @@ namespace chord::graphics
 		// Imgui new frame.
 		m_imguiManager->newFrame();
 
-		{
-			// Some imgui logic here.
-			ImGui::ShowDemoWindow();
-		}
+		onTick.broadcast(tickData);
 
 		// ImGui prepare render data.
 		m_imguiManager->render();
@@ -1072,6 +1070,11 @@ namespace chord::graphics
 	Context& graphics::getContext()
 	{
 		return Application::get().getContext();
+	}
+
+	float dpiScale()
+	{
+		return getContext().dpiScale();
 	}
 
 	void setResourceName(VkObjectType objectType, uint64 handle, const char* name)

@@ -4,8 +4,6 @@
 #include <utils/log.h>
 #include <utils/optional.h>
 
-// #define IMGUI_ENABLE_FREETYPE
-
 // Texture in vulkan use bindless id.
 #define ImTextureID chord::uint32
 

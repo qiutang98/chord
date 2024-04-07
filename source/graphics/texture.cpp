@@ -18,6 +18,8 @@ namespace chord::graphics
 	// Global device size for GPUTexture.
 	static VkDeviceSize sTotalGPUTextureDeviceSize = 0;
 
+	const VkImageSubresourceRange graphics::kDefaultImageSubresourceRange = helper::buildBasicImageSubresource();
+
 	GPUTexture::GPUTexture(
 		const std::string& name,
 		const VkImageCreateInfo& createInfo,
@@ -42,6 +44,11 @@ namespace chord::graphics
 		// Init some subresources.
 		auto subresourceNum = m_createInfo.arrayLayers * m_createInfo.mipLevels;
 		m_subresourceStates.resize(subresourceNum);
+		for (auto& state : m_subresourceStates)
+		{
+			// Prepare initial layout.
+			state.imageLayout = createInfo.initialLayout;
+		}
 	}
 
 	GPUTexture::~GPUTexture()
@@ -87,8 +94,10 @@ namespace chord::graphics
 
 	void GPUTexture::rename(const std::string& name)
 	{
-		Super::rename(name);
-		setResourceName(VK_OBJECT_TYPE_IMAGE, (uint64)m_image, name.c_str());
+		if (setName(name))
+		{
+			setResourceName(VK_OBJECT_TYPE_IMAGE, (uint64)m_image, name.c_str());
+		}
 	}
 
 	// NOTE: Performance optimization guide.

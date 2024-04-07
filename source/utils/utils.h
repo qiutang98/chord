@@ -2,11 +2,6 @@
 
 #include <pch.h>
 
-#include <cstdint>
-#include <type_traits>
-#include <atomic>
-#include <iostream>
-
 #include <utils/noncopyable.h>
 
 #define ENABLE_LOG
@@ -86,6 +81,48 @@ do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' f
 
 #define DECLARE_SUPER_TYPE(Parent) using Super = Parent
 
+#define ARCHIVE_DECLARE                                                                  \
+	friend class cereal::access;                                                         \
+	template<class Archive>                                                              \
+	void serialize(Archive& archive, std::uint32_t const version);
+
+#define ARCHIVE_NVP_DEFAULT(Member) archive(cereal::make_nvp(#Member, Member))
+
+// Version and type registry.
+#define ASSET_ARCHIVE_IMPL_BASIC(AssetNameXX, Version)                                   \
+	CEREAL_CLASS_VERSION(chord::AssetNameXX, Version);                                   \
+	CEREAL_REGISTER_TYPE_WITH_NAME(chord::AssetNameXX, "chord::"#AssetNameXX);
+
+// Virtual children class.
+#define registerClassMemberInherit(AssetNameXX, AssetNamePP)                             \
+	ASSET_ARCHIVE_IMPL_BASIC(AssetNameXX, chord::kAssetVersion);                         \
+	CEREAL_REGISTER_POLYMORPHIC_RELATION(chord::AssetNamePP, chord::AssetNameXX)         \
+	template<class Archive>                                                              \
+	void chord::AssetNameXX::serialize(Archive& archive, std::uint32_t const version) {  \
+	archive(cereal::base_class<chord::AssetNamePP>(this));
+
+// Baisc class.
+#define registerClassMember(AssetNameXX)                                                 \
+	ASSET_ARCHIVE_IMPL_BASIC(AssetNameXX, chord::kAssetVersion);                         \
+	template<class Archive>                                                              \
+	void chord::AssetNameXX::serialize(Archive& archive, std::uint32_t const version)
+
+// Achive enum class type.
+#define ARCHIVE_ENUM_CLASS(value)                     \
+	{ size_t enum__type__##value = (size_t)value;     \
+	ARCHIVE_NVP_DEFAULT(enum__type__##value);         \
+	value = (decltype(value))(enum__type__##value); }
+
+#define registerPODClassMember(AssetNameXX)                                              \
+	CEREAL_CLASS_VERSION(chord::AssetNameXX, chord::kAssetVersion);                      \
+	template<class Archive>                                                              \
+	void chord::AssetNameXX::serialize(Archive& archive, std::uint32_t const version)
+
+#define REGISTER_BODY_DECLARE(...)  \
+	ARCHIVE_DECLARE                 \
+	RTTR_ENABLE(__VA_ARGS__);       \
+	RTTR_REGISTRATION_FRIEND();
+
 namespace chord
 {
 	class ImageLdr2D;
@@ -112,6 +149,9 @@ namespace chord
 		sizeof(int8)   == 1 &&
 		sizeof(uint8)  == 1);
 
+	// Asset version control all asset.
+	extern const uint32 kAssetVersion;
+
 	// 
 	enum class ERuntimePeriod
 	{
@@ -121,6 +161,99 @@ namespace chord
 		Releasing,
 
 		MAX
+	};
+
+	// Alias string to notify user know current is u8str instead std::u8string because it is hard to use.
+	using u8str  = std::string;
+	using u16str = std::u16string;
+
+	class RegionString
+	{
+	private:
+		u8str m_utf8 = {};
+		u16str m_utf16 = {};
+
+	public:
+		RegionString() = default;
+
+		RegionString(const u16str& str)
+			: m_utf8(utf8::utf16to8(str))
+			, m_utf16(str)
+		{
+
+		}
+
+		RegionString(const u8str& str)
+			: m_utf8(str)
+			, m_utf16(utf8::utf8to16(str))
+		{
+
+		}
+
+		bool isValid() const
+		{
+			return !m_utf8.empty();
+		}
+
+		const u8str& u8() const
+		{
+			return m_utf8;
+		}
+
+		const u16str& u16() const
+		{
+			return m_utf16;
+		}
+	};
+
+	template<typename T>
+	class RegisterManager
+	{
+	public:
+		void add(T& in)
+		{
+			m_registers.push_back(in);
+		}
+
+		bool remove(const T& in)
+		{
+			size_t i = 0;
+			for (auto& iter : m_registers)
+			{
+				if (iter == in)
+				{
+					break;
+				}
+
+				i++;
+			}
+
+			if (i >= m_registers.size())
+			{
+				return false;
+			}
+
+			m_registers[i] = std::move(m_registers.back());
+			m_registers.pop_back();
+
+			return true;
+		}
+
+		void loop(std::function<void(T& r)>&& f)
+		{
+			for (auto& iter : m_registers)
+			{
+				f(iter);
+			}
+		}
+
+		void clear()
+		{
+			m_registers.clear();
+		}
+
+	private:
+		std::vector<T> m_registers;
 	};
 
 	class SizedBuffer
@@ -151,7 +284,11 @@ namespace chord
 	};
 
 	// Interface for all resource used in application.
-	class IResource : NonCopyable { };
+	class IResource : NonCopyable 
+	{
+	public:
+		virtual ~IResource() { }
+	};
 	using ResourceRef = std::shared_ptr<IResource>;
 
 	// DeletionQueue used for shared_ptr resource lazy release.
@@ -258,4 +395,6 @@ namespace chord
 		lhs ^= rhs + 0x9e3779b9 + (lhs << 6) + (lhs >> 2);
 		return lhs;
 	}
+
+
 }

@@ -16,8 +16,11 @@ namespace chord
 		// ReadOnly meaning can not change value by code in runtime.
 		ReadOnly    = 0x01 << 0,
 
+		// Read only, but still can config in project ini.
+		ProjectIni  = 0x01 << 1,
+
 		// Export this value as a scalability config.
-		Scalability = 0x01 << 1, 
+		Scalability = 0x01 << 2, 
 		
 		MAX,
 	};
@@ -39,6 +42,8 @@ namespace chord
 		EConsoleVarFlags getFlags() const { return m_flags; }
 		std::string_view getName() const { return m_name; }
 		std::string_view getDescription() const { return m_description; }
+
+		virtual bool isValueTypeMatch(const char* typeName) const = 0;
 	
 	private:
 		EConsoleVarFlags m_flags;
@@ -57,6 +62,11 @@ namespace chord
 		}
 
 		virtual ~CVarStorageInterface() = default;
+
+		virtual bool isValueTypeMatch(const char* typeName) const override
+		{
+			return typeName == getTypeName<T>();
+		}
 
 		const T& get() const 
 		{ 
@@ -187,10 +197,7 @@ namespace chord
 	public:
 		static CVarSystem& get();
 
-
-
-		template <typename T>
-		CVarStorageInterface<T>* getCVarIfExist(std::string_view name) const 
+		CVarStorage* getCVarIfExistGeneric(std::string_view name) const
 		{
 			std::shared_lock<std::shared_mutex> lock(m_lock);
 
@@ -200,7 +207,16 @@ namespace chord
 				return nullptr;
 			}
 
-			return (CVarStorageInterface<T>*)m_storages.at(hashId).get();
+			return m_storages.at(hashId).get();
+		}
+
+		bool setValueIfExistGeneric(std::string_view name, const std::string& value);
+		std::string getValueIfExistGeneric(std::string_view name);
+
+		template <typename T>
+		CVarStorageInterface<T>* getCVarIfExist(std::string_view name) const 
+		{
+			return (CVarStorageInterface<T>*)getCVarIfExistGeneric(name);
 		}
 
 		template <typename T>
@@ -210,6 +226,17 @@ namespace chord
 			check(ptr != nullptr);
 
 			return ptr;
+		}
+
+		struct CacheCommand
+		{
+			std::string_view name;
+			CVarStorage* storage;
+		};
+
+		const auto& getCacheCommands() const
+		{
+			return m_cacheCommands;
 		}
 
 	private:
@@ -224,6 +251,12 @@ namespace chord
 			check(!m_storages.contains(hashId));
 
 			m_storages[hashId] = std::make_unique<CVarStorageValue<T>>(flag, name, description, v);
+
+			CacheCommand cacheCommand;
+			cacheCommand.name = m_storages[hashId]->getName();
+			cacheCommand.storage = m_storages[hashId].get();
+			m_cacheCommands.push_back(cacheCommand);
+
 			return (CVarStorageValue<T>*)m_storages[hashId].get();
 		}
 
@@ -236,12 +269,21 @@ namespace chord
 			check(!m_storages.contains(hashId));
 
 			m_storages[hashId] = std::make_unique<CVarStorageRef<T>>(flag, name, description, v);
+
+			CacheCommand cacheCommand;
+			cacheCommand.name = m_storages[hashId]->getName();
+			cacheCommand.storage = m_storages[hashId].get();
+			m_cacheCommands.push_back(cacheCommand);
+
 			return (CVarStorageRef<T>*)m_storages[hashId].get();
 		}
 
 	private:
 		mutable std::shared_mutex m_lock;
 		std::unordered_map<size_t, std::unique_ptr<CVarStorage>> m_storages;
+
+
+		std::vector<CacheCommand> m_cacheCommands;
 	};
 
 	template <typename T>
@@ -283,4 +325,6 @@ namespace chord
 	private:
 		CVarStorageRef<T>* m_ptr;
 	};
+
+	// Cmd must name start with "cmd.", and type always is bool type.
 }

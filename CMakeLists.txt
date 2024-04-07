@@ -32,12 +32,17 @@ add_library(Chord::Chord ALIAS chord)
 ## Thirdparty packages.
 find_package(Vulkan REQUIRED)
 add_subdirectory("${PROJECT_SOURCE_DIR}/external/glfw")
+add_subdirectory("${PROJECT_SOURCE_DIR}/external/lz4/cmake") 
+add_subdirectory("${PROJECT_SOURCE_DIR}/external/rttr")
+add_subdirectory("${PROJECT_SOURCE_DIR}/external/nativefiledialogs")
 
 ## Link libraries for chord.
 target_link_libraries(chord PUBLIC 
     Vulkan::Vulkan
     GLFW::GLFW
-    "${PROJECT_SOURCE_DIR}/external/library/freetype.lib"
+    lz4_static
+    nativefiledialog
+    RTTR::Core_Lib
     "${PROJECT_SOURCE_DIR}/external/library/dxcompiler.lib"
 )
 
@@ -46,6 +51,7 @@ target_include_directories(chord PUBLIC
     "${PROJECT_SOURCE_DIR}/source"
     "${PROJECT_SOURCE_DIR}/external/include"
     "${PROJECT_SOURCE_DIR}/install/resource"
+    "${PROJECT_SOURCE_DIR}/external/tracy"
 )
 
 ## Add pch to accelerate our compile speed.
@@ -66,8 +72,7 @@ if(MSVC)
 
     ## Only include hlsl as text file.
     set_source_files_properties(${shaderHeaders} PROPERTIES HEADER_FILE_ONLY TRUE)
-  
-    ## Cmake force utf-8.
+
     add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
     add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 endif()

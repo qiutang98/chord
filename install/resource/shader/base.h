@@ -4,10 +4,8 @@
     
     #include <utils/utils.h>
 
-    namespace chord
-    {
-        constexpr auto kMaxPushConstSize = 128;
-    }
+    using namespace chord;
+    using namespace chord::math;
 
     // Type alias bool.
     using bool2 = chord::math::bvec2;
@@ -35,14 +33,42 @@
     using float3x3 = chord::math::mat3;
     using float4x4 = chord::math::mat4;
 
+    namespace chord
+    {
+        constexpr auto kMaxPushConstSize = 128;
+
+        float4 lerp(const float4& x, const float4& y, const float4& a) { return math::mix(x, y, a); }
+        float3 lerp(const float3& x, const float3& y, const float3& a) { return math::mix(x, y, a); }
+        float3 lerp(const float3& x, const float3& y, const float   a) { return math::mix(x, y, a); }
+        float2 lerp(const float2& x, const float2& y, const float2& a) { return math::mix(x, y, a); }
+        float  lerp(const float   x, const float   y, const float   a) { return math::mix(x, y, a); }
+
+        float3 pow(const float3& base, float v)
+        {
+            return math::pow(base, float3(v));
+        }
+    }
+
     // Cpp end check struct size match machine.
-    #define CHORD_PUSHCONST(Type, Name) static_assert(sizeof(Type) <= chord::kMaxPushConstSize)
-    #define CHORD_DEFAULT_COMPARE(T) bool operator==(const T&) const = default
+    #define CHORD_PUSHCONST(Type, Name) \
+        static_assert(sizeof(Type) <= chord::kMaxPushConstSize)
+
+    // Serialization relative.
+    #define CHORD_DEFAULT_COMPARE_ARCHIVE(T)       \
+        ARCHIVE_DECLARE                            \
+        bool operator==(const T&) const = default;
+        
+    // GPU size require struct size pad 4 float.
+    #define CHORD_CHECK_SIZE_GPU_SAFE(X) \
+        static_assert(sizeof(X) % (4 * sizeof(float)) == 0)
+
+
 
 #else  ///////////////////////////////////////////////////////
 
     // HLSL is declaration pushconst.
     #define CHORD_PUSHCONST(Type, Name) [[vk::push_constant]] Type Name
-    #define CHORD_DEFAULT_COMPARE(T)
+    #define CHORD_DEFAULT_COMPARE_ARCHIVE(T)
+    #define CHORD_CHECK_SIZE_GPU_SAFE(X)
 
 #endif ///////////////////////////////////////////////////////

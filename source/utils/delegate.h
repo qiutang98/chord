@@ -10,6 +10,29 @@
 
 namespace chord
 {
+	template<typename Friend, typename... Args>
+	class CallOnceEvents
+	{
+		friend Friend;
+	private:
+		std::vector<std::function<void(Args...)>> m_collections;
+
+		void brocast(Args&&... args)
+		{
+			for (auto& func : m_collections)
+			{
+				func(std::forward<Args>(args)...);
+			}
+			m_collections.clear();
+		}
+
+	public:
+		void add(std::function<void(Args...)>&& func)
+		{
+			m_collections.push_back(func);
+		}
+	};
+
 	template<typename Friend, typename RetType, typename... Args>
 	class Delegate : NonCopyable
 	{
@@ -87,9 +110,6 @@ namespace chord
 
 		CHORD_NODISCARD EventHandle add(EventType&& lambda)
 		{
-			// Don't add when broadcasting.
-			check(!isBroadcasting());
-
 			std::unique_lock<std::shared_mutex> lock(m_lock);
 
 			// Loop to found first free element and register.
@@ -111,9 +131,6 @@ namespace chord
 		// Remove event.
 		CHORD_NODISCARD bool remove(EventHandle& handle)
 		{
-			// Don't remove when broadcasting.
-			check(!isBroadcasting());
-
 			std::unique_lock<std::shared_mutex> lock(m_lock);
 
 			if (handle.isValid())
@@ -163,9 +180,6 @@ namespace chord
 		void broadcast(Args...args, std::function<void(const OpType&)>&& opResult = nullptr)
 		{
 			std::shared_lock<std::shared_mutex> lock(m_lock);
-
-			m_broadcasting++;
-
 			for (auto& event : m_events)
 			{
 				if constexpr (std::is_void_v<RetType>)
@@ -181,16 +195,9 @@ namespace chord
 					}
 				}
 			}
-
-			m_broadcasting--;
 		}
 
 	protected:
-		bool isBroadcasting() const
-		{
-			return m_broadcasting > 0;
-		}
-
 		Event createEvent(EventType&& lambda) const
 		{
 			Event event { };
@@ -201,7 +208,6 @@ namespace chord
 
 	protected:
 		mutable std::shared_mutex m_lock;
-		std::atomic<uint32> m_broadcasting = 0;
 		std::vector<Event>  m_events = { };
 	};
 

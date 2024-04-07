@@ -53,7 +53,6 @@ namespace chord::graphics
 		for (const auto& pair : m_definitions.getMap())
 		{
 			out.push_back("-D");
-
 			if (pair.second.empty())
 			{
 				out.push_back(pair.first);
@@ -161,8 +160,6 @@ namespace chord::graphics
 				result.errorMsg = errorMessage;
 				result.bSuccess = false;
 			}
-
-
 
 			// Shader compile success, copy output to result.
 			if (result.bSuccess)

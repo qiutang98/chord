@@ -47,13 +47,24 @@ namespace chord::graphics
 		const auto& getSize() const { return m_size; }
 		const auto& getName() const { return m_name; }
 
-		virtual void rename(const std::string& name);
+		virtual void rename(const std::string& name) = 0;
 
 	protected:
 		// Update memory size, should only call once when allocate memory.
 		void setSize(VkDeviceSize size)
 		{
 			m_size = size;
+		}
+
+		bool setName(const std::string& name)
+		{
+			if (m_name != name)
+			{
+				m_name = name;
+				return true;
+			}
+
+			return false;
 		}
 
 	private:
@@ -90,10 +101,10 @@ namespace chord::graphics
 		bool operator==(const GPUTextureSyncBarrierMasks&) const = default;
 	};
 
+	extern const VkImageSubresourceRange kDefaultImageSubresourceRange;
 	class GPUTexture : public GPUResource
 	{
 	public:
-		using Super = GPUResource;
 		explicit GPUTexture(
 			const std::string& name, 
 			const VkImageCreateInfo& createInfo,
@@ -172,12 +183,10 @@ namespace chord::graphics
 	class GPUBuffer : public GPUResource
 	{
 	public:
-		using Super = GPUResource;
 		explicit GPUBuffer(
-			const std::string& name, 
+			const std::string& name,
 			const VkBufferCreateInfo& createInfo,
-			const VmaAllocationCreateInfo& vmaCreateInfo,
-			SizedBuffer data = { });
+			const VmaAllocationCreateInfo& vmaCreateInfo);
 
 		virtual ~GPUBuffer();
 
@@ -188,9 +197,9 @@ namespace chord::graphics
 
 		virtual void rename(const std::string& name) override;
 
-		operator VkBuffer() const 
-		{ 
-			return m_buffer; 
+		operator VkBuffer() const
+		{
+			return m_buffer;
 		}
 
 		const VkBufferUsageFlags getUsage() const
@@ -200,23 +209,11 @@ namespace chord::graphics
 
 		uint64 getDeviceAddress();
 
-		// Get current buffer mapped pointer, see map(size) and unmap() functions.
-		void* getMapped() const 
-		{
-			return m_mapped;
-		}
-
-		void map(VkDeviceSize size = VK_WHOLE_SIZE);
-		void unmap();
-
-		void flush(VkDeviceSize size, VkDeviceSize offset);
-		void invalidate(VkDeviceSize size, VkDeviceSize offset);
-
-		// Copy whole size of buffer.
-		void copyTo(const void* data, VkDeviceSize size);
-
 	protected:
+		// Buffer create info.
 		VkBufferCreateInfo m_createInfo;
+
+		// VMA allocation info.
 		VmaAllocationInfo m_vmaAllocationInfo;
 
 		// Buffer device address.
@@ -227,12 +224,75 @@ namespace chord::graphics
 
 		// Memory allocation.
 		VmaAllocation m_allocation = VK_NULL_HANDLE;
-		
-		// Mapped pointer.
-		void* m_mapped = nullptr;
+	};
+	using GPUBufferRef = std::shared_ptr<GPUBuffer>;
 
+	static inline VmaAllocationCreateInfo getGPUOnlyBufferVMACI()
+	{
+		VmaAllocationCreateInfo vmaAllocInfo = {};
+		vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+		return vmaAllocInfo;
+	}
+
+	// GPU inner buffer, need to tracking it's barrier state.
+	// Can used for UAV or SRV.
+	class GPUOnlyBuffer : public GPUBuffer
+	{
+	public:
+		explicit GPUOnlyBuffer(
+			const std::string& name,
+			const VkBufferCreateInfo& createInfo);
+
+		virtual ~GPUOnlyBuffer();
+
+	protected:
 		// Whole GPU buffer state.
 		GPUSyncBarrierMasks m_syncBarrierMasks;
 	};
-	using GPUBufferRef = std::shared_ptr<GPUBuffer>;
+	using GPUOnlyBufferRef = std::shared_ptr<GPUOnlyBuffer>;
+
+	static inline VmaAllocationCreateInfo getHostVisibleGPUBufferVMACI()
+	{
+		VmaAllocationCreateInfo vmaAllocInfo = {};
+		vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+		vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+		return vmaAllocInfo;
+	}
+
+	// Host visibile buffer commonly used for CPU/GPU buffer copy sync.
+	// Don't care gpu inner state tracking.
+	// And it only can used ad SRV, no UAV.
+	class HostVisibleGPUBuffer : public GPUBuffer
+	{
+	public:
+		explicit HostVisibleGPUBuffer(
+			const std::string& name, 
+			const VkBufferCreateInfo& createInfo,
+			SizedBuffer data = { });
+
+		virtual ~HostVisibleGPUBuffer();
+
+		// Get current buffer mapped pointer, see map(size) and unmap() functions.
+		void* getMapped() const 
+		{
+			return m_mapped;
+		}
+
+		void map(VkDeviceSize size = VK_WHOLE_SIZE);
+		void unmap();
+		void flush(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
+		void invalidate(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
+
+		// Copy whole size of buffer.
+		void copyTo(const void* data, VkDeviceSize size);
+
+	protected:
+		// Mapped pointer.
+		void* m_mapped = nullptr;
+	};
+	using HostVisibleGPUBufferRef = std::shared_ptr<HostVisibleGPUBuffer>;
+
+
+
 }

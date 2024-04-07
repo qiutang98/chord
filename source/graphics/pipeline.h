@@ -31,9 +31,16 @@ namespace chord::graphics
 		void initPipeline(VkPipeline pipeline);
 
 	protected:
+		// Pipeline name.
 		std::string m_name;
+
+		// Combine shader stages.
 		VkShaderStageFlags m_shaderStageFlags;
+
+		// Shared push const size.
 		uint32 m_pushConstSize = 0;
+
+		// Pipeline and pipeline layout.
 		VkPipeline m_pipeline = VK_NULL_HANDLE;
 		VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
 	};
@@ -55,6 +62,7 @@ namespace chord::graphics
 		IPipelineRef graphics(const std::string& name, const GraphicsPipelineCreateInfo& ci);
 
 	private:
+		// Graphics pipeline map, hash by GraphicsPipelineCreateInfo.
 		std::map<uint64, std::shared_ptr<GraphicsPipeline>> m_graphics;
 	};
 }

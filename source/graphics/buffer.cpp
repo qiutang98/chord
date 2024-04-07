@@ -7,7 +7,7 @@
 
 namespace chord::graphics
 {
-	static bool bGraphicsBufferLifeLogTraceEnable = true;
+	static bool bGraphicsBufferLifeLogTraceEnable = false;
 	static AutoCVarRef<bool> cVarBufferLifeLogTraceEnable(
 		"r.graphics.resource.buffer.lifeLogTrace",
 		bGraphicsBufferLifeLogTraceEnable,
@@ -21,10 +21,9 @@ namespace chord::graphics
 	GPUBuffer::GPUBuffer(
 		const std::string& name,
 		const VkBufferCreateInfo& createInfo,
-		const VmaAllocationCreateInfo& vmaCreateInfo,
-		SizedBuffer data)
-	: GPUResource(name, 0)
-	, m_createInfo(createInfo)
+		const VmaAllocationCreateInfo& vmaCreateInfo)
+		: GPUResource(name, 0)
+		, m_createInfo(createInfo)
 	{
 		VmaAllocationCreateInfo copyVMAInfo = vmaCreateInfo;
 		copyVMAInfo.pUserData = (void*)getName().c_str();
@@ -39,11 +38,6 @@ namespace chord::graphics
 		{
 			LOG_GRAPHICS_TRACE("Create GPUBuffer {0} with size {1} KB.", getName(), float(getSize()) / 1024.0f)
 		}
-
-		if (data.isValid())
-		{
-			copyTo(data.ptr, data.size);
-		}
 	}
 
 	GPUBuffer::~GPUBuffer()
@@ -57,9 +51,6 @@ namespace chord::graphics
 		}
 		sTotalGPUBufferDeviceSize -= getSize();
 
-		// Unmap buffer before release.
-		unmap();
-
 		if (m_allocation != VK_NULL_HANDLE)
 		{
 			vmaDestroyBuffer(getVMA(), m_buffer, m_allocation);
@@ -69,18 +60,20 @@ namespace chord::graphics
 
 	void GPUBuffer::rename(const std::string& name)
 	{
-		Super::rename(name);
-		setResourceName(VK_OBJECT_TYPE_BUFFER, (uint64)m_buffer, name.c_str());
+		if (setName(name))
+		{
+			setResourceName(VK_OBJECT_TYPE_BUFFER, (uint64)m_buffer, name.c_str());
+		}
 	}
 
 	uint64 GPUBuffer::getDeviceAddress()
 	{
-		checkGraphicsMsgf(m_createInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 
+		checkGraphicsMsgf(m_createInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 			"Buffer {0} usage must exist 'VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT' if you want to require device addres.", getName());
 
 		if (!m_deviceAddress.isValid())
 		{
-			VkBufferDeviceAddressInfo bufferDeviceAddressInfo { };
+			VkBufferDeviceAddressInfo bufferDeviceAddressInfo{ };
 			bufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 			bufferDeviceAddressInfo.buffer = m_buffer;
 
@@ -89,7 +82,42 @@ namespace chord::graphics
 		return m_deviceAddress.get();
 	}
 
-	void GPUBuffer::map(VkDeviceSize size)
+
+
+	GPUOnlyBuffer::GPUOnlyBuffer(
+		const std::string& name,
+		const VkBufferCreateInfo& createInfo)
+		: GPUBuffer(name, createInfo, getGPUOnlyBufferVMACI())
+	{
+
+	}
+
+	GPUOnlyBuffer::~GPUOnlyBuffer()
+	{
+
+	}
+
+	//
+
+	HostVisibleGPUBuffer::HostVisibleGPUBuffer(
+		const std::string& name,
+		const VkBufferCreateInfo& createInfo,
+		SizedBuffer data)
+		: GPUBuffer(name, createInfo, getHostVisibleGPUBufferVMACI())
+	{
+		if (data.isValid())
+		{
+			copyTo(data.ptr, data.size);
+		}
+	}
+
+	HostVisibleGPUBuffer::~HostVisibleGPUBuffer()
+	{
+		// Unmap buffer before release.
+		unmap();
+	}
+
+	void HostVisibleGPUBuffer::map(VkDeviceSize size)
 	{
 		if (m_mapped == nullptr)
 		{
@@ -97,7 +125,7 @@ namespace chord::graphics
 		}
 	}
 
-	void GPUBuffer::unmap()
+	void HostVisibleGPUBuffer::unmap()
 	{
 		if (m_mapped != nullptr)
 		{
@@ -106,17 +134,17 @@ namespace chord::graphics
 		}
 	}
 
-	void GPUBuffer::flush(VkDeviceSize size, VkDeviceSize offset)
+	void HostVisibleGPUBuffer::flush(VkDeviceSize size, VkDeviceSize offset)
 	{
 		checkVkResult(vmaFlushAllocation(getVMA(), m_allocation, offset, size));
 	}
 
-	void GPUBuffer::invalidate(VkDeviceSize size, VkDeviceSize offset)
+	void HostVisibleGPUBuffer::invalidate(VkDeviceSize size, VkDeviceSize offset)
 	{
 		checkVkResult(vmaInvalidateAllocation(getVMA(), m_allocation, offset, size));
 	}
 
-	void GPUBuffer::copyTo(const void* data, VkDeviceSize size)
+	void HostVisibleGPUBuffer::copyTo(const void* data, VkDeviceSize size)
 	{
 		checkGraphicsMsgf(!m_mapped, "Buffer already mapped, don't use this function, just memcpy is fine.");
 
@@ -124,11 +152,11 @@ namespace chord::graphics
 		checkGraphics(size <= getSize());
 
 		map(size);
-		
-		// Copy then flush.
-		memcpy(m_mapped, data, size);
-		flush(size, 0);
-
+		{
+			// Copy then flush.
+			memcpy(m_mapped, data, size);
+			flush(size);
+		}
 		unmap();
 	}
 }

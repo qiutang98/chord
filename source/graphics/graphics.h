@@ -125,7 +125,7 @@ namespace chord::graphics
 		const BuiltinTextures& getBuiltinTextures() const { return m_builtinTextures; }
 
 		// Create a stage upload buffer, commonly only used for engine init.
-		GPUBufferRef createStageUploadBuffer(const std::string& name, SizedBuffer data);
+		HostVisibleGPUBufferRef createStageUploadBuffer(const std::string& name, SizedBuffer data);
 
 		// Sync upload texture, only used for engine init, should not call in actually render pipeline.
 		void syncUploadTexture(GPUTexture& texture, SizedBuffer data);
@@ -145,7 +145,18 @@ namespace chord::graphics
 		const auto& getPipelineContainer() const { return *m_pipelineContainer; }
 		auto& getPipelineContainer() { return *m_pipelineContainer; }
 
+		template<class VertexShader, class PixelShader>
+		IPipelineRef graphicsPipe(
+			const std::string& name,
+			std::vector<VkFormat>&& attachments,
+			VkFormat inDepthFormat = VK_FORMAT_UNDEFINED,
+			VkFormat inStencilFormat = VK_FORMAT_UNDEFINED,
+			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
 		void waitDeviceIdle() const;
+
+		// Current active dpi scale.
+		float dpiScale() const;
 
 	public:
 		bool init(const InitConfig& config);
@@ -156,6 +167,9 @@ namespace chord::graphics
 
 		// After context basic init will call and clean this event.
 		Events<Context> onInit;
+
+		// Tick event.
+		Events<Context, const ApplicationTickData&> onTick;
 
 	private:
 		// Sync init builtin textures.
@@ -219,6 +233,7 @@ namespace chord::graphics
 
 	// Helper function save some time.
 	extern Context& getContext();
+	extern float dpiScale();
 
 	// Helper function save some time.
 	static inline const auto* getAllocationCallbacks() 

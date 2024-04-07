@@ -5,6 +5,8 @@
 
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/dist_sink.h>
 
 namespace chord
 {
@@ -46,7 +48,12 @@ namespace chord
 		// Pop callback from logger sink.
 		void popCallback(EventHandle& name);
 
+		void updateLogFile();
+
 	private:
+		std::shared_ptr<spdlog::sinks::basic_file_sink_mt> m_fileSink = nullptr;
+		std::shared_ptr<spdlog::sinks::dist_sink_mt> m_fileDestSink = nullptr;
+
 		// Sink cache all logger.
 		std::vector<spdlog::sink_ptr> m_logSinks{ };
 

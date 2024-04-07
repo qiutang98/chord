@@ -16,9 +16,4 @@ namespace chord::graphics
 	
 	}
 
-	void GPUResource::rename(const std::string& name)
-	{
-		m_name = name;
-	}
-
 }

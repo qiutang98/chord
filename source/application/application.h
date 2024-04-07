@@ -7,6 +7,7 @@
 #include <utils/subsystem.h>
 #include <utils/optional.h>
 #include <graphics/graphics.h>
+#include <utils/timer.h>
 
 namespace chord
 {
@@ -44,7 +45,15 @@ namespace chord
 	class ApplicationTickData
 	{
 	public:
-		uint64 tickCount = 0;
+		uint64 tickCount;
+		double totalTime;
+
+		double fps;
+		double dt;
+
+		// Update persecond fps this frame or not.
+		bool bFpsUpdatedPerSecond;
+		double fpsUpdatedPerSecond;
 	};
 
 	class WindowData : NonCopyable
@@ -78,6 +87,8 @@ namespace chord
 
 		// Graphics context.
 		graphics::Context m_context;
+
+		Timer m_timer;
 
 	public:
 		static Application& get();

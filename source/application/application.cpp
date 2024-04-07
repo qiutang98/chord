@@ -176,6 +176,8 @@ namespace chord
             onInit.broadcast<bool>([&](const bool& bResult) { m_bInit &= bResult; });
         }
 
+        m_timer.init();
+
         // Return result.
         return m_bInit;
     }
@@ -184,11 +186,22 @@ namespace chord
     {
         m_runtimePeriod = ERuntimePeriod::Ticking;
 
-        ApplicationTickData tickData { };
+        // Default application.
+        ApplicationTickData tickData
+        {
+            .tickCount            = 0,
+            .totalTime            = m_timer.getRuntime(),
+            .fps                  = 60.0,
+            .dt                   = 1.0 / 60.0,
+            .bFpsUpdatedPerSecond = false,
+            .fpsUpdatedPerSecond  = 60.0
+        };
 
         while (m_windowData.bContinue)
         {
             glfwPollEvents();
+
+            const bool bFpsUpdatedPerSecond = m_timer.tick();
 
             // Graphics context tick.
             m_windowData.bContinue &= m_context.tick(tickData);
@@ -215,7 +228,12 @@ namespace chord
             ThreadContext::main().tick(tickData.tickCount);
 
             // Update tick count.
-            tickData.tickCount ++;
+            tickData.tickCount = m_timer.getTickCount();
+            tickData.dt        = m_timer.getDt();
+            tickData.bFpsUpdatedPerSecond = bFpsUpdatedPerSecond;
+            tickData.fpsUpdatedPerSecond  = m_timer.getFpsUpdatedPerSecond();
+            tickData.fps       = m_timer.getFps();
+            tickData.totalTime = m_timer.getRuntime();
         }
     }
 
