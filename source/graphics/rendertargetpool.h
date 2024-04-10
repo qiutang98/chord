@@ -35,17 +35,23 @@ namespace chord::graphics
 			operator const GPUTexture&() const { return *m_texture; }
 			operator GPUTexture&() { return *m_texture; }
 
-			virtual ~PoolTexture()
-			{
-				// We should ensure pool image life shorter than pool.
-				m_pool.m_rendertargets[m_hashId].push(m_texture);
-			}
+			virtual ~PoolTexture();
 
 		protected:
 			const uint64 m_hashId;
 			GPUTexturePool& m_pool;
 			GPUTextureRef m_texture = nullptr;
 		};
+
+		explicit GPUTexturePool(uint64 freeFrameCount)
+			: m_freeFrameCount(freeFrameCount)
+		{
+
+		}
+
+		virtual ~GPUTexturePool();
+
+		void tick(const ApplicationTickData& tickData);
 
 		// Create pool texture by create info.
 		std::shared_ptr<PoolTexture> create(
@@ -71,9 +77,19 @@ namespace chord::graphics
 	private:
 		friend PoolTexture;
 
-		// Free render targets.
-		std::map<uint64, std::stack<GPUTextureRef>> m_rendertargets;
+		// Frame count ready to release.
+		const uint64 m_freeFrameCount;
 
+		// Pool frame counter.
+		uint64 m_frameCounter = 0;
+
+		// Free render targets.
+		struct FreePoolTexture
+		{
+			GPUTextureRef texture;
+			uint64 freeFrame = 0;
+		};
+		std::map<uint64, std::vector<FreePoolTexture>> m_rendertargets;
 	};
 	using GPUTexturePoolRef = std::shared_ptr<GPUTexturePool>;
 	using PoolTextureRef = std::shared_ptr<GPUTexturePool::PoolTexture>;

@@ -44,5 +44,7 @@ namespace chord
 		{
 			return m_bSetup;
 		}
+
+		std::string getAppTitleName() const;
 	};
 }

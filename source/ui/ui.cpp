@@ -11,6 +11,8 @@
 #include <shader/compiler.h>
 #include <graphics/pipeline.h>
 #include <ui/imgui/imgui_internal.h>
+#include <project.h>
+
 namespace chord
 { 
 	using namespace graphics;
@@ -79,389 +81,109 @@ namespace chord
 	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawVS, "resource/shader/imgui.hlsl", "mainVS", EShaderStage::Vertex);
 	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawPS, "resource/shader/imgui.hlsl", "mainPS", EShaderStage::Pixel);
 
-	void styleProfessionalDark()
+	// Viewport host data.
+	class ImGuiViewportData : NonCopyable
 	{
-		ImGui::StyleColorsDark();
-
-		ImGuiStyle& style = ImGui::GetStyle();
-		ImVec4* colors = ImGui::GetStyle().Colors;
-
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.1f, 0.1f, 0.0f, 0.39f);
+	public:
+		explicit ImGuiViewportData(ImGuiViewport* viewport)
 		{
-			style.Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-			style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-			style.Colors[ImGuiCol_Border] = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
-			style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-			style.Colors[ImGuiCol_FrameBg] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-			style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.38f, 0.38f, 0.38f, 1.00f);
-			style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
-			style.Colors[ImGuiCol_TitleBg] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
-			style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
-			style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
-			style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
-			style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
-			style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
-			style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
-			style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
-			style.Colors[ImGuiCol_CheckMark] = ImVec4(0.11f, 0.64f, 0.92f, 1.00f);
-			style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.11f, 0.64f, 0.92f, 0.40f);
-			style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.08f, 0.50f, 0.72f, 1.00f);
-			style.Colors[ImGuiCol_Button] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-			style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.38f, 0.38f, 0.38f, 1.00f);
-			style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
-			style.Colors[ImGuiCol_Header] = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
-			style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-			style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
-			style.Colors[ImGuiCol_Separator] = style.Colors[ImGuiCol_Border];
-			style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.41f, 0.42f, 0.44f, 1.00f);
-			style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
-			style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-			style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.29f, 0.30f, 0.31f, 0.67f);
-			style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
-			style.Colors[ImGuiCol_Tab] = ImVec4(0.08f, 0.08f, 0.09f, 0.83f);
-			style.Colors[ImGuiCol_TabHovered] = ImVec4(0.33f, 0.34f, 0.36f, 0.83f);
-			style.Colors[ImGuiCol_TabActive] = ImVec4(0.23f, 0.23f, 0.24f, 1.00f);
-			style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
-			style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.13f, 0.14f, 0.15f, 1.00f);
-			style.Colors[ImGuiCol_DockingPreview] = ImVec4(0.26f, 0.59f, 0.98f, 0.70f);
-			style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-			style.Colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
-			style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
-			style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-			style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
-			style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
-			style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.11f, 0.64f, 0.92f, 1.00f);
-			style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-			style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-			style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-			style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
-			style.Colors[ImGuiCol_CheckMark] = ImVec4(0.96f, 0.96f, 0.96f, 1.00f);
-			style.Colors[ImGuiCol_SliderGrab] = ImVec4(1.0f, 1.0f, 1.0f, 0.3f);
-			style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(1.0f, 1.0f, 1.0f, 1.00f);
+			// Create swapchain.
+			m_swapchain = std::make_unique<Swapchain>((GLFWwindow*)viewport->PlatformHandle);
 		}
 
-
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, -1.0f));
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(2.0f, 3.0f));
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 1.0f));
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowTitleAlign, ImVec2(0.5f, 0.5f));
-		ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, 0.0f);
-
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.1f, 0.1f, 0.0f, 0.39f);
-
-		ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
-		ImGui::GetIO().ConfigWindowsResizeFromEdges = true;
-		style.AntiAliasedLines = true;
-		style.WindowMenuButtonPosition = ImGuiDir_Left;
-		style.WindowPadding = ImVec2(4, 4);
-		style.FramePadding  = ImVec2(6, 4);
-		style.ItemSpacing   = ImVec2(6, 2);
-		style.ScrollbarSize = 18;
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.1f, 0.1f, 0.0f, 0.39f);
-		style.WindowBorderSize = 1;
-		style.ChildBorderSize = 1;
-		style.PopupBorderSize = 1;
-		style.FrameBorderSize = 1;
-		style.TabBorderSize = 1;
-		style.WindowRounding = 0;
-		style.ChildRounding = 0;
-		style.FrameRounding = 1;
-		style.PopupRounding = 0;
-		style.ScrollbarRounding = 0;
-		style.GrabRounding = 2;
-		style.GrabMinSize = 8;
-		style.LogSliderDeadzone = 0;
-		style.TabRounding = 12;
-		style.SliderThickness = 0.3f;
-		style.SliderContrast = 1.0f;
-	}
-
-	uint32 getFontSize(float dpiScale)
-	{
-		return uint32(sUIFontSize * dpiScale);
-	}
-
-	ImGuiManager::ImGuiManager()
-	{
-		IMGUI_CHECKVERSION();
-		ImGui::CreateContext();
-
-		ImGuiIO& io = ImGui::GetIO();
+		~ImGuiViewportData()
 		{
-			io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable keyboard controls.
-			io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable gamepad controls.
+			// Reset swapchain which sync command buffer can ensure all resource are safe to release.
+			m_swapchain.reset();
 
-			// Configable.
-			if (bEnableViewports)
-			{
-				io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-				io.ConfigViewportsNoDecoration = bViewportsNoDecoration;
-			}
-			if (bEnableDocking)
-			{
-				io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-			}
-
-			if (!std::filesystem::exists(sUIConfigFileSavePath))
-			{
-				std::filesystem::create_directory(sUIConfigFileSavePath);
-			}
-
-			// Config file store path.
-			m_iniFileStorePath = std::format("{0}/{1}-ui.ini", sUIConfigFileSavePath, Application::get().getName());
-			io.IniFilename = m_iniFileStorePath.c_str();
+			// Free allocated command buffers.
+			vkFreeCommandBuffers(
+				graphics::getDevice(),
+				graphics::getContext().getGraphicsCommandPool().pool(),
+				uint32(m_commandBuffers.size()),
+				m_commandBuffers.data());
+			m_commandBuffers.clear();
 		}
 
-		updateStyle();
-
-		// Copy main style.
-		m_mainStyle = ImGui::GetStyle();
-
-		// Init glfw backend.
-		ImGui_ImplGlfw_InitForVulkan(Application::get().getWindowData().window, true);
-
-		// Add font atlas to fit all.
+		// Each viewport keep frame buffers.
+		struct RenderBuffers
 		{
-			m_mainAtlas = io.Fonts; // Just cache main fonts.
-
-			int monitorsCount = 0;
-			GLFWmonitor** glfwMonitors = glfwGetMonitors(&monitorsCount);
-
-			for(int32 index = monitorsCount -1; index >= 0; index --)
-			{
-				float xScale, yScale;
-				glfwGetMonitorContentScale(glfwMonitors[index], &xScale, &yScale);
-
-				int32 fontSize = getFontSize(xScale);
-				setupFont(fontSize, xScale);
-
-				if (index == 0)
-				{
-					io.Fonts = &m_fontAtlasTextures[fontSize].atlas;
-				}
-			}
-		}
-
-		// Vulkan backend.
-		{
-			io.BackendRendererName = "ChordImGui";
-
-			// We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
-			io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  
-		}
-	}
-
-	VkCommandBuffer ImGuiManager::getCommandBuffer(uint32 index)
-	{
-		while (m_commandBuffers.size() < (index + 1))
-		{
-			auto cmd = graphics::helper::allocateCommandBuffer(graphics::getContext().getGraphicsCommandPool().pool());
-			m_commandBuffers.push_back(cmd);
-		}
-		return m_commandBuffers.at(index);
-	}
-
-	// Setup font for IMGUI windows.
-	void ImGuiManager::setupFont(uint32 fontSize, float dpiScale)
-	{
-		if (m_fontAtlasTextures[fontSize].texture != nullptr)
-		{
-			return;
-		}
-
-		ImFontAtlas* fonts = &m_fontAtlasTextures[fontSize].atlas;
-
-		// Load font data to memory.
-		fonts->AddFontFromFileTTF(sUIFontFilePath.c_str(), fontSize, NULL, fonts->GetGlyphRangesChineseFull());
-
-		{
-			static const ImWchar iconsRanges[] = { 0xe001, 0xF8B3, 0 };
-			ImFontConfig iconsConfig;
-			iconsConfig.MergeMode  = true;
-			iconsConfig.PixelSnapH = true;
-			iconsConfig.GlyphOffset = math::vec2(0.0f, 4.0f) * dpiScale;
-			fonts->AddFontFromFileTTF(sUIFontIconFilePath.c_str(), fontSize, &iconsConfig, iconsRanges);
-		}
-
-		fonts->Build();
-
-		// Upload atlas to GPU, sync.
-		GPUTextureRef texture;
-		{
-			using namespace graphics;
-			const std::string fonmtTextureName = std::format("{0}-UIFontAtlas-{1}", Application::get().getName(), fontSize);
-
-			unsigned char* pixels;
-			int32 width, height;
-			fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
-
-			auto imageCI = helper::buildBasicUploadImageCreateInfo(width, height, VK_FORMAT_R8_UNORM);
-			auto uploadVMACI = helper::buildVMAUploadImageAllocationCI();
-			texture = std::make_shared<GPUTexture>(fonmtTextureName, imageCI, uploadVMACI);
-
-			SizedBuffer stageSizedBuffer(width * height * sizeof(char), pixels);
-			getContext().syncUploadTexture(*texture, stageSizedBuffer);
-		}
-
-		m_fontAtlasTextures[fontSize].dpiScale   = dpiScale;
-		m_fontAtlasTextures[fontSize].texture    = texture;
-		m_fontAtlasTextures[fontSize].style      = m_mainStyle;
-		m_fontAtlasTextures[fontSize].style.ScaleAllSizes(dpiScale);
-
-		// Update texture id.
-		fonts->TexID = texture->requireView(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get();
-	}
-
-	ImGuiManager::~ImGuiManager()
-	{
-		// Clear all font atlas.
-		{
-			for (auto& fontPair : m_fontAtlasTextures)
-			{
-				fontPair.second.atlas.Locked = false;
-				fontPair.second.atlas.Clear();
-			}
-
-			// Assgin back font io.
-			ImGui::GetIO().Fonts = m_mainAtlas;
-		}
-
-		// Free allocated command buffers.
-		vkFreeCommandBuffers(
-			graphics::getDevice(),
-			graphics::getContext().getGraphicsCommandPool().pool(),
-			uint32(m_commandBuffers.size()),
-			m_commandBuffers.data());
-		m_commandBuffers.clear();
-
-		// Release glfw backend.
-		ImGui_ImplGlfw_Shutdown();
-
-		ImGui::DestroyContext();
-	}
-
-	void ImGuiManager::render()
-	{
-		ImGui::Render();
-	}
-
-	void ImGuiManager::renderFrame(uint32 backBufferIndex)
-	{
-		// No meaning for minimized window record command buffer.
-		check(!isMainMinimized());
-
-		auto& swapchain = getContext().getSwapchain();
-		const auto& extent = swapchain.getExtent();
-
-		// SDR mode.
-		const bool bCanDrawInBackBuffer = 
-			swapchain.getFormatType() == Swapchain::EFormatType::sRGB8Bit;
-
-		auto [image, view] = swapchain.getImage(backBufferIndex);
-		auto transitionImageLayout = [&](
-			VkCommandBuffer cmd, VkImageLayout oldLayout, VkImageLayout newLayout,
-			VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkPipelineStageFlags srcStage, VkPipelineStageFlagBits dstStage)
-		{
-			VkImageMemoryBarrier barrier { };
-			barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			barrier.oldLayout = oldLayout;
-			barrier.newLayout = newLayout;
-			barrier.image = image;
-			barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-			barrier.subresourceRange.baseMipLevel   = 0;
-			barrier.subresourceRange.levelCount     = 1;
-			barrier.subresourceRange.baseArrayLayer = 0;
-			barrier.subresourceRange.layerCount     = 1;
-			barrier.srcAccessMask = srcAccessMask;
-			barrier.dstAccessMask = dstAccessMask;
-
-			vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+			graphics::HostVisibleGPUBufferRef verticesBuffer = nullptr;
+			graphics::HostVisibleGPUBufferRef indicesBuffer = nullptr;
 		};
 
-		VkCommandBuffer cmd = getCommandBuffer(backBufferIndex);
-		helper::resetCommandBuffer(cmd);
-		helper::beginCommandBuffer(cmd);
+		RenderBuffers& getRenderBuffers(uint32 index)
 		{
-			VkFormat uiBackBufferFormat = bCanDrawInBackBuffer
-				? swapchain.getSurfaceFormat().format
-				: VK_FORMAT_R8G8B8A8_SRGB;
-
-			auto graphicsPipeline = getContext().graphicsPipe<ImGuiDrawVS, ImGuiDrawPS>("ImGuiDraw", { uiBackBufferFormat });
-
-			// Transition image to attachment layout.
-			transitionImageLayout(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-
-			auto backBufferAttachment = helper::renderingAttachmentInfo(false);
+			while (m_frameRenderBuffers.size() <= index)
 			{
-				backBufferAttachment.imageView   = view;
-				backBufferAttachment.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
-				backBufferAttachment.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
-				backBufferAttachment.clearValue  = VkClearValue{ .color = { 57.0f / 255.0f, 197.0f / 255.0f, 187.0f / 255.0f, 1.0f } };
+				m_frameRenderBuffers.push_back({});
 			}
-
-			auto renderInfo = helper::renderingInfo();
-			{
-				renderInfo.renderArea = VkRect2D{ .offset {0,0}, .extent = extent };
-				renderInfo.colorAttachmentCount = 1;
-				renderInfo.pColorAttachments = &backBufferAttachment;
-			}
-
-
-			vkCmdBeginRendering(cmd, &renderInfo);
-			{
-				renderDrawData(backBufferIndex, cmd, (void*)ImGui::GetDrawData(), graphicsPipeline);
-			}
-			vkCmdEndRendering(cmd);
-
-			// Transition image to present layout.
-			transitionImageLayout(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		}
-		helper::endCommandBuffer(cmd);
-	}
-
-	bool ImGuiManager::isMainMinimized()
-	{
-		ImDrawData* mainDrawData = ImGui::GetDrawData();
-		return (mainDrawData->DisplaySize.x <= 0.0f || mainDrawData->DisplaySize.y <= 0.0f);
-	}
-
-	void ImGuiManager::newFrame()
-	{
-		{
-			float xscale, yscale;
-			glfwGetWindowContentScale((GLFWwindow*)ImGui::GetMainViewport()->PlatformHandle, &xscale, &yscale);
-
-			m_dpiScale = xscale;
-
-			uint32 fontSize = getFontSize(xscale);
-			setupFont(fontSize, xscale);
-
-			ImGui::GetIO().Fonts = &m_fontAtlasTextures[fontSize].atlas;
-			ImGui::GetStyle()    =  m_fontAtlasTextures[fontSize].style;
+			return m_frameRenderBuffers.at(index);
 		}
 
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
+		VkCommandBuffer getCommandBuffer(uint32 index)
+		{
+			while (m_commandBuffers.size() < (index + 1))
+			{
+				auto cmd = graphics::helper::allocateCommandBuffer(graphics::getContext().getGraphicsCommandPool().pool());
+				m_commandBuffers.push_back(cmd);
+			}
+			return m_commandBuffers.at(index);
+		}
+
+		Swapchain& swapchain() 
+		{
+			return *m_swapchain;
+		}
+
+	private:
+		// Common buffers ring for current window.
+		std::vector<VkCommandBuffer> m_commandBuffers;
+
+		// Render buffers.
+		std::vector<RenderBuffers> m_frameRenderBuffers;
+
+		// Window swapchain.
+		std::unique_ptr<Swapchain> m_swapchain = nullptr;
+	};
+
+	static void imguiCreateWindow(ImGuiViewport* viewport)
+	{
+		// Create new viewport data and assigned.
+		viewport->RendererUserData = new ImGuiViewportData(viewport);
+
+		// Update icon and title.
+		{
+			const auto& icon = Application::get().getIcon();
+			GLFWimage glfwIcon
+			{
+				.width  = icon.getWidth(),
+				.height = icon.getHeight(),
+				.pixels = (unsigned char*)icon.getPixels()
+			};
+
+			glfwSetWindowIcon((GLFWwindow*)viewport->PlatformHandle, 1, &glfwIcon);
+
+			const auto titleName = Project::get().getAppTitleName();
+			glfwSetWindowTitle((GLFWwindow*)viewport->PlatformHandle, titleName.c_str());
+		}
 	}
 
-	void ImGuiManager::updateStyle()
+	static void imguiDestroyWindow(ImGuiViewport* viewport)
 	{
-		ImGuiIO& io = ImGui::GetIO();
-
-		// Style setup.
-		styleProfessionalDark();
-
-		// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
-		ImGuiStyle& style = ImGui::GetStyle();
-		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+		// Clear and release viewport data.
+		if (auto* vd = (ImGuiViewportData*)viewport->RendererUserData)
 		{
-			style.WindowRounding = 0.0f;
-			style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+			delete vd;
+		}
+		viewport->RendererUserData = nullptr;
+	}
+
+	static void imguiSetWindowSize(ImGuiViewport* viewport, ImVec2 size)
+	{
+		if (auto* vd = (ImGuiViewportData*)viewport->RendererUserData)
+		{
+			vd->swapchain().markDirty();
 		}
 	}
 
@@ -470,34 +192,30 @@ namespace chord
 		return (size + alignment - 1) & ~(alignment - 1);
 	}
 
-	void ImGuiManager::renderDrawData(uint32 backBufferIndex, VkCommandBuffer commandBuffer, void* drawDataInput, IPipelineRef pipeline)
+	static void imguiRenderDrawData(uint32 backBufferIndex, VkCommandBuffer commandBuffer, void* drawDataInput, std::shared_ptr<IPipeline> pipeline)
 	{
 		auto* drawData = (ImDrawData*)drawDataInput;
+		auto* vrd = (ImGuiViewportData*)drawData->OwnerViewport->RendererUserData;
+		auto* bd = (ImGuiManager*)ImGui::GetIO().BackendRendererUserData;
 
-		auto& swapchain = getContext().getSwapchain();
-		const auto imageCount = swapchain.getBackbufferCount();
+		auto& swapchain = vrd->swapchain();
+		auto& rb = vrd->getRenderBuffers(backBufferIndex);
 
 		// Avoid rendering when minimized, scale coordinates for retina displays (screen coordinates != framebuffer coordinates)
-		int32 fbWidth  = (int32)(drawData->DisplaySize.x * drawData->FramebufferScale.x);
+		int32 fbWidth = (int32)(drawData->DisplaySize.x * drawData->FramebufferScale.x);
 		int32 fbHeight = (int32)(drawData->DisplaySize.y * drawData->FramebufferScale.y);
 		if (fbWidth <= 0 || fbHeight <= 0)
 		{
 			return;
 		}
 
-		while (m_frameRenderBuffers.size() <= backBufferIndex)
-		{
-			m_frameRenderBuffers.push_back({});
-		}
-		auto& rb = m_frameRenderBuffers.at(backBufferIndex);
-
 		// Upload vertex/index buffer.
 		if (drawData->TotalVtxCount > 0)
 		{
 			auto vertexSize = alignImGuiBufferSize(drawData->TotalVtxCount * sizeof(ImDrawVert), 256);
-			auto indexSize  = alignImGuiBufferSize(drawData->TotalIdxCount * sizeof(ImDrawIdx),  256);
+			auto indexSize = alignImGuiBufferSize(drawData->TotalIdxCount * sizeof(ImDrawIdx), 256);
 			{
-				VkBufferCreateInfo bufferCI { };
+				VkBufferCreateInfo bufferCI{ };
 				bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 				bufferCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -552,7 +270,7 @@ namespace chord
 				VkDeviceSize vertexOffset[1] = { 0 };
 				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, vertexOffset);
 				vkCmdBindIndexBuffer(commandBuffer, *rb.indicesBuffer, 0, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
-			
+
 				const auto binding = helper::vertexInputBindingDescription2EXT(sizeof(ImDrawVert));
 				const VkVertexInputAttributeDescription2EXT attributes[3] =
 				{
@@ -566,7 +284,7 @@ namespace chord
 
 			VkBool32 bEnableBlend = VK_TRUE;
 			vkCmdSetColorBlendEnableEXT(commandBuffer, 0, 1, &bEnableBlend);
-			VkColorBlendEquationEXT ext{} ;
+			VkColorBlendEquationEXT ext { };
 			ext.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 			ext.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 			ext.colorBlendOp        = VK_BLEND_OP_ADD;
@@ -588,10 +306,7 @@ namespace chord
 				pushConst.translate.y = -1.0f - drawData->DisplayPos.y * pushConst.scale.y;
 			}
 
-			pushConst.textureId = ImGui::GetIO().Fonts->TexID;
-			pushConst.bFont = true;
 			pushConst.samplerId = getSamplers().linearClampBorder0000MipPoint().index.get();
-
 			pipeline->pushConst(commandBuffer, pushConst);
 		}
 
@@ -631,7 +346,7 @@ namespace chord
 
 				// Update push const texture id and font.
 				pushConst.textureId = pcmd->TextureId;
-				pushConst.bFont = (pcmd->TextureId == ImGui::GetIO().Fonts->TexID);
+				pushConst.bFont = bd->m_fontSet.contains(pcmd->TextureId);
 
 				if (copyPushConst != pushConst)
 				{
@@ -646,5 +361,507 @@ namespace chord
 
 		// Scissor reset.
 		helper::setScissor(commandBuffer, { 0, 0 }, { (uint32)fbWidth, (uint32)fbHeight });
+	}
+
+	static void imguiRenderWindow(ImGuiViewport* viewport, void*)
+	{
+		auto* vd = (ImGuiViewportData*)viewport->RendererUserData;
+		auto& swapchain = vd->swapchain();
+		const auto& extent = swapchain.getExtent();
+
+		uint32 backBufferIndex = swapchain.acquireNextPresentImage();
+		VkCommandBuffer imguiCmdBuffer = vd->getCommandBuffer(backBufferIndex);
+		{
+			// SDR mode.
+			const bool bCanDrawInBackBuffer =
+				swapchain.getFormatType() == Swapchain::EFormatType::sRGB8Bit;
+
+			auto [image, view] = swapchain.getImage(backBufferIndex);
+			auto transitionImageLayout = [&](
+				VkCommandBuffer cmd, VkImageLayout oldLayout, VkImageLayout newLayout,
+				VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkPipelineStageFlags srcStage, VkPipelineStageFlagBits dstStage)
+				{
+					VkImageMemoryBarrier barrier{ };
+					barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+					barrier.oldLayout = oldLayout;
+					barrier.newLayout = newLayout;
+					barrier.image = image;
+					barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+					barrier.subresourceRange.baseMipLevel = 0;
+					barrier.subresourceRange.levelCount = 1;
+					barrier.subresourceRange.baseArrayLayer = 0;
+					barrier.subresourceRange.layerCount = 1;
+					barrier.srcAccessMask = srcAccessMask;
+					barrier.dstAccessMask = dstAccessMask;
+
+					vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+				};
+
+			helper::resetCommandBuffer(imguiCmdBuffer);
+			helper::beginCommandBuffer(imguiCmdBuffer);
+			{
+				VkFormat uiBackBufferFormat = bCanDrawInBackBuffer
+					? swapchain.getSurfaceFormat().format
+					: VK_FORMAT_R8G8B8A8_SRGB;
+
+				auto graphicsPipeline = getContext().graphicsPipe<ImGuiDrawVS, ImGuiDrawPS>("ImGuiDraw", { uiBackBufferFormat });
+
+				// Transition image to attachment layout.
+				transitionImageLayout(imguiCmdBuffer, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+				auto backBufferAttachment = helper::renderingAttachmentInfo(false);
+				{
+					backBufferAttachment.imageView = view;
+					backBufferAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+					backBufferAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+					backBufferAttachment.clearValue = VkClearValue{ .color = { 57.0f / 255.0f, 197.0f / 255.0f, 187.0f / 255.0f, 1.0f } };
+				}
+
+				auto renderInfo = helper::renderingInfo();
+				{
+					renderInfo.renderArea = VkRect2D{ .offset {0,0}, .extent = extent };
+					renderInfo.colorAttachmentCount = 1;
+					renderInfo.pColorAttachments = &backBufferAttachment;
+				}
+
+				vkCmdBeginRendering(imguiCmdBuffer, &renderInfo);
+				{
+					imguiRenderDrawData(backBufferIndex, imguiCmdBuffer, (void*)viewport->DrawData, graphicsPipeline);
+				}
+				vkCmdEndRendering(imguiCmdBuffer);
+
+				// Transition image to present layout.
+				transitionImageLayout(imguiCmdBuffer, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+			}
+			helper::endCommandBuffer(imguiCmdBuffer);
+		}
+
+		// UI cmd submit.
+		auto frameStartSemaphore = swapchain.getCurrentFrameWaitSemaphore();
+		{
+			std::vector<VkSemaphore> imguiWaitSemaphores =
+			{
+				frameStartSemaphore,
+			};
+
+			std::vector<VkSemaphore> imguiSignalSemaphores =
+			{
+				swapchain.getCurrentFrameFinishSemaphore()
+			};
+
+			VkPipelineStageFlags kUiWaitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+			helper::SubmitInfo imGuiCmdSubmitInfo{ };
+
+			imGuiCmdSubmitInfo.setWaitStage(&kUiWaitFlags)
+				.setWaitSemaphore(imguiWaitSemaphores.data(), imguiWaitSemaphores.size())
+				.setSignalSemaphore(imguiSignalSemaphores.data(), imguiSignalSemaphores.size())
+				.setCommandBuffer(&imguiCmdBuffer, 1);
+
+			std::vector<VkSubmitInfo> infosRawSubmit{ imGuiCmdSubmitInfo };
+			swapchain.submit((uint32)infosRawSubmit.size(), infosRawSubmit.data());
+		}
+	}
+
+	static void imguiSwapBuffers(ImGuiViewport* viewport, void*)
+	{
+		auto* vd = (ImGuiViewportData*)viewport->RendererUserData;
+		auto& swapchain = vd->swapchain();
+
+		swapchain.present();
+	}
+
+
+	uint32 getFontSize(float dpiScale)
+	{
+		return uint32(sUIFontSize * dpiScale);
+	}
+
+	static void imguiPushWindowStyle(ImGuiViewport* vp)
+	{
+		auto* bd = (ImGuiManager*)ImGui::GetIO().BackendRendererUserData;
+		float dpiScale = vp->DpiScale;
+		if (vp->PlatformHandle)
+		{ 
+			float yscale;
+			glfwGetWindowContentScale((GLFWwindow*)vp->PlatformHandle, &dpiScale, &yscale);
+		}
+
+		auto& style  = bd->m_cacheStyle;
+		auto* styles = &bd->m_cacheStyle;
+
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,     math::floor(math::vec2(style.WindowPadding) * math::vec2(dpiScale)));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,    ImFloor(styles->WindowRounding * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize,     ImFloor(math::vec2(styles->WindowMinSize) * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,     ImFloor(styles->ChildRounding * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding,     ImFloor(styles->PopupRounding * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,      ImFloor(math::vec2(styles->FramePadding) * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,     ImFloor(styles->FrameRounding * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,       ImFloor(math::vec2(styles->ItemSpacing) * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing,  ImFloor(math::vec2(styles->ItemInnerSpacing) * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_CellPadding,       ImFloor(math::vec2(styles->CellPadding) * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing,     ImFloor(styles->IndentSpacing * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize,     ImFloor(styles->ScrollbarSize * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, ImFloor(styles->ScrollbarRounding * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize,       ImFloor(styles->GrabMinSize * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding,      ImFloor(styles->GrabRounding * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_TabRounding,       ImFloor(styles->TabRounding * dpiScale));
+
+		ImGui::PushStyleVar(ImGuiStyleVar_TouchExtraPadding,         math::floor(math::vec2(style.TouchExtraPadding) * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_ColumnsMinSpacing,         math::floor(style.ColumnsMinSpacing * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_LogSliderDeadzone,         math::floor(style.LogSliderDeadzone * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_TabMinWidthForCloseButton, math::floor(style.TabMinWidthForCloseButton * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_DisplayWindowPadding,      math::floor(math::vec2(style.DisplayWindowPadding) * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_DisplaySafeAreaPadding,    math::floor(math::vec2(style.DisplaySafeAreaPadding) * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_MouseCursorScale,          math::floor(style.MouseCursorScale * dpiScale));
+
+		// 
+
+		{
+			const uint32 fontSize = getFontSize(dpiScale);
+			auto* fonts = &bd->m_fontAtlasTextures[fontSize].atlas;
+
+			ImGui::PushFont(fonts->Fonts[0]);
+		}
+	}
+
+	static void imguiPopWindowStyle(ImGuiViewport*)
+	{
+		ImGui::PopFont();
+		ImGui::PopStyleVar(23);
+	}
+
+	void styleProfessionalDark()
+	{
+		ImGui::StyleColorsDark();
+
+		ImGuiStyle& style = ImGui::GetStyle();
+		ImVec4* colors    = ImGui::GetStyle().Colors;
+
+		{
+			style.Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+			style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+			style.Colors[ImGuiCol_Border] = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
+			style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.1f, 0.1f, 0.0f, 0.39f);
+			style.Colors[ImGuiCol_FrameBg] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+			style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.38f, 0.38f, 0.38f, 1.00f);
+			style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
+			style.Colors[ImGuiCol_TitleBg] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
+			style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
+			style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
+			style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+			style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
+			style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
+			style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
+			style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
+			style.Colors[ImGuiCol_CheckMark] = ImVec4(0.11f, 0.64f, 0.92f, 1.00f);
+			style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.11f, 0.64f, 0.92f, 0.40f);
+			style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.08f, 0.50f, 0.72f, 1.00f);
+			style.Colors[ImGuiCol_Button] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+			style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.38f, 0.38f, 0.38f, 1.00f);
+			style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
+			style.Colors[ImGuiCol_Header] = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
+			style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+			style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
+			style.Colors[ImGuiCol_Separator] = style.Colors[ImGuiCol_Border];
+			style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.41f, 0.42f, 0.44f, 1.00f);
+			style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+			style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+			style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.29f, 0.30f, 0.31f, 0.67f);
+			style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+			style.Colors[ImGuiCol_Tab] = ImVec4(0.08f, 0.08f, 0.09f, 0.83f);
+			style.Colors[ImGuiCol_TabHovered] = ImVec4(0.33f, 0.34f, 0.36f, 0.83f);
+			style.Colors[ImGuiCol_TabActive] = ImVec4(0.23f, 0.23f, 0.24f, 1.00f);
+			style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
+			style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.13f, 0.14f, 0.15f, 1.00f);
+			style.Colors[ImGuiCol_DockingPreview] = ImVec4(0.26f, 0.59f, 0.98f, 0.70f);
+			style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+			style.Colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
+			style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+			style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+			style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+			style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
+			style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.11f, 0.64f, 0.92f, 1.00f);
+			style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+			style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+			style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+			style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+			style.Colors[ImGuiCol_CheckMark] = ImVec4(0.96f, 0.96f, 0.96f, 1.00f);
+			style.Colors[ImGuiCol_SliderGrab] = ImVec4(1.0f, 1.0f, 1.0f, 0.3f);
+			style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(1.0f, 1.0f, 1.0f, 1.00f);
+		}
+
+
+		ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
+		ImGui::GetIO().ConfigWindowsResizeFromEdges = true;
+
+		style.AntiAliasedLines = true;
+		style.WindowMenuButtonPosition = ImGuiDir_Left;
+		style.WindowPadding     = ImVec2(4, 4);
+		style.FramePadding      = ImVec2(6, 4);
+		style.ItemSpacing       = ImVec2(6, 2);
+		style.ItemInnerSpacing  = ImVec2(2.0f, 3.0f);
+		style.WindowTitleAlign  = ImVec2(0.5f, 0.5f);
+		style.ScrollbarSize     = 18;
+		style.WindowBorderSize  = 1;
+		style.ChildBorderSize   = 1;
+		style.PopupBorderSize   = 1;
+		style.FrameBorderSize   = 1;
+		style.TabBorderSize     = 1;
+		style.WindowRounding    = 0;
+		style.ChildRounding     = 0;
+		style.FrameRounding     = 1;
+		style.PopupRounding     = 0;
+		style.ScrollbarRounding = 0;
+		style.GrabRounding      = 2;
+		style.GrabMinSize       = 8;
+		style.LogSliderDeadzone = 0;
+		style.TabRounding       = 12;
+		style.SliderThickness   = 0.3f;
+		style.SliderContrast    = 1.0f;
+	}
+
+	ImGuiManager::ImGuiManager()
+	{
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+
+		ImGuiIO& io = ImGui::GetIO();
+		{
+			io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable keyboard controls.
+			io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable gamepad controls.
+
+			// Configable.
+			if (bEnableViewports)
+			{
+				io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+				io.ConfigViewportsNoDecoration = bViewportsNoDecoration;
+			}
+			if (bEnableDocking)
+			{
+				io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+			}
+
+			if (!std::filesystem::exists(sUIConfigFileSavePath))
+			{
+				std::filesystem::create_directory(sUIConfigFileSavePath);
+			}
+
+			// Config file store path.
+			m_iniFileStorePath = std::format("{0}/{1}-ui.ini", sUIConfigFileSavePath, Application::get().getName());
+			io.IniFilename = m_iniFileStorePath.c_str();
+		}
+
+		updateStyle();
+
+		// Init glfw backend.
+		ImGui_ImplGlfw_InitForVulkan(Application::get().getWindowData().window, true);
+
+		// Add font atlas to fit all.
+		{
+			m_mainAtlas = io.Fonts; // Just cache main fonts.
+			io.Fonts = updateMonitorFonts();
+		}
+
+		// Vulkan backend.
+		{
+			io.BackendRendererName = "ChordImGui";
+
+			// Assign backend renderer user data.
+			io.BackendRendererUserData = (void*)this;
+
+			// We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
+			io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  
+			io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
+
+			// Create render data for main viewport.
+			ImGui::GetMainViewport()->RendererUserData = new ImGuiViewportData(ImGui::GetMainViewport());
+
+			if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+			{
+				ImGui::GetPlatformIO().Renderer_CreateWindow  = imguiCreateWindow;
+				ImGui::GetPlatformIO().Renderer_DestroyWindow = imguiDestroyWindow;
+				ImGui::GetPlatformIO().Renderer_SetWindowSize = imguiSetWindowSize;
+				ImGui::GetPlatformIO().Renderer_RenderWindow  = imguiRenderWindow;
+				ImGui::GetPlatformIO().Renderer_SwapBuffers   = imguiSwapBuffers;
+
+				ImGui::GetPlatformIO().Platform_PushWindowStyle = imguiPushWindowStyle;
+				ImGui::GetPlatformIO().Platform_PopWindowStyle = imguiPopWindowStyle;
+			}
+		}
+	}
+
+	// Setup font for IMGUI windows.
+	void ImGuiManager::setupFont(uint32 fontSize, float dpiScale)
+	{
+		if (m_fontAtlasTextures[fontSize].texture != nullptr)
+		{
+			return;
+		}
+
+		ImFontAtlas* fonts = &m_fontAtlasTextures[fontSize].atlas;
+
+		// Load font data to memory.
+		fonts->AddFontFromFileTTF(sUIFontFilePath.c_str(), fontSize, NULL, fonts->GetGlyphRangesChineseFull());
+
+		{
+			static const ImWchar iconsRanges[] = { 0xe001, 0xF8B3, 0 };
+			ImFontConfig iconsConfig;
+			iconsConfig.MergeMode  = true;
+			iconsConfig.PixelSnapH = true;
+			iconsConfig.GlyphOffset = math::vec2(0.0f, 4.0f) * dpiScale;
+			fonts->AddFontFromFileTTF(sUIFontIconFilePath.c_str(), fontSize, &iconsConfig, iconsRanges);
+		}
+
+		fonts->Build();
+
+		// Upload atlas to GPU, sync.
+		GPUTextureRef texture;
+		{
+			using namespace graphics;
+			const std::string fonmtTextureName = std::format("{0}-UIFontAtlas-{1}", Application::get().getName(), fontSize);
+
+			unsigned char* pixels;
+			int32 width, height;
+			fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
+
+			auto imageCI = helper::buildBasicUploadImageCreateInfo(width, height, VK_FORMAT_R8_UNORM);
+			auto uploadVMACI = helper::buildVMAUploadImageAllocationCI();
+			texture = std::make_shared<GPUTexture>(fonmtTextureName, imageCI, uploadVMACI);
+
+			SizedBuffer stageSizedBuffer(width * height * sizeof(char), pixels);
+			getContext().syncUploadTexture(*texture, stageSizedBuffer);
+		}
+
+		m_fontAtlasTextures[fontSize].dpiScale   = dpiScale;
+		m_fontAtlasTextures[fontSize].texture    = texture;
+		m_fontAtlasTextures[fontSize].styles     = m_cacheStyle;
+		m_fontAtlasTextures[fontSize].styles.ScaleAllSizes(dpiScale);
+
+		// Update texture id.
+		fonts->TexID = texture->requireView(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get();
+		m_fontSet.insert(fonts->TexID);
+	}
+
+	ImGuiManager::~ImGuiManager()
+	{
+		// Clear all font atlas.
+		{
+			for (auto& fontPair : m_fontAtlasTextures)
+			{
+				fontPair.second.atlas.Locked = false;
+				fontPair.second.atlas.Clear();
+			}
+
+			// Assgin back font io.
+			ImGui::GetIO().Fonts = m_mainAtlas;
+		}
+
+		// Clean main viewport render data.
+		if (auto* vd = (ImGuiViewportData*)ImGui::GetMainViewport()->RendererUserData)
+		{
+			delete vd;
+		}
+		ImGui::GetMainViewport()->RendererUserData = nullptr;
+
+		// Clear all other windows.
+		ImGui::DestroyPlatformWindows();
+
+		// Clear bounding backend renderer user data.
+		ImGui::GetIO().BackendRendererName = nullptr;
+		ImGui::GetIO().BackendRendererUserData = nullptr;
+
+		// Release glfw backend.
+		ImGui_ImplGlfw_Shutdown();
+
+		// Final imgui destroy context.
+		ImGui::DestroyContext();
+	}
+
+	void ImGuiManager::render()
+	{
+		m_bWidgetDrawing = false;
+
+		ImGui::Render();
+
+		if (!isMainMinimized())
+		{
+			imguiRenderWindow(ImGui::GetMainViewport(), nullptr);
+			imguiSwapBuffers(ImGui::GetMainViewport(), nullptr);
+		}
+
+		if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+		{
+			ImGui::UpdatePlatformWindows();
+			ImGui::RenderPlatformWindowsDefault();
+		}
+	}
+
+	ImFontAtlas* ImGuiManager::updateMonitorFonts()
+	{
+		ImFontAtlas* result;
+
+		int monitorsCount = 0;
+		GLFWmonitor** glfwMonitors = glfwGetMonitors(&monitorsCount);
+		for (int32 index = monitorsCount - 1; index >= 0; index--)
+		{
+			float xScale, yScale;
+			glfwGetMonitorContentScale(glfwMonitors[index], &xScale, &yScale);
+
+			int32 fontSize = getFontSize(xScale);
+			setupFont(fontSize, xScale);
+
+			if (index == 0)
+			{
+				result = &m_fontAtlasTextures[fontSize].atlas;
+			}
+		}
+
+		return result;
+	}
+
+	bool ImGuiManager::isMainMinimized()
+	{
+		ImDrawData* mainDrawData = ImGui::GetDrawData();
+		return (mainDrawData->DisplaySize.x <= 0.0f || mainDrawData->DisplaySize.y <= 0.0f);
+	}
+
+	void ImGuiManager::newFrame()
+	{
+		updateMonitorFonts();
+
+		// Switch all style if no multi viewports.
+		if (!(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable))
+		{
+			float xScale, yScale;
+			glfwGetWindowContentScale(Application::get().getWindowData().window, &xScale, &yScale);
+			int32 fontSize = getFontSize(xScale);
+
+			GImGui->Style = m_fontAtlasTextures[fontSize].styles;
+			ImGui::GetIO().Fonts = &m_fontAtlasTextures[fontSize].atlas;
+		}
+
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		m_bWidgetDrawing = true;
+	}
+
+	void ImGuiManager::updateStyle()
+	{
+		ImGuiIO& io = ImGui::GetIO();
+
+		// Style setup.
+		styleProfessionalDark();
+
+		// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
+		ImGuiStyle& style = ImGui::GetStyle();
+		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+		{
+			style.WindowRounding = 0.0f;
+			style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+		}
+
+		m_cacheStyle = style;
 	}
 }

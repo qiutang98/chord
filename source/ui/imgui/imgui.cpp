@@ -3090,6 +3090,14 @@ static const ImGuiStyleVarInfo GStyleVarInfo[] =
     { ImGuiDataType_Float, 1, (ImU32)IM_OFFSETOF(ImGuiStyle, TabRounding) },         // ImGuiStyleVar_TabRounding
     { ImGuiDataType_Float, 2, (ImU32)IM_OFFSETOF(ImGuiStyle, ButtonTextAlign) },     // ImGuiStyleVar_ButtonTextAlign
     { ImGuiDataType_Float, 2, (ImU32)IM_OFFSETOF(ImGuiStyle, SelectableTextAlign) }, // ImGuiStyleVar_SelectableTextAlign
+
+    { ImGuiDataType_Float, 2, (ImU32)IM_OFFSETOF(ImGuiStyle, TouchExtraPadding) }, // ImGuiStyleVar_SelectableTextAlign
+    { ImGuiDataType_Float, 1, (ImU32)IM_OFFSETOF(ImGuiStyle, ColumnsMinSpacing) }, // ImGuiStyleVar_SelectableTextAlign
+    { ImGuiDataType_Float, 1, (ImU32)IM_OFFSETOF(ImGuiStyle, LogSliderDeadzone) }, // ImGuiStyleVar_SelectableTextAlign
+    { ImGuiDataType_Float, 1, (ImU32)IM_OFFSETOF(ImGuiStyle, TabMinWidthForCloseButton) }, // ImGuiStyleVar_SelectableTextAlign
+    { ImGuiDataType_Float, 2, (ImU32)IM_OFFSETOF(ImGuiStyle, DisplayWindowPadding) }, // ImGuiStyleVar_SelectableTextAlign
+    { ImGuiDataType_Float, 2, (ImU32)IM_OFFSETOF(ImGuiStyle, DisplaySafeAreaPadding) }, // ImGuiStyleVar_SelectableTextAlign
+    { ImGuiDataType_Float, 1, (ImU32)IM_OFFSETOF(ImGuiStyle, MouseCursorScale) }, // ImGuiStyleVar_SelectableTextAlign
 };
 
 static const ImGuiStyleVarInfo* GetStyleVarInfo(ImGuiStyleVar idx)
@@ -4763,7 +4771,7 @@ void ImGui::NewFrame()
     // This fallback is particularly important as it prevents ImGui:: calls from crashing.
     g.WithinFrameScopeWithImplicitWindow = true;
     SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
-    Begin("Debug##Default");
+    Begin("Debug##Default", NULL, 0, false);
     IM_ASSERT(g.CurrentWindow->IsFallbackWindow == true);
 
     CallContextHooks(&g, ImGuiContextHookType_NewFramePost);
@@ -5072,7 +5080,7 @@ void ImGui::EndFrame()
     g.WithinFrameScopeWithImplicitWindow = false;
     if (g.CurrentWindow && !g.CurrentWindow->WriteAccessed)
         g.CurrentWindow->Active = false;
-    End();
+    End(false);
 
     // Update navigation: CTRL+Tab, wrap-around requests
     NavEndFrame();
@@ -6364,10 +6372,10 @@ static ImGuiWindow* ImGui::FindBlockingModal(ImGuiWindow* window)
 //   You can use the "##" or "###" markers to use the same label with different id, or same id with different label. See documentation at the top of this file.
 // - Return false when window is collapsed, so you can early out in your code. You always need to call ImGui::End() even if false is returned.
 // - Passing 'bool* p_open' displays a Close button on the upper-right corner of the window, the pointed value will be set to false when the button is pressed.
-bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
+bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags, bool bWidget)
 {
     ImGuiContext& g = *GImGui;
-    const ImGuiStyle& style = g.Style;
+
     IM_ASSERT(name != NULL && name[0] != '\0');     // Window name required
     IM_ASSERT(g.WithinFrameScope);                  // Forgot to call ImGui::NewFrame()
     IM_ASSERT(g.FrameCountEnded != g.FrameCount);   // Called ImGui::Render() or ImGui::EndFrame() and haven't called ImGui::NewFrame() again yet
@@ -6623,7 +6631,14 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
         SetCurrentViewport(window, window->Viewport);
         window->FontDpiScale = (g.IO.ConfigFlags & ImGuiConfigFlags_DpiEnableScaleFonts) ? window->Viewport->DpiScale : 1.0f;
         SetCurrentWindow(window);
+
+        if (g.PlatformIO.Platform_PushWindowStyle)
+        {
+            g.PlatformIO.Platform_PushWindowStyle(window->Viewport);
+        }
+
         flags = window->Flags;
+        const ImGuiStyle& style = g.Style;
 
         // LOCK BORDER SIZE AND PADDING FOR THE FRAME (so that altering them doesn't cause inconsistencies)
         // We read Style data after the call to UpdateSelectWindowViewport() which might be swapping the style.
@@ -7135,6 +7150,11 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
         // Append
         SetCurrentViewport(window, window->Viewport);
         SetCurrentWindow(window);
+
+        if (g.PlatformIO.Platform_PushWindowStyle)
+        {
+            g.PlatformIO.Platform_PushWindowStyle(window->Viewport);
+        }
     }
 
     if (!(flags & ImGuiWindowFlags_DockNodeHost))
@@ -7181,7 +7201,7 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
         }
 
         // Don't render if style alpha is 0.0 at the time of Begin(). This is arbitrary and inconsistent but has been there for a long while (may remove at some point)
-        if (style.Alpha <= 0.0f)
+        if (g.Style.Alpha <= 0.0f)
             window->HiddenFramesCanSkipItems = 1;
 
         // Update the Hidden flag
@@ -7216,7 +7236,7 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
     return !window->SkipItems;
 }
 
-void ImGui::End()
+void ImGui::End(bool bWidget)
 {
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
@@ -7238,6 +7258,12 @@ void ImGui::End()
         EndColumns();
     if (!(window->Flags & ImGuiWindowFlags_DockNodeHost))   // Pop inner window clip rectangle
         PopClipRect();
+
+    if (g.PlatformIO.Platform_PopWindowStyle)
+    {
+        g.PlatformIO.Platform_PopWindowStyle(window->Viewport);
+    }
+
     PopFocusScope();
 
     // Stop logging

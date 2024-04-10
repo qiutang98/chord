@@ -51,14 +51,14 @@ namespace chord
 		if (m_bShow)
 		{
 			ImGui::SetNextWindowSize(ImVec2(800, 400), ImGuiCond_FirstUseEver);
-			if (ImGui::Begin(m_name.c_str(), &m_bShow, m_flags))
+
+			if (ImGui::Begin(m_name.c_str(), &m_bShow, m_flags, true))
 			{
 				ImGui::PushID(m_uniqueId);
 				onVisibleTick(tickData);
 				ImGui::PopID();
 			}
-
-			ImGui::End();
+			ImGui::End(true);
 		}
 
 		onAfterTick(tickData);

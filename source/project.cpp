@@ -3,6 +3,7 @@
 #include <utils/utils.h>
 #include <utils/cvar.h>
 #include <utils/log.h>
+#include <application/application.h>
 
 namespace chord
 {
@@ -39,19 +40,21 @@ namespace chord
 		createDirectoryIfNoExist(m_projectPath.cachePath.u16());
 		createDirectoryIfNoExist(m_projectPath.configPath.u16());
 		createDirectoryIfNoExist(m_projectPath.logPath.u16());
-
-
-
 		
 		CVarSystem::get().getCVarCheck<std::string>("r.log.file.folder")->set(logFolderPath.string());
 		CVarSystem::get().getCVarCheck<std::string>("r.log.file.name")->set("flower");
 		LoggerSystem::get().updateLogFile();
 
+		const auto titleName = getAppTitleName();
+		glfwSetWindowTitle(Application::get().getWindowData().window, titleName.c_str());
+
 		// Final update setup state.
 		m_bSetup = true;
 	}
 
-
-
+	std::string Project::getAppTitleName() const
+	{
+		return std::format("{} - {}", Application::get().getName(), m_projectPath.projectName.u8());
+	}
 }
 

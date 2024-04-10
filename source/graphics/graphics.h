@@ -5,12 +5,7 @@
 #include <graphics/swapchain.h>
 #include <graphics/bindless.h>
 #include <graphics/pipeline.h>
-
-namespace chord
-{
-	class ApplicationTickData;
-	class ImGuiManager;
-}
+#include <graphics/rendertargetpool.h>
 
 namespace chord::graphics
 {
@@ -104,9 +99,6 @@ namespace chord::graphics
 		auto& getBindlessManger() { return *m_bindlessManager; }
 		const auto& getBindlessManger() const { return *m_bindlessManager; }
 
-		auto& getSwapchain() { return *m_swapchain; }
-		const auto& getSwapchain() const { return *m_swapchain; }
-
 		// All samplers managed by SamplerManager, only one instance.
 		auto& getSamplerManager() { return *m_samplerManager; }
 		const auto& getSamplerManager() const { return *m_samplerManager; }
@@ -145,6 +137,9 @@ namespace chord::graphics
 		const auto& getPipelineContainer() const { return *m_pipelineContainer; }
 		auto& getPipelineContainer() { return *m_pipelineContainer; }
 
+		const auto& getTexturePool() const { return *m_texturePool; }
+		auto& getTexturePool() { return *m_texturePool; }
+
 		template<class VertexShader, class PixelShader>
 		IPipelineRef graphicsPipe(
 			const std::string& name,
@@ -154,9 +149,6 @@ namespace chord::graphics
 			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
 		void waitDeviceIdle() const;
-
-		// Current active dpi scale.
-		float dpiScale() const;
 
 	public:
 		bool init(const InitConfig& config);
@@ -207,9 +199,6 @@ namespace chord::graphics
 
 		// VMA allocator.
 		VmaAllocator m_vmaAllocator = VK_NULL_HANDLE;
-
-		// Vulkan swapchain.
-		std::unique_ptr<Swapchain> m_swapchain = nullptr;
 		
 		// Vulkan bindless manager.
 		std::unique_ptr<BindlessManager> m_bindlessManager = nullptr;
@@ -229,11 +218,12 @@ namespace chord::graphics
 		std::unique_ptr<PipelineLayoutManager> m_pipelineLayoutManager = nullptr;
 		std::unique_ptr<PipelineContainer> m_pipelineContainer = nullptr;
 		std::unique_ptr<ImGuiManager> m_imguiManager = nullptr;
+		std::unique_ptr<GPUTexturePool> m_texturePool = nullptr;
+		std::unique_ptr<GPUBufferPool> m_bufferPool = nullptr;
 	};
 
 	// Helper function save some time.
 	extern Context& getContext();
-	extern float dpiScale();
 
 	// Helper function save some time.
 	static inline const auto* getAllocationCallbacks() 

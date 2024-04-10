@@ -319,8 +319,14 @@ namespace chord::graphics
 
 	void Swapchain::releaseContext()
 	{
-		// Flush working queue.
-		vkQueueWaitIdle(m_queue);
+		// Ensure all in flight images ready.
+		for(auto fence : m_imagesInFlight)
+		{
+			if (fence != VK_NULL_HANDLE)
+			{
+				vkWaitForFences(getContext().getDevice(), 1, &fence, VK_TRUE, UINT64_MAX);
+			}
+		}
 
 		// Destroy present relative data.
 		for (auto i = 0; i < m_backbufferCount; i++)

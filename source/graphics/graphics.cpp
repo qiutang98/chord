@@ -14,6 +14,8 @@
 #include <shader/compiler.h>
 #include <shader/shader.h>
 #include <ui/ui.h>
+#include <graphics/rendertargetpool.h>
+#include <graphics/bufferpool.h>
 
 namespace chord::graphics
 {
@@ -47,6 +49,22 @@ namespace chord::graphics
 		sFreeShaderCompilerThreadCount,
 		"Free shader compiler thread count.",
 		EConsoleVarFlags::ReadOnly
+	);
+
+	static uint32 sPoolTextureFreeFrameCount = 3;
+	static AutoCVarRef<uint32> cVarPoolTextureFreeFrameCount(
+		"r.graphics.texturepool.freeframecount",
+		sPoolTextureFreeFrameCount,
+		"Graphics texture pool free frame count, min is 1, max is 10.",
+		EConsoleVarFlags::ProjectIni
+	);
+
+	static uint32 sPoolBufferFreeFrameCount = 3;
+	static AutoCVarRef<uint32> cVarPoolBufferFreeFrameCount(
+		"r.graphics.bufferpool.freeframecount",
+		sPoolBufferFreeFrameCount,
+		"Graphics buffer pool free frame count, min is 1, max is 10.",
+		EConsoleVarFlags::ProjectIni
 	);
 
 	namespace debugUtils
@@ -210,11 +228,6 @@ namespace chord::graphics
 	void Context::waitDeviceIdle() const
 	{
 		vkDeviceWaitIdle(m_device);
-	}
-
-	float Context::dpiScale() const
-	{
-		return m_imguiManager->dpiScale();
 	}
 
 	bool Context::init(const InitConfig& inputConfig)
@@ -841,12 +854,10 @@ namespace chord::graphics
 				m_samplerManager = std::make_unique<GPUSamplerManager>();
 			}
 
-			initBuiltinTextures();
+			m_texturePool = std::make_unique<GPUTexturePool>(math::clamp(sPoolTextureFreeFrameCount, 1u, 10u));
+			m_bufferPool = std::make_unique<GPUBufferPool>(math::clamp(sPoolBufferFreeFrameCount, 1u, 10u));
 
-			// Create swapchain.
-			{
-				m_swapchain = std::make_unique<Swapchain>(Application::get().getWindowData().window);
-			}
+			initBuiltinTextures(); 
 
 			// Imgui manager init.
 			m_imguiManager = std::make_unique<ImGuiManager>();
@@ -857,6 +868,10 @@ namespace chord::graphics
 
 	bool Context::tick(const ApplicationTickData& tickData)
 	{
+		// Update texture pool.
+		m_texturePool->tick(tickData);
+		m_bufferPool->tick(tickData);
+
 		// Imgui new frame.
 		m_imguiManager->newFrame();
 
@@ -864,45 +879,6 @@ namespace chord::graphics
 
 		// ImGui prepare render data.
 		m_imguiManager->render();
-
-		const bool bMainMinimized = m_imguiManager->isMainMinimized();
-		if (!bMainMinimized)
-		{
-			// Acquire next present image.
-			uint32 backBufferIndex = m_swapchain->acquireNextPresentImage();
-
-			// Record ui render.
-			m_imguiManager->renderFrame(backBufferIndex);
-
-			auto frameStartSemaphore = m_swapchain->getCurrentFrameWaitSemaphore();
-
-			// UI cmd submit.
-			{
-				std::vector<VkSemaphore> imguiWaitSemaphores =
-				{
-					frameStartSemaphore,
-				};
-
-				std::vector<VkSemaphore> imguiSignalSemaphores =
-				{
-					m_swapchain->getCurrentFrameFinishSemaphore()
-				};
-
-				VkPipelineStageFlags kUiWaitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-
-				helper::SubmitInfo imGuiCmdSubmitInfo{ };
-				VkCommandBuffer imguiCmdBuffer = m_imguiManager->getCommandBuffer(backBufferIndex);
-				imGuiCmdSubmitInfo.setWaitStage(&kUiWaitFlags)
-					.setWaitSemaphore(imguiWaitSemaphores.data(), imguiWaitSemaphores.size())
-					.setSignalSemaphore(imguiSignalSemaphores.data(), imguiSignalSemaphores.size())
-					.setCommandBuffer(&imguiCmdBuffer, 1);
-
-				std::vector<VkSubmitInfo> infosRawSubmit{ imGuiCmdSubmitInfo };
-				m_swapchain->submit((uint32)infosRawSubmit.size(), infosRawSubmit.data());
-			}
-
-			m_swapchain->present();
-		}
 
 		return true;
 	}
@@ -930,11 +906,10 @@ namespace chord::graphics
 	{
 		m_imguiManager.reset();
 
-		// Swapchain.
-		m_swapchain.reset();
-
 		// Clear all builtin textures.
 		m_builtinTextures = {};
+		m_texturePool.reset();
+		m_bufferPool.reset();
 
 		// Clear shader compiler.
 		m_shaderLibrary.reset();
@@ -1070,11 +1045,6 @@ namespace chord::graphics
 	Context& graphics::getContext()
 	{
 		return Application::get().getContext();
-	}
-
-	float dpiScale()
-	{
-		return getContext().dpiScale();
 	}
 
 	void setResourceName(VkObjectType objectType, uint64 handle, const char* name)

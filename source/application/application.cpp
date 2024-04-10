@@ -6,6 +6,8 @@
 #include <shader/shader.h>
 #include <shader/compiler.h>
 #include <ui/ui.h>
+#include <graphics/bufferpool.h>
+#include <graphics/rendertargetpool.h>
 
 namespace chord
 {

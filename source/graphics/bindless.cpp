@@ -2,6 +2,8 @@
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
 #include <graphics/resource.h>
+#include <graphics/bufferpool.h>
+#include <graphics/rendertargetpool.h>
 
 namespace chord::graphics
 {

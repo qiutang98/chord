@@ -416,6 +416,9 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 
 	const bool bItemSeleted = getSelections().isSelected(entrySelector);
 
+	const math::vec2 startPos = ImGui::GetCursorScreenPos();
+	const math::vec2 endPos = startPos + drawDimSize;
+
 	ImGui::PushID(int(haser(entry->getHashId())));
 	ImGui::BeginChild(
 		entry->getName().c_str(),
@@ -424,11 +427,9 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 		ImGuiWindowFlags_NoScrollWithMouse |
 		ImGuiWindowFlags_NoScrollbar);
 
+	bool bItemHover = ImGui::IsMouseHoveringRect(startPos, endPos);
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0);
 	{
-		bool bItemHover = ImGui::IsMouseHoveringRect(ImGui::GetCursorScreenPos(),
-			ImVec2(ImGui::GetCursorScreenPos().x + drawDimSize, ImGui::GetCursorScreenPos().y + drawDimSize));
-
 		if (bItemHover)
 		{
 			// Double clicked
@@ -498,19 +499,9 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 		// Decorated fill
 		{
 			ImGui::GetWindowDrawList()->AddRectFilled(
-				ImGui::GetCursorScreenPos(),
-				ImVec2(ImGui::GetCursorScreenPos().x + drawDimSize, ImGui::GetCursorScreenPos().y + drawDimSize + textH * 3.0f),
+				startPos,
+				ImVec2(startPos.x + drawDimSize, startPos.y + drawDimSize + textH * 3.0f),
 				bItemSeleted ? IM_COL32(88, 150, 250, 81) : IM_COL32(51, 51, 51, 190));
-
-			ImGui::GetWindowDrawList()->AddRect(
-				ImGui::GetCursorScreenPos(),
-				ImVec2(ImGui::GetCursorScreenPos().x + drawDimSize, ImGui::GetCursorScreenPos().y + drawDimSize + textH * 3.0f),
-				IM_COL32(255, 255, 255, 39));
-
-			ImGui::GetWindowDrawList()->AddRect(
-				ImGui::GetCursorScreenPos(),
-				ImVec2(ImGui::GetCursorScreenPos().x + drawDimSize, ImGui::GetCursorScreenPos().y + drawDimSize),
-				bItemHover ? IM_COL32(250, 244, 11, 255) : IM_COL32(255, 255, 255, 80), bItemHover ? 1.0f : 0.0f, 0, bItemHover ? 1.5f : 1.0f);
 		}
 
 		ImVec2 uv0{ 0.0f, 0.0f };
@@ -518,6 +509,7 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 
 		auto set = entry->getSet(uv0, uv1);
 		ImGui::Image(set, { drawDimSize , drawDimSize }, uv0, uv1);
+
 
 		const float indentSize = ImGui::GetFontSize() * 0.25f;
 		ImGui::Indent(indentSize);
@@ -528,13 +520,23 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 			ImGui::PopTextWrapPos();
 		}
 		ImGui::Unindent();
+
 	}
 	ImGui::PopStyleVar();
 	ImGui::EndChild();
 
+	ImGui::GetWindowDrawList()->AddRect(
+		startPos,
+		endPos,
+		bItemHover ? IM_COL32(250, 244, 11, 255) : IM_COL32(255, 255, 255, 80), bItemHover ? 1.0f : 0.0f, 0, bItemHover ? 1.5f : 1.0f);
+
+	ImGui::GetWindowDrawList()->AddRect(
+		math::vec2(startPos.x, startPos.y + drawDimSize),
+		ImGui::GetItemRectMax(),
+		IM_COL32(255, 255, 255, 39));
+
 	ui::hoverTip(entry->getName().c_str());
 	ImGui::PopID();
-	ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMin(), IM_COL32(88, 150, 250, 81));
 }
 
 void WidgetContent::drawContentSnapShot(ProjectContentEntryRef workingEntry)
@@ -545,14 +547,11 @@ void WidgetContent::drawContentSnapShot(ProjectContentEntryRef workingEntry)
 	const auto availRegion = ImGui::GetContentRegionAvail();
 	const float itemDimSize = ImGui::GetTextLineHeightWithSpacing() * m_snapshotItemIconSize;
 
-	const float kPadFirstColumDimX = 1.0f;
-
+	const float kPadFirstColumDimX = ImGui::GetItemSpacing(); // ImGui::GetItemSpacing();
 	const uint32_t drawItemPerRow = uint32_t(math::max(1.0f, (availRegion.x - kPadFirstColumDimX - ImGui::GetTextLineHeightWithSpacing() * 2.0f) / (itemDimSize + ImGui::GetStyle().ItemSpacing.x)));
 
 	const size_t minDrawRowNum = size_t(math::max(1.0f, math::ceil(availRegion.y / itemDimSize)));
 	const uint32_t drawRowNum = uint32_t(math::max(minDrawRowNum, inspectItemNum / drawItemPerRow + 1));
-
-
 	if (ImGui::BeginTable("##table_scrolly_snapshot", drawItemPerRow + 1,
 		ImGuiTableFlags_ScrollY |
 		ImGuiTableFlags_Hideable |
@@ -593,7 +592,8 @@ void WidgetContent::drawContentSnapShot(ProjectContentEntryRef workingEntry)
 	{
 		m_snapshotItemIconSize += ImGui::GetIO().MouseWheel;
 	}
-	m_snapshotItemIconSize = math::clamp(m_snapshotItemIconSize, kMinSnapShotIconSize * dpiScale(), kMaxSnapShotIconSize * dpiScale());
+	
+	m_snapshotItemIconSize = math::clamp(m_snapshotItemIconSize, kMinSnapShotIconSize, kMaxSnapShotIconSize);
 
 	if (ImGui::IsMouseClicked(1) &&
 		ImGui::IsMouseHoveringRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()) &&

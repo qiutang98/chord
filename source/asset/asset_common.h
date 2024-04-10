@@ -4,14 +4,34 @@
 
 namespace chord
 {
+	class AssetImportConfig
+	{
+	public:
+		bool bImportable;
+		std::string rawDataExtension;
+	};
+
 	// Asset type meta info, register in runtime.
 	class IAssetType
 	{
 	public:
-		const std::string name;
-		const std::string icon;
-		const std::string decoratedName;
+		std::string name;
+		std::string icon;
+		std::string decoratedName;
 
+		// Asset import config.
+		std::unique_ptr<AssetImportConfig> importConfig;
+	};
 
+	class AssetRegistry
+	{
+	public:
+		static AssetRegistry& get();
+
+	private:
+		explicit AssetRegistry() = default;
+
+	private:
+		std::unordered_map<const char*, std::unique_ptr<IAssetType>> m_registeredAssetType;
 	};
 }

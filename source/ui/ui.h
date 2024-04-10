@@ -6,11 +6,21 @@
 #include <graphics/resource.h>
 #include <graphics/pipeline.h>
 #include <ui/imgui/imgui.h>
+#include <ui/imgui/imgui_internal.h>
 
 namespace chord
 {
+	namespace graphics
+	{
+		class IPipeline;
+	}
+
 	class ImGuiManager : NonCopyable
 	{
+		friend void imguiPushWindowStyle(ImGuiViewport*);
+		friend void imguiPopWindowStyle(ImGuiViewport*);
+		
+		friend void imguiRenderDrawData(uint32, VkCommandBuffer, void*, std::shared_ptr<graphics::IPipeline>);
 	public:
 		explicit ImGuiManager();
 		~ImGuiManager();
@@ -25,41 +35,22 @@ namespace chord
 		// It produce render resource.
 		void render();
 
-		// Call render frame after render() call.
-		// It record render command.
-		void renderFrame(uint32 backBufferIndex);
-
-		// Get command buffer in frame index, auto increment when no enough.
-		VkCommandBuffer getCommandBuffer(uint32 index);
-
-		float dpiScale() const
+		const bool isWidgetDrawing() const
 		{
-			return m_dpiScale;
+			return m_bWidgetDrawing;
 		}
 
 	private:
+		// Update all monitor fonts, return first monitor's atlas.
+		ImFontAtlas* updateMonitorFonts();
+
 		// Setup font relative resource.
 		void setupFont(uint32 fontSize, float dpiScale);
 
 		// Update ui style.
 		void updateStyle();
 
-		// Render imgui draw data.
-		void renderDrawData(uint32 backBufferIndex, VkCommandBuffer commandBuffer, void* drawData,  graphics::IPipelineRef pipeline);
-
 	private:
-		// Delegate handle cache when swapchain rebuild.
-		EventHandle m_afterSwapChainRebuildHandle;
-
-		// Common buffers ring.
-		std::vector<VkCommandBuffer> m_commandBuffers;
-		struct RenderBuffers
-		{
-			graphics::HostVisibleGPUBufferRef verticesBuffer = nullptr;
-			graphics::HostVisibleGPUBufferRef indicesBuffer  = nullptr;
-		};
-		std::vector<RenderBuffers> m_frameRenderBuffers;
-
 		// UI backbuffer clear value.
 		math::vec4 m_clearColor = { 0.45f, 0.55f, 0.60f, 1.00f };
 
@@ -71,16 +62,19 @@ namespace chord
 			float dpiScale = 0.0f;
 			graphics::GPUTextureRef texture = nullptr;
 
-			ImGuiStyle  style; // Style which scale by dpi.
 			ImFontAtlas atlas; // Need to call clear when release.
+			ImGuiStyle styles;
 		};
 		std::map<uint32, FontAtlas> m_fontAtlasTextures;
+		std::set<uint32> m_fontSet;
 
 		// Cache main atlas when init.
 		ImFontAtlas* m_mainAtlas;
-		ImGuiStyle   m_mainStyle;
 
-		// Current active dpi scale.
-		float m_dpiScale = 0.0f;
+		// Cache style.
+		ImGuiStyle m_cacheStyle;
+
+		// Is widget drawing or not.
+		bool m_bWidgetDrawing = false;
 	};
 }

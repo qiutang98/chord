@@ -22,3 +22,4 @@
 #define IM_VEC4_CLASS_EXTRA \
     constexpr ImVec4(const chord::math::vec4& f) : x(f.x), y(f.y), z(f.z), w(f.w) {} \
     operator chord::math::vec4() const { return chord::math::vec4(x,y,z,w); }
+

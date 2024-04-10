@@ -20,10 +20,7 @@ namespace chord::graphics
 		{
 			friend GPUBufferPool;
 		public:
-			virtual ~PoolBuffer()
-			{
-				m_pool.m_buffers[m_hashId].push(m_buffer);
-			}
+			virtual ~PoolBuffer();
 
 			explicit PoolBuffer(GPUBufferRef inBuffer, uint64 hashId, GPUBufferPool& pool)
 				: m_buffer(inBuffer)
@@ -40,6 +37,16 @@ namespace chord::graphics
 			GPUBufferPool& m_pool;
 			GPUBufferRef m_buffer = nullptr;
 		};
+		
+		explicit GPUBufferPool(uint64 freeCount)
+			: m_freeFrameCount(freeCount)
+		{
+
+		}
+
+		virtual ~GPUBufferPool();
+
+		void tick(const ApplicationTickData& tickData);
 
 		// Generic buffer.
 		std::shared_ptr<PoolBuffer> create(
@@ -87,9 +94,18 @@ namespace chord::graphics
 	private:
 		friend PoolBuffer;
 
-		std::map<uint64, std::stack<GPUBufferRef>> m_buffers;
-		std::map<uint64, std::stack<GPUOnlyBufferRef>> m_gpuOnlyBuffers;
-		std::map<uint64, std::stack<HostVisibleGPUBufferRef>> m_hostVisibleBuffers;
+		// Free frame count.
+		const uint64 m_freeFrameCount;
+
+		// Counter inner.
+		uint64 m_frameCounter = 0;
+
+		struct FreePoolBuffer
+		{
+			GPUBufferRef buffer;
+			uint64 freeFrame = 0;
+		};
+		std::map<uint64, std::vector<FreePoolBuffer>> m_buffers;
 	};
 	using GPUBufferPoolRef = std::shared_ptr<GPUBufferPool>;
 	using PoolBufferRef = std::shared_ptr<GPUBufferPool::PoolBuffer>;

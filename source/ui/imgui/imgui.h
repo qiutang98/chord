@@ -333,8 +333,8 @@ namespace ImGui
     //    BeginPopup/EndPopup, etc. where the EndXXX call should only be called if the corresponding BeginXXX function
     //    returned true. Begin and BeginChild are the only odd ones out. Will be fixed in a future update.]
     // - Note that the bottom of window stack always contains a window called "Debug".
-    IMGUI_API bool          Begin(const char* name, bool* p_open = NULL, ImGuiWindowFlags flags = 0);
-    IMGUI_API void          End();
+    IMGUI_API bool          Begin(const char* name, bool* p_open = NULL, ImGuiWindowFlags flags = 0, bool bWidget = true);
+    IMGUI_API void          End(bool bWidget = true);
 
     // Child Windows
     // - Use child windows to begin into a self-contained independent scrolling/clipping regions within a host window. Child windows can embed their own child.
@@ -1686,6 +1686,13 @@ enum ImGuiStyleVar_
     ImGuiStyleVar_TabRounding,         // float     TabRounding
     ImGuiStyleVar_ButtonTextAlign,     // ImVec2    ButtonTextAlign
     ImGuiStyleVar_SelectableTextAlign, // ImVec2    SelectableTextAlign
+    ImGuiStyleVar_TouchExtraPadding,
+    ImGuiStyleVar_ColumnsMinSpacing,
+    ImGuiStyleVar_LogSliderDeadzone,
+    ImGuiStyleVar_TabMinWidthForCloseButton,
+    ImGuiStyleVar_DisplayWindowPadding,
+    ImGuiStyleVar_DisplaySafeAreaPadding,
+    ImGuiStyleVar_MouseCursorScale,
     ImGuiStyleVar_COUNT
 };
 
@@ -3164,6 +3171,9 @@ struct ImGuiPlatformIO
     float   (*Platform_GetWindowDpiScale)(ImGuiViewport* vp);               // N . . . .  // (Optional) [BETA] FIXME-DPI: DPI handling: Return DPI scale for this viewport. 1.0f = 96 DPI.
     void    (*Platform_OnChangedViewport)(ImGuiViewport* vp);               // . F . . .  // (Optional) [BETA] FIXME-DPI: DPI handling: Called during Begin() every time the viewport we are outputting into changes, so backend has a chance to swap fonts to adjust style.
     int     (*Platform_CreateVkSurface)(ImGuiViewport* vp, ImU64 vk_inst, const void* vk_allocators, ImU64* out_vk_surface); // (Optional) For a Vulkan Renderer to call into Platform code (since the surface creation needs to tie them both).
+
+    void    (*Platform_PushWindowStyle)(ImGuiViewport* wd);
+    void    (*Platform_PopWindowStyle)(ImGuiViewport* wd);
 
     // (Optional) Renderer functions (e.g. DirectX, OpenGL, Vulkan)
     void    (*Renderer_CreateWindow)(ImGuiViewport* vp);                    // . . U . .  // Create swap chain, frame buffers etc. (called after Platform_CreateWindow)

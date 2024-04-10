@@ -6,11 +6,19 @@
 #include <utils/crc.h>
 #include <utils/cvar.h>
 
+namespace chord
+{
+	class ApplicationTickData;
+	class ImGuiManager;
+}
+
 namespace chord::graphics
 {
 	class ImageView;
 	class ShaderCompilerManager;
 	class ShaderLibrary;
+	class GPUTexturePool;
+	class GPUBufferPool;
 
 	using ShaderCompileArguments = std::vector<std::string>;
 	class ShaderModule;

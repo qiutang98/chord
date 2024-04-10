@@ -2,6 +2,7 @@
 #include <graphics/graphics.h>
 #include <graphics/resource.h>
 #include <utils/cityhash.h>
+#include <application/application.h>
 
 namespace chord::graphics
 {
@@ -38,14 +39,48 @@ namespace chord::graphics
 		return GPUTexturePool::create(name, ci);
 	}
 
+	GPUTexturePool::~GPUTexturePool()
+	{
+		m_rendertargets.clear();
+	}
+
+	void GPUTexturePool::tick(const ApplicationTickData& tickData)
+	{
+		// Update inner counter.
+		m_frameCounter = tickData.tickCount;
+
+		// Clear garbages.
+		std::vector<uint64> emptyKeys;
+		for (auto& texturesPair : m_rendertargets)
+		{
+			const auto& key = texturesPair.first;
+			auto& textures = texturesPair.second;
+
+			textures.erase(std::remove_if(textures.begin(), textures.end(),[&](const auto& t)
+			{ 
+				return m_frameCounter - t.freeFrame > m_freeFrameCount;
+			}), textures.end());
+
+			if (textures.empty())
+			{
+				emptyKeys.push_back(key);
+			}
+		}
+
+		for (const auto& key : emptyKeys)
+		{
+			m_rendertargets.erase(key);
+		}
+	}
+
 	PoolTextureRef GPUTexturePool::create(const std::string& name, const PoolTextureCreateInfo& createInfo)
 	{
 		const uint64 hashId = cityhash::cityhash64((const char*)&createInfo, sizeof(createInfo));
-		auto& list = m_rendertargets[hashId];
+		auto& freeTextures = m_rendertargets[hashId];
 
 		// Render target empty.
 		GPUTextureRef texture = nullptr;
-		if (list.empty())
+		if (freeTextures.empty())
 		{
 			VkImageCreateInfo ci { };
 			ci.sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -72,12 +107,22 @@ namespace chord::graphics
 		}
 		else
 		{
-			texture = list.top();
+			texture = freeTextures.back().texture;
 			texture->rename(name);
-			list.pop();
+			freeTextures.pop_back();
 		}
 
 		return std::make_shared<GPUTexturePool::PoolTexture>(texture, hashId, *this);
+	}
+
+	GPUTexturePool::PoolTexture::~PoolTexture()
+	{
+		FreePoolTexture poolTexture;
+		poolTexture.freeFrame = m_pool.m_frameCounter;
+		poolTexture.texture = m_texture;
+
+		// We should ensure pool image life shorter than pool.
+		m_pool.m_rendertargets[m_hashId].push_back(poolTexture);
 	}
 
 }
