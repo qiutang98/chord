@@ -189,6 +189,14 @@ namespace chord
 		T& m_reference;
 	};
 
+	template<class T>
+	void cVarDisableTypeCheck()
+	{
+		static_assert(!std::is_same_v<T, std::string>, "Don't use string directly, use u16str!");
+		static_assert(!std::is_same_v<T, std::u16string>, "Don't use u16string directly, use u16str!");
+		static_assert(!std::is_same_v<T, std::u32string>, "Don't use u32string directly, use u16str!");
+		static_assert(!std::is_same_v<T, std::u8string>, "Don't use u8string directly, use u16str!");
+	}
 
 	class CVarSystem final : NonCopyable
 	{
@@ -199,6 +207,7 @@ namespace chord
 
 		CVarStorage* getCVarIfExistGeneric(std::string_view name) const
 		{
+
 			std::shared_lock<std::shared_mutex> lock(m_lock);
 
 			const size_t hashId = std::hash<std::string_view>()(name);
@@ -216,6 +225,7 @@ namespace chord
 		template <typename T>
 		CVarStorageInterface<T>* getCVarIfExist(std::string_view name) const 
 		{
+			cVarDisableTypeCheck<T>();
 			return (CVarStorageInterface<T>*)getCVarIfExistGeneric(name);
 		}
 
@@ -245,6 +255,8 @@ namespace chord
 		template <typename T>
 		CVarStorageValue<T>* addCVar(EConsoleVarFlags flag, std::string_view name, std::string_view description, const T& v)
 		{
+			cVarDisableTypeCheck<T>();
+
 			std::unique_lock<std::shared_mutex> lock(m_lock);
 
 			const size_t hashId = std::hash<std::string_view>()(name);
@@ -263,6 +275,8 @@ namespace chord
 		template <typename T>
 		CVarStorageRef<T>* addCVarRef(EConsoleVarFlags flag, std::string_view name, std::string_view description, T& v)
 		{
+			cVarDisableTypeCheck<T>();
+
 			std::unique_lock<std::shared_mutex> lock(m_lock);
 
 			const size_t hashId = std::hash<std::string_view>()(name);
@@ -293,6 +307,8 @@ namespace chord
 		explicit AutoCVar(std::string_view name, const T& v,  std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None,
 			std::function<void(const T&, const T&)>&& onValueChangeCallback = nullptr)
 		{
+			cVarDisableTypeCheck<T>();
+
 			m_ptr = CVarSystem::get().addCVar<T>(flag, name, description, v);
 			m_ptr->onValueChange.bind(std::move(onValueChangeCallback));
 		}
@@ -313,6 +329,8 @@ namespace chord
 	public:
 		explicit AutoCVarRef(std::string_view name, T& v, std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None)
 		{
+			cVarDisableTypeCheck<T>();
+
 			m_ptr = CVarSystem::get().addCVarRef<T>(flag, name, description, v);
 		}
 
@@ -327,4 +345,5 @@ namespace chord
 	};
 
 	// Cmd must name start with "cmd.", and type always is bool type.
+
 }

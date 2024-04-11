@@ -6,7 +6,13 @@
 	#include <consoleapi3.h>
 #endif
 
-const chord::uint32 chord::kAssetVersion = 0;
+#define UUID_SYSTEM_GENERATOR
+#include <stduuid/uuid.h>
+
+chord::UUID chord::generateUUID()
+{
+	return uuids::to_string(uuids::uuid_system_generator{}());
+}
 
 void chord::setConsoleTitle(const std::string& title)
 {

@@ -98,7 +98,7 @@ void WidgetContent::onVisibleTick(const chord::ApplicationTickData& tickData)
 		ImGui::TextDisabled("Working project: %s and working path: %s.", projectConfig.projectName.u8().c_str(), projectConfig.rootPath.u8().c_str());
 		ImGui::SameLine();
 
-		std::string activeFolderName = utf8::utf16to8(m_activeFolder.lock()->getPath());
+		std::string activeFolderName = m_activeFolder.lock()->getPath().u8();
 		ImGui::Text("Inspecting folder path: %s.", activeFolderName.c_str());
 	}
 
@@ -273,7 +273,7 @@ void WidgetContent::drawContentTreeView(ProjectContentEntryRef entry)
 	}
 
 	// Add icon decorate.
-	u8str showName = entry->getName();
+	std::string showName = entry->getName().u8();
 	constexpr const char* padStr = "  ";
 	if (entry->isFoleder())
 	{
@@ -299,7 +299,7 @@ void WidgetContent::drawContentTreeView(ProjectContentEntryRef entry)
 	}
 
 	// Draw tree node.
-	bool bNodeOpen = treeNodeEx(entry->getName().c_str(), showName.c_str(), nodeFlags);
+	bool bNodeOpen = treeNodeEx(entry->getName().u8().c_str(), showName.c_str(), nodeFlags);
 	if (bNodeOpen)
 	{
 		m_openedEntry.insert(entry->getHashId());
@@ -421,7 +421,7 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 
 	ImGui::PushID(int(haser(entry->getHashId())));
 	ImGui::BeginChild(
-		entry->getName().c_str(),
+		entry->getName().u8().c_str(),
 		{ drawDimSize ,  drawDimSize + textH * 3.0f },
 		false,
 		ImGuiWindowFlags_NoScrollWithMouse |
@@ -477,7 +477,7 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 			{
 				if (auto entry = selector.entry.lock())
 				{
-					dragDropAssets.selectAssets.insert(entry->getPath());
+					dragDropAssets.selectAssets.insert(entry->getPath().u16());
 				}
 			}
 
@@ -516,7 +516,7 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 		{
 			ImGui::Spacing();
 			ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + drawDimSize - indentSize);
-			ImGui::Text(entry->getName().c_str());
+			ImGui::Text(entry->getName().u8().c_str());
 			ImGui::PopTextWrapPos();
 		}
 		ImGui::Unindent();
@@ -535,7 +535,7 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 		ImGui::GetItemRectMax(),
 		IM_COL32(255, 255, 255, 39));
 
-	ui::hoverTip(entry->getName().c_str());
+	ui::hoverTip(entry->getName().u8().c_str());
 	ImGui::PopID();
 }
 

@@ -17,9 +17,10 @@ namespace chord
 				((CVarStorageInterface<float>*)storage)->set(std::stof(value));
 				return true;
 			}
-			else if (storage->isValueTypeMatch(getTypeName<std::string>()))
+			else if (storage->isValueTypeMatch(getTypeName<u16str>()))
 			{
-				((CVarStorageInterface<std::string>*)storage)->set(value);
+				// String is utf8 encode.
+				((CVarStorageInterface<u16str>*)storage)->set(u16str(value));
 				return true;
 			}
 			else if (storage->isValueTypeMatch(getTypeName<double>()))
@@ -60,9 +61,10 @@ namespace chord
 			{
 				return std::to_string(((CVarStorageInterface<float>*)storage)->get());
 			}
-			else if (storage->isValueTypeMatch(getTypeName<std::string>()))
+			else if (storage->isValueTypeMatch(getTypeName<u16str>()))
 			{
-				return ((CVarStorageInterface<std::string>*)storage)->get();
+				// Default return u8 string.
+				return ((CVarStorageInterface<u16str>*)storage)->get().u8();
 			}
 			else if (storage->isValueTypeMatch(getTypeName<double>()))
 			{

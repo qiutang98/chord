@@ -6,17 +6,17 @@ namespace chord
 	struct ProjectPath
 	{
 		// Project stem name, not include period and suffix.
-		RegionString projectName;
+		u16str projectName;
 
 		// Project file absolute path file in this computer, this is runtime generate value.
-		RegionString projectFilePath;
+		u16str projectFilePath;
 
 		// Misc project folder path.
-		RegionString rootPath;
-		RegionString assetPath;
-		RegionString configPath;
-		RegionString logPath;
-		RegionString cachePath;
+		u16str rootPath;
+		u16str assetPath;
+		u16str configPath;
+		u16str logPath;
+		u16str cachePath;
 	};
 
 	class Project 

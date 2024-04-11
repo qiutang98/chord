@@ -49,10 +49,8 @@ int Flower::run(int argc, const char** argv)
 	CVarSystem::get().getCVarCheck<bool>("r.ui.docking")->set(true);
 	// CVarSystem::get().getCVarCheck<bool>("r.ui.viewports")->set(true);
 	
-	CVarSystem::get().getCVarCheck<std::string>("r.log.file.name")->set("flower/flower");
-
-	
-	CVarSystem::get().getCVarCheck<std::string>("r.ui.configPath")->set("config/flower");
+	CVarSystem::get().getCVarCheck<u16str>("r.log.file.name")->set(u16str("flower/flower"));
+	CVarSystem::get().getCVarCheck<u16str>("r.ui.configPath")->set(u16str("config/flower"));
 
 	Application::InitConfig config { };
 

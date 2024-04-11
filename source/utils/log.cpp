@@ -11,9 +11,9 @@
 
 namespace chord
 {
-	static AutoCVar<std::string> cVarLogPrintFormat(
+	static AutoCVar<u16str> cVarLogPrintFormat(
 		"r.log.printFormat", 
-		"%^[%H:%M:%S][%l] %n: %v%$", 
+		u16str("%^[%H:%M:%S][%l] %n: %v%$"), 
 		"Print format of log in app.", 
 		EConsoleVarFlags::ReadOnly);
 
@@ -35,21 +35,21 @@ namespace chord
 		"Delete days for old logs.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static AutoCVar<std::string> cVarLogFileFormat(
+	static AutoCVar<u16str> cVarLogFileFormat(
 		"r.log.file.format", 
-		"[%H:%M:%S][%l] %n: %v", 
+		u16str("[%H:%M:%S][%l] %n: %v"),
 		"Saved format of log in file.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static AutoCVar<std::string> cVarLogFileOutputFolder(
+	static AutoCVar<u16str> cVarLogFileOutputFolder(
 		"r.log.file.folder", 
-		"save/log", 
-		"Save folder path of log file.", 
+		u16str("save/log"),
+		"Save folder path of log file.",
 		EConsoleVarFlags::ReadOnly);
 
-	static AutoCVar<std::string> cVarLogFileName(
+	static AutoCVar<u16str> cVarLogFileName(
 		"r.log.file.name", 
-		"chord", 
+		u16str("chord"),
 		"Save name of log file.", 
 		EConsoleVarFlags::ReadOnly);
 
@@ -107,7 +107,7 @@ namespace chord
 	void LoggerSystem::updateLogFile()
 	{
 		// Create save folder for log if no exist.
-		const auto saveFolder = std::filesystem::path(cVarLogFileOutputFolder.get());
+		const auto saveFolder = cVarLogFileOutputFolder.get().u16();
 		if (!std::filesystem::exists(saveFolder))
 		{
 			std::filesystem::create_directories(saveFolder);
@@ -167,8 +167,8 @@ namespace chord
 			return false;
 		};
 
-		const auto saveFilePath = cVarLogFileName.get() + serializeTimePoint(now, "_%Y_%m_%d_%H_%M_%S") + ".log";
-		const auto finalPath = saveFolder / saveFilePath;
+		const auto saveFilePath = cVarLogFileName.get().u16() + u16str(serializeTimePoint(now, "_%Y_%m_%d_%H_%M_%S") + ".log").u16();
+		const auto finalPath = std::filesystem::path(saveFolder) / saveFilePath;
 
 		// Delete old log files out of day.
 		if (cVarLogFileDelete.get())
@@ -201,7 +201,7 @@ namespace chord
 			}
 
 			m_fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(finalPath.string().c_str(), true);
-			m_fileSink->set_pattern(cVarLogFileFormat.get());
+			m_fileSink->set_pattern(cVarLogFileFormat.get().str());
 
 			if (m_fileDestSink)
 			{
@@ -230,7 +230,7 @@ namespace chord
 		// Set format.
 		for (auto& sink : m_logSinks)
 		{
-			sink->set_pattern(cVarLogPrintFormat.get());
+			sink->set_pattern(cVarLogPrintFormat.get().str());
 		}
 
 		// Log file.

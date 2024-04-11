@@ -17,7 +17,7 @@ class ProjectContentEntry final
 
 public:
 	explicit ProjectContentEntry(
-		const chord::u8str& name, 
+		const chord::u16str& name, 
 		bool bFolder, 
 		const std::filesystem::path& path, 
 		std::shared_ptr<ProjectContentEntry> parent,
@@ -52,7 +52,7 @@ public:
 		return m_parent; 
 	}
 
-	const chord::u8str& getName() const 
+	const chord::u16str& getName() const 
 	{ 
 		return m_name; 
 	}
@@ -80,7 +80,7 @@ private:
 	chord::u16str m_path;
 
 	// Entry name.
-	chord::u8str m_name;
+	chord::u16str m_name;
 
 	// Current entry is folder or not.
 	bool m_bFolder : 1;     

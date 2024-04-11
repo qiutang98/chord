@@ -7,7 +7,7 @@
 struct RecentOpenProjects
 {
 	chord::uint32 validId = 0;
-	std::array<chord::RegionString, 10> recentOpenProjects;
+	std::array<chord::u16str, 10> recentOpenProjects;
 
 	void update(const std::filesystem::path& path);
 	void updatePathForView();

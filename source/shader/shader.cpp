@@ -6,8 +6,8 @@
 
 namespace chord::graphics
 {
-	static std::string gShaderCompileOutputFolder = "save/shader";
-	static AutoCVarRef<std::string> cVarShaderCompileOutputFolder(
+	static u16str gShaderCompileOutputFolder = u16str("save/shader");
+	static AutoCVarRef<u16str> cVarShaderCompileOutputFolder(
 		"r.graphics.shadercompiler.tempfolder",
 		gShaderCompileOutputFolder,
 		"Save folder path of temp shader file.",
@@ -136,7 +136,7 @@ namespace chord::graphics
 
 			// Get shader temp file store path.
 			const auto tempFilePath = 
-				std::filesystem::path(gShaderCompileOutputFolder) / 
+				std::filesystem::path(gShaderCompileOutputFolder.u16()) / 
 				std::filesystem::path(env.getMetaInfo().shaderFilePath).stem() / 
 				std::to_string(hash);
 

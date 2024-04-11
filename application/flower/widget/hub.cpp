@@ -28,7 +28,7 @@ void HubWidget::onRelease()
 
 void HubWidget::onTick(const ApplicationTickData& tickData)
 {
-	RegionString projectPath {};
+	u16str projectPath {};
 
 	ImGui::DockSpaceOverViewport();
 
@@ -78,7 +78,7 @@ void HubWidget::onTick(const ApplicationTickData& tickData)
 		{
 			if (ImGui::Button(ensureName.c_str(), {3.0f * ImGui::GetFontSize(), 0.0f}))
 			{
-				projectPath = RegionString(m_projectPath);
+				projectPath = u16str(m_projectPath);
 			}
 		}, !m_bProjectPathReady);
 
@@ -90,14 +90,14 @@ void HubWidget::onTick(const ApplicationTickData& tickData)
 		ImGui::NewLine();
 
 		ImGui::Indent();
-		if (!projectPath.isValid())
+		if (projectPath.empty())
 		{
 			for (size_t i = 0; i < m_recentProjectList.validId; i++)
 			{
 				const auto& item = m_recentProjectList.recentOpenProjects[i];
 				if (ImGui::Selectable(item.u8().c_str()))
 				{
-					projectPath = item.u8();
+					projectPath = item;
 					break;
 				}
 				ImGui::Spacing();
@@ -114,7 +114,7 @@ void HubWidget::onTick(const ApplicationTickData& tickData)
 	ImGui::End();
 
 	// Project ready, close hub and resizable windows.
-	if (projectPath.isValid())
+	if (!projectPath.empty())
 	{
 		setupProject(projectPath.u16());
 	}
@@ -270,12 +270,12 @@ void RecentOpenProjects::load()
 {
 	if (std::filesystem::exists(getRecentProjectsPath()))
 	{
-		std::string u8str;
+		std::string u8strEncode;
 		std::ifstream is(getRecentProjectsPath());
 		for (size_t i = 0; i < recentOpenProjects.size(); i++)
 		{
-			std::getline(is, u8str);
-			recentOpenProjects[i] = u8str;
+			std::getline(is, u8strEncode);
+			recentOpenProjects[i] = u16str(u8strEncode);
 		}
 	}
 

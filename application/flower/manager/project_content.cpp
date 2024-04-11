@@ -13,7 +13,7 @@ static uint64 requireProjectContentEntryId()
 }
 
 ProjectContentEntry::ProjectContentEntry(
-	const chord::u8str& name,
+	const chord::u16str& name,
 	bool bFolder, 
 	const std::filesystem::path& path, 
 	std::shared_ptr<ProjectContentEntry> parent,
@@ -32,7 +32,7 @@ ProjectContentEntry::ProjectContentEntry(
 ProjectContentEntry::~ProjectContentEntry()
 {
 	// Remove self node in tree when release.
-	m_tree.m_entryMap.erase(m_path);
+	m_tree.m_entryMap.erase(m_path.u16());
 }
 
 ImTextureID ProjectContentEntry::getSet(ImVec2& outUv0, ImVec2& outUv1)
@@ -43,8 +43,6 @@ ImTextureID ProjectContentEntry::getSet(ImVec2& outUv0, ImVec2& outUv1)
 		uv0 = { 0.0f, 0.0f };
 		uv1 = { 1.0f, 1.0f };
 		math::vec2 kUvScale = { 0.02f, 0.02f };
-
-
 
 		const auto& builtinResources = Flower::get().getBuiltinTextures();
 		if (m_bFolder)
@@ -72,7 +70,7 @@ void ProjectContentEntry::build(bool bRecursive)
 	// Only folder node need loop.
 	if (m_bFolder)
 	{
-		for (const auto& entry : std::filesystem::directory_iterator(m_path))
+		for (const auto& entry : std::filesystem::directory_iterator(m_path.u16()))
 		{
 			const bool bFolder = std::filesystem::is_directory(entry);
 
@@ -83,7 +81,7 @@ void ProjectContentEntry::build(bool bRecursive)
 				auto u16FileNameString = entry.path().filename().replace_extension().u16string();
 
 				auto child = std::make_shared<ProjectContentEntry>(
-					utf8::utf16to8(u16FileNameString),
+					u16FileNameString,
 					bFolder,
 					entry.path(),
 					shared_from_this(),
@@ -105,7 +103,7 @@ void ProjectContentEntry::build(bool bRecursive)
 		{
 			if ((A->isFoleder() && B->isFoleder()) || (!A->isFoleder() && !B->isFoleder()))
 			{
-				return A->getName() < B->getName();
+				return A->getName().u8() < B->getName().u8();
 			}
 			return A->isFoleder();
 		});
@@ -132,7 +130,7 @@ void ProjectContentEntryTree::build()
 
 	const auto& projectConfig = Project::get().getPath();
 	m_root = std::make_shared<ProjectContentEntry>(
-		"Asset", 
+		u16str("Asset"), 
 		true, 
 		projectConfig.assetPath.u16(),
 		nullptr,

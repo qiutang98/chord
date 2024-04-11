@@ -38,15 +38,15 @@ namespace chord
 		"Multi viewport no decorated.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static std::string sUIConfigFileSavePath = "config";
-	static AutoCVarRef<std::string> cVarUIConfigFileSavePath(
+	static u16str sUIConfigFileSavePath = u16str("config");
+	static AutoCVarRef<u16str> cVarUIConfigFileSavePath(
 		"r.ui.configPath", 
 		sUIConfigFileSavePath, 
 		"UI config file path saved path relative application.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static std::string sUIFontFilePath = "resource/font/full_chinese.ttf";
-	static AutoCVarRef<std::string> cVarsUIFontFilePath(
+	static u16str sUIFontFilePath = u16str("resource/font/full_chinese.ttf");
+	static AutoCVarRef<u16str> cVarsUIFontFilePath(
 		"r.ui.font",
 		sUIFontFilePath,
 		"ImGui font file path.",
@@ -59,8 +59,8 @@ namespace chord
 		"UI font base size.",
 		EConsoleVarFlags::ReadOnly);
 
-	static std::string sUIFontIconFilePath = "resource/font/segmdl2.ttf";
-	static AutoCVarRef<std::string> cVarsUIFontIconFilePath(
+	static u16str sUIFontIconFilePath = u16str("resource/font/segmdl2.ttf");
+	static AutoCVarRef<u16str> cVarsUIFontIconFilePath(
 		"r.ui.font.icon",
 		sUIFontIconFilePath,
 		"ImGui icon font file path.",
@@ -642,13 +642,13 @@ namespace chord
 				io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 			}
 
-			if (!std::filesystem::exists(sUIConfigFileSavePath))
+			if (!std::filesystem::exists(sUIConfigFileSavePath.u16()))
 			{
-				std::filesystem::create_directory(sUIConfigFileSavePath);
+				std::filesystem::create_directory(sUIConfigFileSavePath.u16());
 			}
 
 			// Config file store path.
-			m_iniFileStorePath = std::format("{0}/{1}-ui.ini", sUIConfigFileSavePath, Application::get().getName());
+			m_iniFileStorePath = std::format("{0}/{1}-ui.ini", sUIConfigFileSavePath.str(), Application::get().getName());
 			io.IniFilename = m_iniFileStorePath.c_str();
 		}
 
@@ -702,7 +702,7 @@ namespace chord
 		ImFontAtlas* fonts = &m_fontAtlasTextures[fontSize].atlas;
 
 		// Load font data to memory.
-		fonts->AddFontFromFileTTF(sUIFontFilePath.c_str(), fontSize, NULL, fonts->GetGlyphRangesChineseFull());
+		fonts->AddFontFromFileTTF(sUIFontFilePath.str().c_str(), fontSize, NULL, fonts->GetGlyphRangesChineseFull());
 
 		{
 			static const ImWchar iconsRanges[] = { 0xe001, 0xF8B3, 0 };
@@ -710,7 +710,7 @@ namespace chord
 			iconsConfig.MergeMode  = true;
 			iconsConfig.PixelSnapH = true;
 			iconsConfig.GlyphOffset = math::vec2(0.0f, 4.0f) * dpiScale;
-			fonts->AddFontFromFileTTF(sUIFontIconFilePath.c_str(), fontSize, &iconsConfig, iconsRanges);
+			fonts->AddFontFromFileTTF(sUIFontIconFilePath.str().c_str(), fontSize, &iconsConfig, iconsRanges);
 		}
 
 		fonts->Build();

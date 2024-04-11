@@ -164,45 +164,82 @@ namespace chord
 	};
 
 	// Alias string to notify user know current is u8str instead std::u8string because it is hard to use.
-	using u8str  = std::string;
-	using u16str = std::u16string;
-
-	class RegionString
+	class u16str
 	{
 	private:
-		u8str m_utf8 = {};
-		u16str m_utf16 = {};
+		std::u16string m_u16str;
 
 	public:
-		RegionString() = default;
+		u16str() = default;
 
-		RegionString(const u16str& str)
-			: m_utf8(utf8::utf16to8(str))
-			, m_utf16(str)
+		explicit u16str(const char* u8encode)
+			: m_u16str(utf8::utf8to16(u8encode))
+		{
+		}
+
+		explicit u16str(const std::string& u8encode)
+			: m_u16str(utf8::utf8to16(u8encode))
+		{
+		}
+		
+		u16str(const std::u16string& u16str)
+			: m_u16str(u16str)
 		{
 
 		}
 
-		RegionString(const u8str& str)
-			: m_utf8(str)
-			, m_utf16(utf8::utf8to16(str))
+		bool operator==(const u16str& lhs) const
 		{
-
+			return m_u16str == lhs.m_u16str;
 		}
 
-		bool isValid() const
+		operator const std::u16string&() const
 		{
-			return !m_utf8.empty();
+			return m_u16str;
 		}
 
-		const u8str& u8() const
+
+		operator std::u16string&()
 		{
-			return m_utf8;
+			return m_u16str;
 		}
 
-		const u16str& u16() const
+		bool empty() const 
 		{
-			return m_utf16;
+			return m_u16str.empty();
+		}
+
+		std::string u8() const
+		{
+			return utf8::utf16to8(m_u16str);
+		}
+
+		auto& data() 
+		{
+			return m_u16str;
+		}
+
+		const auto& data() const
+		{
+			return m_u16str;
+		}
+
+		const std::u16string& u16() const
+		{
+			return m_u16str;
+		}
+
+		// System code page string, we use filesystem path help.
+		std::string str() const 
+		{
+			std::filesystem::path path = u16();
+			return path.string();
+		}
+
+	public:
+		template<class Ar> void serialize(Ar& ar, uint32 ver)
+		{
+			ar(m_u16str);
 		}
 	};
 
@@ -331,16 +368,6 @@ namespace chord
 	    ::memset(&data, 0, sizeof(T));
 	}
 
-	static inline auto convertString(const std::u8string& u8str)
-	{
-		return reinterpret_cast<const char*>(u8str.c_str());
-	}
-
-	static inline auto convertUTF8(const std::string& str)
-	{
-		return reinterpret_cast<const char8_t*>(str.c_str());
-	}
-
 	extern void setConsoleTitle(const std::string& title);
 	extern void setConsoleUtf8();
 
@@ -396,5 +423,22 @@ namespace chord
 		return lhs;
 	}
 
+	using UUID = std::string;
+	CHORD_NODISCARD extern UUID generateUUID();
 
+	// Build two path relative path, remove first "\" and "/" char.
+	inline static std::u16string buildRelativePath(
+		const std::filesystem::path& shortPath,
+		const std::filesystem::path& longPath)
+	{
+		const std::u16string shortPath16 = std::filesystem::absolute(shortPath).u16string();
+		const std::u16string longPath16 = std::filesystem::absolute(longPath).u16string();
+
+		auto result = longPath16.substr(shortPath16.size());
+		if (result.starts_with(u"\\") || result.starts_with(u"/"))
+		{
+			result = result.erase(0, 1);
+		}
+		return result;
+	}
 }

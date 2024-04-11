@@ -39,7 +39,7 @@ public:
 	{
 		if (entry.lock() && rhs.entry.lock())
 		{
-			return entry.lock()->getPath() < rhs.entry.lock()->getPath();
+			return entry.lock()->getPath().u16() < rhs.entry.lock()->getPath().u16();
 		}
 		return false;
 	}
