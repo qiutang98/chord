@@ -8,20 +8,9 @@ namespace chord
 {
 	class ImageLdr2D : NonCopyable
 	{
-	private:
-		std::vector<uint8> m_pixels = { };
-
-		int32  m_width = 0;
-		int32  m_height = 0;
-		int32  m_component = 0;
-		int32  m_requiredComponent = 0;
-
-	protected:
-		void clear();
-
 	public:
-		virtual ~ImageLdr2D();
 		explicit ImageLdr2D() = default;
+		virtual ~ImageLdr2D();
 
 		void fillColor(RGBA c, int32 width = 1, int32 height = 1);
 		void fillChessboard(RGBA c0, RGBA c1, int32 width, int32 height, int32 blockDim);
@@ -35,5 +24,21 @@ namespace chord
 		const auto* getPixels() const { return m_pixels.data(); }
 		SizedBuffer getSizeBuffer() const { return SizedBuffer(getSize(), (void*)getPixels()); }
 		bool isEmpty() const { return m_pixels.empty(); }
+
+	private:
+		void clear();
+
+	private:
+		std::vector<uint8> m_pixels = { };
+		int32 m_width = 0;
+		int32 m_height = 0;
+		int32 m_component = 0;
+		int32 m_requiredComponent = 0;
+
+	public:
+		template<class Ar> void serialize(Ar& ar, uint32 ver)
+		{
+			ar(m_pixels, m_width, m_height, m_component, m_requiredComponent);
+		}
 	};
 }

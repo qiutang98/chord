@@ -115,7 +115,5 @@ namespace chord
 		return registry;
 	}
 
-
-
 }
 

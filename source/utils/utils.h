@@ -166,9 +166,6 @@ namespace chord
 	// Alias string to notify user know current is u8str instead std::u8string because it is hard to use.
 	class u16str
 	{
-	private:
-		std::u16string m_u16str;
-
 	public:
 		u16str() = default;
 
@@ -235,6 +232,9 @@ namespace chord
 			std::filesystem::path path = u16();
 			return path.string();
 		}
+
+	private:
+		std::u16string m_u16str;
 
 	public:
 		template<class Ar> void serialize(Ar& ar, uint32 ver)
