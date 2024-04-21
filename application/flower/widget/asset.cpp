@@ -50,10 +50,38 @@ void WidgetAssetConfig::tick(const ApplicationTickData& tickData)
 	prepareAssetConfigWindow();
 
 	ImGui::SetNextWindowSize(ImVec2(1920, 1080), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(m_name.u8().c_str(), &m_bRun, ImGuiWindowFlags_NoSavedSettings))
+	if (ImGui::Begin(m_name.u8().c_str(), &m_bRun, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar))
 	{
 		ImGui::PushID(m_name.u8().c_str());
 		{
+			if (ImGui::BeginMenuBar())
+			{
+				if (ImGui::BeginMenu("  FILE  "))
+				{
+
+					ImGui::EndMenu();
+				}
+				ImGui::Separator();
+
+				if (ImGui::BeginMenu("  EDIT  "))
+				{
+
+					ImGui::EndMenu();
+				}
+				ImGui::Separator();
+
+				if (ImGui::BeginMenu("  HELP  "))
+				{
+
+					ImGui::EndMenu();
+				}
+				ImGui::Separator();
+
+				ImGui::EndMenuBar();
+			}
+
+			// Draw asset.
+
 			// m_asset->drawAssetConfig();
 		}
 		ImGui::PopID();
