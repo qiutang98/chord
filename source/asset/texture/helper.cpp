@@ -810,6 +810,8 @@ namespace chord
 		auto& assetManager = Application::get().getAssetManager();
 		const auto& meta = TextureAsset::kAssetTypeMeta;
 
+
+
 		TextureAssetRef texturePtr;
 		{
 			const auto texPath = utf8::utf16to8(srcPath.u16string());
@@ -1027,6 +1029,16 @@ namespace chord
 			texturePtr->m_rawAssetPath = buildRelativePath(projectPaths.assetPath.u16(), copyDestPath);
 		}
 
+		
+		
+		LOG_TRACE("Import texture [size:({0},{1},{2}), mipmap:{6}] from '{3}' to '{4}' with format '{5}'.",
+			texturePtr->m_dimension.x,
+			texturePtr->m_dimension.y,
+			texturePtr->m_dimension.z,
+			texturePtr->m_rawAssetPath.u8(),
+			utf8::utf16to8(texturePtr->m_saveInfo.relativeAssetStorePath().u16string()),
+			nameof::nameof_enum(texturePtr->m_format),
+			texturePtr->m_mipmapCount);
 		return texturePtr->save();
 	}
 
