@@ -10,9 +10,10 @@ class HubWidget;
 class MainViewportDockspaceAndMenu;
 class DownbarWidget;
 class WidgetConsole;
+class AssetConfigWidgetManager;
 class WidgetContent;
 
-
+using SnapshotCache = chord::LRUCache<chord::graphics::GPUTextureAsset, std::filesystem::path>;
 
 class Flower
 {
@@ -39,14 +40,39 @@ public:
 
 	struct BuiltinTextures
 	{
-		chord::graphics::GPUTextureRef folderImage;
-		chord::graphics::GPUTextureRef fileImage;
+		chord::graphics::GPUTextureAssetRef folderImage;
+		chord::graphics::GPUTextureAssetRef fileImage;
 
 		void init();
 	};
 	const auto& getBuiltinTextures() const
 	{
 		return m_builtinTextures;
+	}
+
+	MainViewportDockspaceAndMenu& getDockSpace() const
+	{
+		return *m_dockSpaceHandle;
+	}
+
+	const SnapshotCache& getSnapshotCache() const
+	{
+		return *m_snapshots;
+	}
+
+	SnapshotCache& getSnapshotCache()
+	{
+		return *m_snapshots;
+	}
+
+	const AssetConfigWidgetManager& getAssetConfigWidgetManager() const
+	{
+		return *m_assetConfigWidgetManager;
+	}
+
+	AssetConfigWidgetManager& getAssetConfigWidgetManager()
+	{
+		return *m_assetConfigWidgetManager;
 	}
 
 private:
@@ -82,4 +108,8 @@ private:
 
 	// Builtin textures.
 	BuiltinTextures m_builtinTextures;
+
+	// Lru cache.
+	SnapshotCache* m_snapshots = nullptr;
+	AssetConfigWidgetManager* m_assetConfigWidgetManager = nullptr;
 };

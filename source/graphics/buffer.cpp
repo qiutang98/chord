@@ -18,6 +18,7 @@ namespace chord::graphics
 	// Global device size for GPUBuffer.
 	static VkDeviceSize sTotalGPUBufferDeviceSize = 0;
 
+
 	GPUBuffer::GPUBuffer(
 		const std::string& name,
 		const VkBufferCreateInfo& createInfo,
@@ -25,6 +26,7 @@ namespace chord::graphics
 		: GPUResource(name, 0)
 		, m_createInfo(createInfo)
 	{
+
 		VmaAllocationCreateInfo copyVMAInfo = vmaCreateInfo;
 		copyVMAInfo.pUserData = (void*)getName().c_str();
 

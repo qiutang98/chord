@@ -8,6 +8,8 @@
 #include <ui/ui.h>
 #include <graphics/bufferpool.h>
 #include <graphics/rendertargetpool.h>
+#include <asset/asset.h>
+#include <graphics/uploader.h>
 
 namespace chord
 {
@@ -179,6 +181,10 @@ namespace chord
         }
 
         m_timer.init();
+
+
+        m_threadPool = std::make_unique<ThreadPool>(L"ApplicationThreadPool", 1);
+        m_assetManager = std::make_unique<AssetManager>();
 
         // Return result.
         return m_bInit;

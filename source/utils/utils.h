@@ -83,10 +83,10 @@ do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' f
 
 #define ARCHIVE_DECLARE                                                                  \
 	friend class cereal::access;                                                         \
-	template<class Archive>                                                              \
-	void serialize(Archive& archive, std::uint32_t const version);
+	template<class Ar>                                                              \
+	void serialize(Ar& ar, std::uint32_t const version);
 
-#define ARCHIVE_NVP_DEFAULT(Member) archive(cereal::make_nvp(#Member, Member))
+#define ARCHIVE_NVP_DEFAULT(Member) ar(cereal::make_nvp(#Member, Member))
 
 // Version and type registry.
 #define ASSET_ARCHIVE_IMPL_BASIC(AssetNameXX, Version)                                   \
@@ -97,15 +97,15 @@ do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' f
 #define registerClassMemberInherit(AssetNameXX, AssetNamePP)                             \
 	ASSET_ARCHIVE_IMPL_BASIC(AssetNameXX, chord::kAssetVersion);                         \
 	CEREAL_REGISTER_POLYMORPHIC_RELATION(chord::AssetNamePP, chord::AssetNameXX)         \
-	template<class Archive>                                                              \
-	void chord::AssetNameXX::serialize(Archive& archive, std::uint32_t const version) {  \
-	archive(cereal::base_class<chord::AssetNamePP>(this));
+	template<class Ar>                                                              \
+	void chord::AssetNameXX::serialize(Ar& ar, std::uint32_t const version) {  \
+	ar(cereal::base_class<chord::AssetNamePP>(this));
 
 // Baisc class.
 #define registerClassMember(AssetNameXX)                                                 \
 	ASSET_ARCHIVE_IMPL_BASIC(AssetNameXX, chord::kAssetVersion);                         \
-	template<class Archive>                                                              \
-	void chord::AssetNameXX::serialize(Archive& archive, std::uint32_t const version)
+	template<class Ar>                                                              \
+	void chord::AssetNameXX::serialize(Ar& ar, std::uint32_t const version)
 
 // Achive enum class type.
 #define ARCHIVE_ENUM_CLASS(value)                     \
@@ -115,8 +115,8 @@ do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' f
 
 #define registerPODClassMember(AssetNameXX)                                              \
 	CEREAL_CLASS_VERSION(chord::AssetNameXX, chord::kAssetVersion);                      \
-	template<class Archive>                                                              \
-	void chord::AssetNameXX::serialize(Archive& archive, std::uint32_t const version)
+	template<class Ar>                                                              \
+	void chord::AssetNameXX::serialize(Ar& ar, std::uint32_t const version)
 
 #define REGISTER_BODY_DECLARE(...)  \
 	ARCHIVE_DECLARE                 \
@@ -233,13 +233,27 @@ namespace chord
 			return path.string();
 		}
 
+		uint64 hash() const 
+		{
+			return std::hash<std::u16string>{}(m_u16str);
+		}
+
 	private:
 		std::u16string m_u16str;
 
 	public:
-		template<class Ar> void serialize(Ar& ar, uint32 ver)
+		template<class Ar> void save(Ar& ar) const
 		{
-			ar(m_u16str);
+			std::string u8 = utf8::utf16to8(m_u16str);
+			ar(u8);
+		}
+
+		template<class Ar> void load(Ar& ar)
+		{
+			std::string u8;
+			ar(u8);
+
+			m_u16str = utf8::utf8to16(u8);
 		}
 	};
 
@@ -441,4 +455,22 @@ namespace chord
 		}
 		return result;
 	}
+
+	static inline bool isPOT(uint32 n)
+	{
+		return (n & (n - 1)) == 0;
+	}
+
+	// Get texture mipmap level count.
+	static inline uint32 getMipLevelsCount(uint32 texWidth, uint32 texHeight)
+	{
+		return static_cast<uint32>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+	}
+
+	template<typename T> inline T divideRoundingUp(T x, T y)
+	{
+		return (x + y - (T)1) / y;
+	}
+
+	extern std::filesystem::path buildStillNonExistPath(const std::filesystem::path& p);
 }

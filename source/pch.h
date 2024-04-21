@@ -38,6 +38,7 @@
 #include <type_traits>
 #include <atomic>
 #include <iostream>
+#include <fstream>
 
 // GLM math library config.
 // 0. glm force compute on radians.

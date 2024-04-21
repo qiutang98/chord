@@ -6,6 +6,7 @@
 
 #include "manager/project_content.h"
 #include "widget/content.h"
+#include "widget/asset.h"
 
 using namespace chord;
 using namespace chord::graphics;
@@ -21,13 +22,18 @@ void Flower::init()
     m_hubHandle = m_widgetManager.addWidget<HubWidget>();
 	m_onTickHandle = getContext().onTick.add([this](const ApplicationTickData& tickData) { this->onTick(tickData); });
 
+	// 16 MB snapshot cache, per snapshot is 0.25 MB, max cache 64.
+	// release 4 snapshot when prune.
+	m_snapshots = new SnapshotCache("FlowerSnapshotCache", 16, 1);
 
+	m_assetConfigWidgetManager = new AssetConfigWidgetManager();
 	m_builtinTextures.init();
 }
 
 void Flower::onTick(const chord::ApplicationTickData& tickData)
 {
 	m_widgetManager.tick(tickData);
+	m_assetConfigWidgetManager->tick(tickData);
 
 	onceEventAfterTick.brocast(tickData);
 }
@@ -36,18 +42,27 @@ void Flower::release()
 {
 	m_builtinTextures = {};
 
-	delete m_contentManager; 
-	m_contentManager = nullptr;
+	if (m_contentManager)
+	{
+		delete m_contentManager;
+		m_contentManager = nullptr;
+	}
+
+	if (m_snapshots)
+	{
+		delete m_snapshots;
+		m_snapshots = nullptr;
+	}
+
 
 	check(getContext().onTick.remove(m_onTickHandle));
 }
-
 
 int Flower::run(int argc, const char** argv)
 {
 	CVarSystem::get().getCVarCheck<bool>("r.log.file")->set(true);
 	CVarSystem::get().getCVarCheck<bool>("r.ui.docking")->set(true);
-	// CVarSystem::get().getCVarCheck<bool>("r.ui.viewports")->set(true);
+	CVarSystem::get().getCVarCheck<bool>("r.ui.viewports")->set(true);
 	
 	CVarSystem::get().getCVarCheck<u16str>("r.log.file.name")->set(u16str("flower/flower"));
 	CVarSystem::get().getCVarCheck<u16str>("r.ui.configPath")->set(u16str("config/flower"));
@@ -161,7 +176,7 @@ void Flower::BuiltinTextures::init()
 		auto texture = std::make_shared<GPUTexture>(path, imageCI, uploadVMACI);
 		getContext().syncUploadTexture(*texture, ldrImage->getSizeBuffer());
 
-		return texture;
+		return std::make_shared<GPUTextureAsset>(texture);
 	};
 
 	folderImage = flushUploadImage("resource/texture/folder.png");

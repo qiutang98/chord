@@ -147,6 +147,14 @@ namespace chord
 		std::unique_ptr<Swapchain> m_swapchain = nullptr;
 	};
 
+	static void imguiSetWindowSize(ImGuiViewport* viewport, ImVec2 size)
+	{
+		if (auto* vd = (ImGuiViewportData*)viewport->RendererUserData)
+		{
+			vd->swapchain().markDirty();
+		}
+	}
+
 	static void imguiCreateWindow(ImGuiViewport* viewport)
 	{
 		// Create new viewport data and assigned.
@@ -162,10 +170,12 @@ namespace chord
 				.pixels = (unsigned char*)icon.getPixels()
 			};
 
-			glfwSetWindowIcon((GLFWwindow*)viewport->PlatformHandle, 1, &glfwIcon);
+			auto* nativeHandle = (GLFWwindow*)viewport->PlatformHandle;
+
+			glfwSetWindowIcon(nativeHandle, 1, &glfwIcon);
 
 			const auto titleName = Project::get().getAppTitleName();
-			glfwSetWindowTitle((GLFWwindow*)viewport->PlatformHandle, titleName.c_str());
+			glfwSetWindowTitle(nativeHandle, titleName.c_str());
 		}
 	}
 
@@ -179,13 +189,7 @@ namespace chord
 		viewport->RendererUserData = nullptr;
 	}
 
-	static void imguiSetWindowSize(ImGuiViewport* viewport, ImVec2 size)
-	{
-		if (auto* vd = (ImGuiViewportData*)viewport->RendererUserData)
-		{
-			vd->swapchain().markDirty();
-		}
-	}
+
 
 	static inline VkDeviceSize alignImGuiBufferSize(VkDeviceSize size, VkDeviceSize alignment)
 	{
@@ -487,6 +491,12 @@ namespace chord
 			glfwGetWindowContentScale((GLFWwindow*)vp->PlatformHandle, &dpiScale, &yscale);
 		}
 
+		if (dpiScale == 0.0f)
+		{
+			LOG_ERROR("Zero dpi in viewport, skiping...");
+			dpiScale = 1.0f;
+		}
+
 		auto& style  = bd->m_cacheStyle;
 		auto* styles = &bd->m_cacheStyle;
 
@@ -495,37 +505,35 @@ namespace chord
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize,     ImFloor(math::vec2(styles->WindowMinSize) * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,     ImFloor(styles->ChildRounding * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding,     ImFloor(styles->PopupRounding * dpiScale));
+
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,      ImFloor(math::vec2(styles->FramePadding) * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,     ImFloor(styles->FrameRounding * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,       ImFloor(math::vec2(styles->ItemSpacing) * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing,  ImFloor(math::vec2(styles->ItemInnerSpacing) * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_CellPadding,       ImFloor(math::vec2(styles->CellPadding) * dpiScale));
-		ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing,     ImFloor(styles->IndentSpacing * dpiScale));
-		ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize,     ImFloor(styles->ScrollbarSize * dpiScale));
-		ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, ImFloor(styles->ScrollbarRounding * dpiScale));
-		ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize,       ImFloor(styles->GrabMinSize * dpiScale));
-		ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding,      ImFloor(styles->GrabRounding * dpiScale));
-		ImGui::PushStyleVar(ImGuiStyleVar_TabRounding,       ImFloor(styles->TabRounding * dpiScale));
 
+		ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, ImFloor(styles->IndentSpacing * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, ImFloor(styles->ScrollbarSize * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, ImFloor(styles->ScrollbarRounding * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, ImFloor(styles->GrabMinSize * dpiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, ImFloor(styles->GrabRounding * dpiScale));
+
+		ImGui::PushStyleVar(ImGuiStyleVar_TabRounding,       ImFloor(styles->TabRounding * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_TouchExtraPadding,         math::floor(math::vec2(style.TouchExtraPadding) * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_ColumnsMinSpacing,         math::floor(style.ColumnsMinSpacing * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_LogSliderDeadzone,         math::floor(style.LogSliderDeadzone * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_TabMinWidthForCloseButton, math::floor(style.TabMinWidthForCloseButton * dpiScale));
+		
 		ImGui::PushStyleVar(ImGuiStyleVar_DisplayWindowPadding,      math::floor(math::vec2(style.DisplayWindowPadding) * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_DisplaySafeAreaPadding,    math::floor(math::vec2(style.DisplaySafeAreaPadding) * dpiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_MouseCursorScale,          math::floor(style.MouseCursorScale * dpiScale));
-
 		// 
-
-		{
-			const uint32 fontSize = getFontSize(dpiScale);
-			auto* fonts = &bd->m_fontAtlasTextures[fontSize].atlas;
-
-			ImGui::PushFont(fonts->Fonts[0]);
-		}
+		const uint32 fontSize = getFontSize(dpiScale);
+		auto* fonts = &bd->m_fontAtlasTextures[fontSize].atlas;
+		ImGui::PushFont(fonts->Fonts[0]);
 	}
 
-	static void imguiPopWindowStyle(ImGuiViewport*)
+	static void imguiPopWindowStyle(ImGuiViewport* vp)
 	{
 		ImGui::PopFont();
 		ImGui::PopStyleVar(23);
@@ -597,7 +605,7 @@ namespace chord
 
 		style.AntiAliasedLines = true;
 		style.WindowMenuButtonPosition = ImGuiDir_Left;
-		style.WindowPadding     = ImVec2(4, 4);
+		style.WindowPadding     = ImVec2(1, 1);
 		style.FramePadding      = ImVec2(6, 4);
 		style.ItemSpacing       = ImVec2(6, 2);
 		style.ItemInnerSpacing  = ImVec2(2.0f, 3.0f);
@@ -613,7 +621,7 @@ namespace chord
 		style.FrameRounding     = 1;
 		style.PopupRounding     = 0;
 		style.ScrollbarRounding = 0;
-		style.GrabRounding      = 2;
+		style.GrabRounding      = 0.0f;
 		style.GrabMinSize       = 8;
 		style.LogSliderDeadzone = 0;
 		style.TabRounding       = 12;
@@ -694,6 +702,11 @@ namespace chord
 	// Setup font for IMGUI windows.
 	void ImGuiManager::setupFont(uint32 fontSize, float dpiScale)
 	{
+		if (fontSize == 0 || dpiScale == 0.0f)
+		{
+			return;
+		}
+
 		if (m_fontAtlasTextures[fontSize].texture != nullptr)
 		{
 			return;

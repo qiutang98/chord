@@ -37,15 +37,20 @@
     {
         constexpr auto kMaxPushConstSize = 128;
 
-        float4 lerp(const float4& x, const float4& y, const float4& a) { return math::mix(x, y, a); }
-        float3 lerp(const float3& x, const float3& y, const float3& a) { return math::mix(x, y, a); }
-        float3 lerp(const float3& x, const float3& y, const float   a) { return math::mix(x, y, a); }
-        float2 lerp(const float2& x, const float2& y, const float2& a) { return math::mix(x, y, a); }
-        float  lerp(const float   x, const float   y, const float   a) { return math::mix(x, y, a); }
+        inline float4 lerp(const float4& x, const float4& y, const float4& a) { return math::mix(x, y, a); }
+        inline float3 lerp(const float3& x, const float3& y, const float3& a) { return math::mix(x, y, a); }
+        inline float3 lerp(const float3& x, const float3& y, const float   a) { return math::mix(x, y, a); }
+        inline float2 lerp(const float2& x, const float2& y, const float2& a) { return math::mix(x, y, a); }
+        inline float  lerp(const float   x, const float   y, const float   a) { return math::mix(x, y, a); }
 
-        float3 pow(const float3& base, float v)
+        inline float3 pow(const float3& base, float v)
         {
             return math::pow(base, float3(v));
+        }
+
+        inline float pow(const float base, float v)
+        {
+            return math::pow(base, v);
         }
     }
 

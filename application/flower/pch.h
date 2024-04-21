@@ -12,5 +12,7 @@
 #include <ui/widget.h>
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
+#include <utils/lru.h>
+#include <graphics/resource.h>
 
 constexpr chord::uint32 kMultiWidgetMaxNum = 4;

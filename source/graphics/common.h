@@ -22,6 +22,7 @@ namespace chord::graphics
 
 	using ShaderCompileArguments = std::vector<std::string>;
 	class ShaderModule;
+	class AsyncUploaderManager;
 
 	// Shader stage.
 	enum class EShaderStage

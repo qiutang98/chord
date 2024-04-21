@@ -1,4 +1,3 @@
-#include <utils/image.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
@@ -12,6 +11,29 @@
 #define STB_DXT_IMPLEMENTATION
 #include <stb/stb_dxt.h>
 
+#include <utils/image.h>
+
+
+/*
+	STBI__CASE(1,2) { dest[0]=src[0]; dest[1]=255;                                     } break;
+	STBI__CASE(1,3) { dest[0]=dest[1]=dest[2]=src[0];                                  } break;
+	STBI__CASE(1,4) { dest[0]=dest[1]=dest[2]=src[0]; dest[3]=255;                     } break;
+	STBI__CASE(2,1) { dest[0]=src[0];                                                  } break;
+	STBI__CASE(2,3) { dest[0]=dest[1]=dest[2]=src[0];                                  } break;
+	STBI__CASE(2,4) { dest[0]=dest[1]=dest[2]=src[0]; dest[3]=src[1];                  } break;
+	STBI__CASE(3,4) { dest[0]=src[0];dest[1]=src[1];dest[2]=src[2];dest[3]=255;        } break;
+	STBI__CASE(3,1) { dest[0]=stbi__compute_y(src[0],src[1],src[2]);                   } break;
+	STBI__CASE(3,2) { dest[0]=stbi__compute_y(src[0],src[1],src[2]); dest[1] = 255;    } break;
+	STBI__CASE(4,1) { dest[0]=stbi__compute_y(src[0],src[1],src[2]);                   } break;
+	STBI__CASE(4,2) { dest[0]=stbi__compute_y(src[0],src[1],src[2]); dest[1] = src[3]; } break;
+	STBI__CASE(4,3) { dest[0]=src[0];dest[1]=src[1];dest[2]=src[2];                    } break;
+
+
+	STBI__CASE(1,4) { dest[0]=dest[1]=dest[2]=src[0]; dest[3]=255;                     } break; // PerPixel offset 0, channel 1
+	STBI__CASE(2,4) { dest[0]=dest[1]=dest[2]=src[0]; dest[3]=src[1];                  } break; // PerPixel offset 2, channel 
+	STBI__CASE(3,4) { dest[0]=src[0];dest[1]=src[1];dest[2]=src[2];dest[3]=255;        } break; // PerPixel offset 0
+*/
+
 namespace chord
 {
 	bool ImageLdr2D::fillFromFile(const std::string& path, int32 requiredComponent)
@@ -19,7 +41,9 @@ namespace chord
 		clear();
 
 		m_requiredComponent = requiredComponent;
-		auto* pixels = stbi_load(path.c_str(), &m_width, &m_height, &m_component, m_requiredComponent);
+		m_dimension.z = 1;
+
+		auto* pixels = stbi_load(path.c_str(), &m_dimension.x, &m_dimension.y, &m_component, m_requiredComponent);
 		{
 			if (pixels == nullptr)
 			{
@@ -27,7 +51,7 @@ namespace chord
 				return false;
 			}
 
-			m_pixels.resize(m_width * m_height * m_requiredComponent);
+			m_pixels.resize(m_dimension.x * m_dimension.y * m_requiredComponent);
 			::memcpy(m_pixels.data(), pixels, m_pixels.size());
 		}
 		stbi_image_free(pixels);
@@ -37,8 +61,7 @@ namespace chord
 
 	void ImageLdr2D::fillColor(RGBA c, int32 width, int32 height)
 	{
-		m_width  = width;
-		m_height = height;
+		m_dimension = { width, height, 1};
 		m_component = m_requiredComponent = 4;
 
 		const auto count = width * height * m_requiredComponent;
@@ -54,8 +77,7 @@ namespace chord
 	{
 		clear();
 
-		m_width = width;
-		m_height = height;
+		m_dimension = { width, height, 1 };
 		m_component = m_requiredComponent = 4;
 
 		const auto count = width * height * m_requiredComponent;
@@ -74,17 +96,26 @@ namespace chord
 		}
 	}
 
-	void ImageLdr2D::clear()
-	{
-		m_pixels = { };
-		m_width = 0;
-		m_height = 0;
-		m_component = 0;
-		m_requiredComponent = 0;
-	}
-
-	ImageLdr2D::~ImageLdr2D()
+	bool ImageHalf2D::fillFromFile(const std::string& path, int32 requiredComponent)
 	{
 		clear();
+
+		m_requiredComponent = requiredComponent;
+		m_dimension.z = 1;
+
+		auto* pixels = stbi_load_16(path.c_str(), &m_dimension.x, &m_dimension.y, &m_component, m_requiredComponent);
+		{
+			if (pixels == nullptr)
+			{
+				clear();
+				return false;
+			}
+
+			m_pixels.resize(m_dimension.x * m_dimension.y * m_requiredComponent);
+			::memcpy(m_pixels.data(), pixels, m_pixels.size() * sizeof(m_pixels[0]));
+		}
+		stbi_image_free(pixels);
+
+		return true;
 	}
 }

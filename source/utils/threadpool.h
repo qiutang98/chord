@@ -376,7 +376,7 @@ namespace chord
 	protected:
 		void worker()
 		{
-			loop([](const TaskType&) { TaskType(); });
+			loop([](const TaskType& task) { task(); });
 		}
 	};
 }

@@ -4,6 +4,7 @@
 #include <utils/cvar.h>
 #include <utils/log.h>
 #include <application/application.h>
+#include <asset/asset.h>
 
 namespace chord
 {
@@ -47,6 +48,9 @@ namespace chord
 
 		// Final update setup state.
 		m_bSetup = true;
+
+		// Setup project.
+		Application::get().getAssetManager().setupProject();
 	}
 
 	std::string Project::getAppTitleName() const

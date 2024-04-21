@@ -1,0 +1,1060 @@
+#include <asset/serialize.h>
+#include <asset/texture/helper.h>
+#include <ui/ui_helper.h>
+#include <asset/texture/texture.h>
+#include <asset/asset.h>
+#include <application/application.h>
+#include <project.h>
+
+#include <stb/stb_dxt.h>
+#include <stb/stb_image_resize.h>
+
+#include <shader/colorspace.h>
+#include <graphics/resource.h>
+#include <asset/asset_common.h>
+#include <graphics/uploader.h>
+#include <graphics/helper.h>
+
+
+namespace chord
+{
+	using namespace graphics;
+
+	namespace dxt
+	{
+		constexpr uint32 kBCBlockDim = 4U;
+		constexpr uint32 kBCBlockSize = kBCBlockDim * kBCBlockDim;
+
+		template<size_t kComponentCount, size_t kCompressionRatio, size_t kPerBlockCompressedSize>
+		static void executeTaskForBC(
+			uint32 mipWidth,
+			uint32 mipHeight,
+			std::vector<uint8>& compressMipData,
+			const std::vector<uint8>& srcMipData,
+			std::function<void(unsigned char* dest, const unsigned char* src)>&& functor)
+		{
+			compressMipData.resize(math::max(kPerBlockCompressedSize, srcMipData.size() / kCompressionRatio));
+			const auto buildBC = [&](const size_t loopStart, const size_t loopEnd)
+			{
+				for (size_t taskIndex = loopStart; taskIndex < loopEnd; ++taskIndex)
+				{
+					const uint32 pixelPosX = (taskIndex * kBCBlockDim) % mipWidth;
+					const uint32 pixelPosY = kBCBlockDim * ((taskIndex * kBCBlockDim) / mipWidth);
+					const uint32 bufferOffset = taskIndex * kPerBlockCompressedSize;
+
+					std::array<uint8, kBCBlockSize* kComponentCount> block{ };
+					uint32 blockLocation = 0;
+
+					// Fill block for bc.
+					for (uint32 j = 0; j < kBCBlockDim; j++)
+					{
+						for (uint32 i = 0; i < kBCBlockDim; i++)
+						{
+							const uint32 dimX = pixelPosX + i;
+							const uint32 dimY = pixelPosY + j;
+							const uint32 pixelLocation = (dimX + dimY * mipWidth) * kComponentCount;
+
+							if (pixelLocation < srcMipData.size())
+							{
+								const uint8* src = srcMipData.data() + pixelLocation;
+								uint8* dest = block.data() + blockLocation;
+
+								memcpy(dest, src, kComponentCount);
+								blockLocation += kComponentCount;
+							}
+						}
+					}
+
+					functor(&compressMipData[bufferOffset], block.data());
+				}
+			};
+			Application::get().getThreadPool().parallelizeLoop(0, math::max(1U, mipWidth * mipHeight / kBCBlockSize), buildBC).wait();
+		}
+
+		void mipmapCompressBC3(
+			std::vector<uint8>& compressMipData,
+			const std::vector<uint8>& srcMipData,
+			const TextureAsset& meta,
+			uint32 mipWidth,
+			uint32 mipHeight)
+		{
+			// src  = (4 * 4) * 4 = 64 byte.
+			// dest = 16 byte.
+			constexpr size_t kCompressionRatio = 4;
+			constexpr size_t kPerBlockCompressedSize = 16;
+			constexpr size_t kComponentCount = 4;
+
+			executeTaskForBC<kComponentCount, kCompressionRatio, kPerBlockCompressedSize>(
+				mipWidth, mipHeight, compressMipData, srcMipData, [](unsigned char* dest, const unsigned char* src)
+				{
+					stb_compress_dxt_block(dest, src, 1, STB_DXT_HIGHQUAL);
+				});
+		}
+
+		void mipmapCompressBC4(
+			std::vector<uint8>& compressMipData,
+			const std::vector<uint8>& srcMipData,
+			const TextureAsset& meta,
+			uint32 mipWidth,
+			uint32 mipHeight)
+		{
+			// src  = (4 * 4) * 1 = 16 byte.
+			// dest = 8 byte.
+			constexpr size_t kCompressionRatio = 2;
+			constexpr size_t kPerBlockCompressedSize = 8;
+			constexpr size_t kComponentCount = 1;
+
+			executeTaskForBC<kComponentCount, kCompressionRatio, kPerBlockCompressedSize>(
+				mipWidth, mipHeight, compressMipData, srcMipData, [](unsigned char* dest, const unsigned char* src)
+				{
+					stb_compress_bc4_block(dest, src);
+				});
+		}
+
+		void mipmapCompressBC1(
+			std::vector<uint8>& compressMipData,
+			const std::vector<uint8>& srcMipData,
+			const TextureAsset& meta,
+			uint32 mipWidth,
+			uint32 mipHeight)
+		{
+			// src  = (4 * 4) * 4 = 64 byte.
+			// dest = 8 byte.
+			constexpr size_t kCompressionRatio = 8;
+			constexpr size_t kPerBlockCompressedSize = 8;
+			constexpr size_t kComponentCount = 4;
+
+			executeTaskForBC<kComponentCount, kCompressionRatio, kPerBlockCompressedSize>(
+				mipWidth, mipHeight, compressMipData, srcMipData, [](unsigned char* dest, const unsigned char* src)
+				{
+					stb_compress_dxt_block(dest, src, 0, STB_DXT_HIGHQUAL);
+				});
+		}
+
+		void mipmapCompressBC5(
+			std::vector<uint8>& compressMipData,
+			const std::vector<uint8>& srcMipData,
+			const TextureAsset& meta,
+			uint32 mipWidth,
+			uint32 mipHeight)
+		{
+			// src  = (4 * 4) * 2 = 32 byte.
+			// dest = 16 byte.
+			constexpr size_t kCompressionRatio = 2;
+			constexpr size_t kPerBlockCompressedSize = 16;
+			constexpr size_t kComponentCount = 2;
+
+			executeTaskForBC<kComponentCount, kCompressionRatio, kPerBlockCompressedSize>(
+				mipWidth, mipHeight, compressMipData, srcMipData, [](unsigned char* dest, const unsigned char* src)
+				{
+					stb_compress_bc5_block(dest, src);
+				});
+		}
+
+		static void mipmapCompressBC(TextureAssetBin& inOutBin, const TextureAsset& meta)
+		{
+			std::vector<std::vector<uint8>> compressedMipdatas;
+			compressedMipdatas.resize(inOutBin.mipmapDatas.size());
+
+			for (size_t mipIndex = 0; mipIndex < compressedMipdatas.size(); mipIndex++)
+			{
+				auto& compressMipData = compressedMipdatas[mipIndex];
+				const auto& srcMipData = inOutBin.mipmapDatas[mipIndex];
+
+				uint32 mipWidth = math::max<uint32>(meta.getDimension().x >> mipIndex, 1);
+				uint32 mipHeight = math::max<uint32>(meta.getDimension().y >> mipIndex, 1);
+
+				if (meta.getFormat() == VK_FORMAT_BC3_SRGB_BLOCK || meta.getFormat() == VK_FORMAT_BC3_UNORM_BLOCK)
+				{
+					mipmapCompressBC3(compressMipData, srcMipData, meta, mipWidth, mipHeight);
+				}
+				else if (meta.getFormat() == VK_FORMAT_BC5_UNORM_BLOCK)
+				{
+					mipmapCompressBC5(compressMipData, srcMipData, meta, mipWidth, mipHeight);
+				}
+				else if (meta.getFormat() == VK_FORMAT_BC1_RGB_UNORM_BLOCK || meta.getFormat() == VK_FORMAT_BC1_RGB_SRGB_BLOCK)
+				{
+					mipmapCompressBC1(compressMipData, srcMipData, meta, mipWidth, mipHeight);
+				}
+				else if (meta.getFormat() == VK_FORMAT_BC4_UNORM_BLOCK)
+				{
+					mipmapCompressBC4(compressMipData, srcMipData, meta, mipWidth, mipHeight);
+				}
+				else
+				{
+					LOG_FATAL("Format {} still no process, need developer fix.", nameof::nameof_enum(meta.getFormat()));
+				}
+			}
+
+			inOutBin.mipmapDatas = std::move(compressedMipdatas);
+		}
+	}
+
+	namespace mipmap
+	{
+		constexpr int32 kFindBestAlphaCount = 50;
+
+		template<typename T> double getQuantifySize() { checkEntry(); return 0.0; }
+		
+		// When mipmap downsample average, we 
+		template<> double getQuantifySize<uint8 >() { return double(1 <<  8) - 1.0; }
+		template<> double getQuantifySize<uint16>() { return double(1 << 16) - 1.0; }
+		template<> double getQuantifySize<float >() { return 1.0; }
+
+		void checkMipmapParams(uint32 channelCount, uint32 pixelOffsetPerSample, float alphaMipmapCutoff)
+		{
+			check(channelCount == 1 || channelCount == 2 || channelCount == 4);
+			check(channelCount + pixelOffsetPerSample <= 4);
+			check(alphaMipmapCutoff >= 0.0f && alphaMipmapCutoff <= 1.0f);
+		}
+
+		template<typename T>
+		static double getAlphaCoverage(const T* data, uint32 width, uint32 height, double scale, double cutoff)
+		{
+			const double kQuantitySize = getQuantifySize<T>();
+
+			double value = 0.0;
+			T* pImg = (T*)data;
+
+			// Loop all texture to get coverage alpha data.
+			for (uint32 y = 0; y < height; y++)
+			{
+				for (uint32 x = 0; x < width; x++)
+				{
+					T* pPixel = pImg;
+					pImg += 4;
+
+					double alpha = scale * double(pPixel[3]) / kQuantitySize;
+
+					if (alpha > 1.0) { alpha = 1.0; }
+					if (alpha < cutoff) { continue; }
+
+					// Accumulate.
+					value += alpha;
+				}
+			}
+
+			// Normalize.
+			return value / double(height * width);
+		}
+
+		// Apply scale in alpha channel.
+		template<typename T>
+		static void scaleAlpha(const T* data, uint32 width, uint32 height, double scale)
+		{
+			constexpr double kQuantitySize = getQuantifySize<T>();
+
+			T* pImg = (T*)data;
+			for (uint32 y = 0; y < height; y++)
+			{
+				for (uint32 x = 0; x < width; x++)
+				{
+					T* pPixel = pImg;
+					pImg += 4;
+
+					// Load and apply scale in alpha.
+					double alpha = scale * double(pPixel[3]) / kQuantitySize;
+					alpha = math::clamp(alpha, 0.0, 1.0);
+
+					pPixel[3] = T(alpha * kQuantitySize);
+				}
+			}
+		}
+
+		template<typename T>
+		void buildMipmapData(
+			uint32 channelCount,
+			uint32 pixelOffsetPerSample,
+			const T* srcPixels,
+			TextureAssetBin& outBinData,
+			uint32 mipmapCount,
+			uint32 inWidth,
+			uint32 inHeight,
+			float alphaMipmapCutoff,
+			bool bSRGB)
+		{
+			if (bSRGB)
+			{
+				constexpr bool bUnit8 = std::is_same_v<T, uint8>;
+				check(bUnit8);
+			}
+
+			checkMipmapParams(channelCount, pixelOffsetPerSample, alphaMipmapCutoff);
+			const double kQuantitySize = getQuantifySize<T>();
+
+			float alphaCoverage = 1.0f;
+			const bool bKeepAlphaCoverage = (alphaMipmapCutoff < 1.0f) && (channelCount == 4);
+
+			// Prepare mipmap datas.
+			outBinData.mipmapDatas.resize(mipmapCount);
+
+			// Get strip size.
+			const auto kStripSize = sizeof(T) * channelCount;
+
+			// Now build each mipmap.
+			for (auto mip = 0; mip < outBinData.mipmapDatas.size(); mip++)
+			{
+				auto& destMipData = outBinData.mipmapDatas[mip];
+
+				// Compute mipmap size.
+				uint32 destWidth  = math::max<uint32>(inWidth  >> mip, 1);
+				uint32 destHeight = math::max<uint32>(inHeight >> mip, 1);
+
+				// Allocate memory.
+				destMipData.resize(destWidth * destHeight * kStripSize);
+
+				T* pDestData = (T*)destMipData.data();
+				if (mip == 0)
+				{
+					if (channelCount == 4)
+					{
+						memcpy(pDestData, srcPixels, destMipData.size());
+					}
+					else
+					{
+						for (auto i = 0; i < destWidth * destHeight; i++)
+						{
+							for (auto j = 0; j < channelCount; j++)
+							{
+								pDestData[i * channelCount + j] = srcPixels[i * 4 + j + pixelOffsetPerSample];
+							}
+						}
+					}
+
+					if (bKeepAlphaCoverage)
+					{
+						alphaCoverage = getAlphaCoverage<T>((const T*)destMipData.data(), destWidth, destHeight, 1.0, alphaMipmapCutoff);
+					}
+				}
+				else
+				{
+					const auto srcMip = mip - 1;
+					const T* pSrcData = (const T*)outBinData.mipmapDatas[srcMip].data();
+
+					for (auto y = 0; y < destHeight; y++)
+					{
+						for (auto x = 0; x < destWidth; x++)
+						{
+							// Get src data.
+							uint32 srcWidth  = std::max<uint32>(inWidth  >> srcMip, 1);
+							uint32 srcHeight = std::max<uint32>(inHeight >> srcMip, 1);
+
+							// Clamp src data fetech edge.
+							auto srcX0 = std::min<uint32>(uint32(x * 2 + 0), srcWidth  - 1);
+							auto srcX1 = std::min<uint32>(uint32(x * 2 + 1), srcWidth  - 1);
+							auto srcY0 = std::min<uint32>(uint32(y * 2 + 0), srcHeight - 1);
+							auto srcY1 = std::min<uint32>(uint32(y * 2 + 1), srcHeight - 1);
+
+							uint32 srcPixelStart[] =
+							{
+								(srcY0 * srcWidth + srcX0) * channelCount, // X0Y0
+								(srcY0 * srcWidth + srcX1) * channelCount, // X1Y0
+								(srcY1 * srcWidth + srcX0) * channelCount, // X0Y1
+								(srcY1 * srcWidth + srcX1) * channelCount, // X1Y1
+							};
+							
+							auto destPixelPosStart = (y * destWidth + x) * channelCount;
+
+							for (auto channelId = 0; channelId < channelCount; channelId++)
+							{
+								double sumValue = 0.0;
+								const bool bAlphaChannel = (channelId + pixelOffsetPerSample == 3);
+
+								for (auto srcPixelId = 0; srcPixelId < 4; srcPixelId++)
+								{
+									T rawData = pSrcData[srcPixelStart[srcPixelId] + channelId];
+
+									double normalizeValue = double(rawData) / kQuantitySize;
+									if (!bAlphaChannel && bSRGB)
+									{
+										normalizeValue = double(rec709GammaDecode(float(normalizeValue)));
+									}
+
+									sumValue += normalizeValue;
+								}
+								sumValue *= 0.25;
+
+								if (!bAlphaChannel && bSRGB)
+								{
+									sumValue = double(rec709GammaEncode(float(sumValue)));
+								}
+								pDestData[destPixelPosStart + channelId] = T(sumValue * kQuantitySize);
+							}
+						}
+					}
+				}
+				check(destHeight * destWidth * kStripSize == destMipData.size());
+			}
+		}
+	}
+	
+	VkFormat getFormatFromConfig(const TextureAssetImportConfig& config, bool bCanCompressed)
+	{
+		if (config.format == ETextureFormat::R16Unorm)
+		{
+			return VK_FORMAT_R16_UNORM;
+		}
+
+		if (config.format == ETextureFormat::RGBA16Unorm)
+		{
+			return VK_FORMAT_R16G16B16A16_UNORM;
+		}
+
+		if (config.format == ETextureFormat::R8G8B8A8)
+		{
+			return config.bSRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+		}
+		if (ETextureFormat::R8G8 == config.format) return VK_FORMAT_R8G8_UNORM;
+		if (ETextureFormat::Greyscale == config.format ||
+			ETextureFormat::R8 == config.format ||
+			ETextureFormat::B8 == config.format ||
+			ETextureFormat::G8 == config.format ||
+			ETextureFormat::A8 == config.format) return VK_FORMAT_R8_UNORM;
+
+		if (ETextureFormat::BC3 == config.format)
+		{
+			if (bCanCompressed)
+			{
+				return config.bSRGB ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_BC3_UNORM_BLOCK;
+			}
+			return config.bSRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+		}
+
+		if (ETextureFormat::BC1 == config.format)
+		{
+			if (bCanCompressed)
+			{
+				// Don't care BC1's alpha which quality poorly.
+				return config.bSRGB ? VK_FORMAT_BC1_RGB_SRGB_BLOCK : VK_FORMAT_BC1_RGB_UNORM_BLOCK;
+			}
+			return config.bSRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+		}
+
+		if (ETextureFormat::BC4Greyscale == config.format ||
+			ETextureFormat::BC4R8 == config.format ||
+			ETextureFormat::BC4G8 == config.format ||
+			ETextureFormat::BC4B8 == config.format ||
+			ETextureFormat::BC4A8 == config.format)
+		{
+			if (bCanCompressed)
+			{
+				return VK_FORMAT_BC4_UNORM_BLOCK;
+			}
+			return VK_FORMAT_R8_UNORM;
+		}
+
+		if (ETextureFormat::BC5 == config.format)
+		{
+			if (bCanCompressed)
+			{
+				return VK_FORMAT_BC5_UNORM_BLOCK;
+			}
+			return VK_FORMAT_R8G8_UNORM;
+		}
+
+		checkEntry();
+		return VK_FORMAT_UNDEFINED;
+	}
+
+	static inline void getChannelCountOffset(uint32& channelCount, uint32& pixelSampleOffset, ETextureFormat format)
+	{
+		switch (format)
+		{
+		case ETextureFormat::RGBA16Unorm:
+		case ETextureFormat::R8G8B8A8:
+		case ETextureFormat::BC3:
+		case ETextureFormat::BC1:
+		{
+			channelCount = 4;
+			pixelSampleOffset = 0;
+			return;
+		}
+		case ETextureFormat::BC5:
+		case ETextureFormat::R8G8:
+		{
+			channelCount = 2;
+			pixelSampleOffset = 0;
+			return;
+		}
+		case ETextureFormat::Greyscale:
+		case ETextureFormat::BC4Greyscale:
+		case ETextureFormat::R8:
+		case ETextureFormat::BC4R8:
+		case ETextureFormat::R16Unorm:
+		{
+			channelCount = 1;
+			pixelSampleOffset = 0;
+			return;
+		}
+		case ETextureFormat::G8:
+		case ETextureFormat::BC4G8:
+		{
+			channelCount = 1;
+			pixelSampleOffset = 1;
+			return;
+		}
+		case ETextureFormat::B8:
+		case ETextureFormat::BC4B8:
+		{
+			channelCount = 1;
+			pixelSampleOffset = 2;
+			return;
+		}
+		case ETextureFormat::A8:
+		case ETextureFormat::BC4A8:
+		{
+			channelCount = 1;
+			pixelSampleOffset = 3;
+			return;
+		}
+		}
+
+		checkEntry();
+	}
+
+	namespace snapshot
+	{
+		constexpr auto kMaxSnapshotDim = 128u;
+		constexpr auto kPerSnapshotSize = kMaxSnapshotDim * kMaxSnapshotDim * 4 * 4;
+
+		static void quantifyDim(uint32& widthSnapShot, uint32& heightSnapShot, uint32 texWidth, uint32 texHeight)
+		{
+			if (texWidth >= kMaxSnapshotDim || texHeight >= kMaxSnapshotDim)
+			{
+				if (texWidth > texHeight)
+				{
+					widthSnapShot = kMaxSnapshotDim;
+					heightSnapShot = texHeight / (texWidth / kMaxSnapshotDim);
+				}
+				else if (texHeight > texWidth)
+				{
+					heightSnapShot = kMaxSnapshotDim;
+					widthSnapShot = texWidth / (texHeight / kMaxSnapshotDim);
+				}
+				else
+				{
+					widthSnapShot = kMaxSnapshotDim;
+					heightSnapShot = kMaxSnapshotDim;
+				}
+			}
+			else
+			{
+				heightSnapShot = texHeight;
+				widthSnapShot = texWidth;
+			}
+		}
+
+		void build8bit(const TextureAsset& meta, std::vector<uint8>& data, unsigned char* pixels, int numChannel, math::uvec2& dim)
+		{
+			const auto& dimension = meta.getDimension();
+
+			uint32 widthSnapShot;
+			uint32 heightSnapShot;
+			quantifyDim(widthSnapShot, heightSnapShot, dimension.x, dimension.y);
+
+			dim.x = widthSnapShot;
+			dim.y = heightSnapShot;
+
+			data.resize(widthSnapShot * heightSnapShot * numChannel);
+
+			// if (meta.isSRGB())
+			{
+				// NOTE: We assume all data inputs is srgb mode.
+				stbir_resize_uint8_srgb_edgemode(
+					pixels,
+					dimension.x,
+					dimension.y,
+					0,
+					data.data(),
+					widthSnapShot,
+					heightSnapShot,
+					0,
+					numChannel,
+					numChannel == 4 ? 3 : STBIR_ALPHA_CHANNEL_NONE,
+					STBIR_FLAG_ALPHA_PREMULTIPLIED,
+					STBIR_EDGE_CLAMP
+				);
+			}
+			/*
+			else
+			{
+				stbir_resize_uint8(
+					pixels,
+					dimension.x,
+					dimension.y,
+					0,
+					data.data(),
+					widthSnapShot,
+					heightSnapShot,
+					0,
+					numChannel
+				);
+			}
+			*/
+
+		}
+		
+		void build16bit(const TextureAsset& meta, std::vector<uint8>& ldrDatas, const uint16* pixels, int numChannel, math::uvec2& dim)
+		{
+			const auto& dimension = meta.getDimension();
+
+			uint32 widthSnapShot;
+			uint32 heightSnapShot;
+			snapshot::quantifyDim(widthSnapShot, heightSnapShot, dimension.x, dimension.y);
+
+			dim.x = widthSnapShot;
+			dim.y = heightSnapShot;
+
+			std::vector<uint16> snapshotData;
+			snapshotData.resize(widthSnapShot * heightSnapShot * numChannel);
+
+			stbir_resize_uint16_generic(
+				pixels,
+				dimension.x,
+				dimension.y,
+				0,
+				snapshotData.data(),
+				widthSnapShot,
+				heightSnapShot,
+				0,
+				numChannel,
+				numChannel == 4 ? 3 : STBIR_ALPHA_CHANNEL_NONE,
+				STBIR_FLAG_ALPHA_PREMULTIPLIED,
+				STBIR_EDGE_CLAMP,
+				STBIR_FILTER_DEFAULT,
+				STBIR_COLORSPACE_LINEAR,
+				nullptr
+			);
+
+			// Remap to 255.0f. maybe need tonemaper.
+			ldrDatas.resize(snapshotData.size());
+			for (size_t i = 0; i < ldrDatas.size(); i += 4)
+			{
+				ldrDatas[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
+				ldrDatas[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
+				ldrDatas[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
+				ldrDatas[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
+			}
+		}
+	}
+
+	bool IAsset::saveSnapShot(const math::uvec2& snapshot, const std::vector<uint8>& datas)
+	{
+		if (saveAsset(datas, ECompressionMode::Lz4, getSnapshotPath(), false))
+		{
+			m_snapshotDimension = snapshot;
+			markDirty();
+
+			return true;
+		}
+
+		return false;
+	}
+
+	GPUTextureAssetRef IAsset::getSnapshotImage()
+	{
+		if (auto cacheTexture = m_snapshotWeakPtr.lock())
+		{
+			return cacheTexture;
+		}
+
+		auto fallback = getContext().getBuiltinTextures().white;
+		if (m_snapshotDimension.x == 0 || m_snapshotDimension.y == 0)
+		{
+			return fallback;
+		}
+
+		auto imageCI = helper::buildBasicUploadImageCreateInfo(
+			m_snapshotDimension.x, 
+			m_snapshotDimension.y,
+			VK_FORMAT_R8G8B8A8_SRGB); // All snapshot is srgb encode.
+		
+		auto uploadVMACI = helper::buildVMAUploadImageAllocationCI();
+
+		auto assetPtr = shared_from_this();
+		auto textureAsset = std::make_shared<GPUTextureAsset>(
+			fallback.get(),
+			m_saveInfo.getSnapshotCachePath(),
+			imageCI,
+			uploadVMACI
+		);
+
+		getContext().getAsyncUploader().addTask(textureAsset->getSize(),
+			[textureAsset, assetPtr](uint32 offset, uint32 queueFamily, void* mapped, VkCommandBuffer cmd, VkBuffer buffer)
+			{
+				auto texture = textureAsset->getOwnHandle();
+				const auto range = helper::buildBasicImageSubresource();
+
+				{
+					std::vector<uint8> snapshotData{ };
+					if (!std::filesystem::exists(assetPtr->getSnapshotPath()))
+					{
+						checkEntry();
+					}
+					else
+					{
+						LOG_TRACE("Found snapshot for asset {} cache in disk so just load.",
+							utf8::utf16to8(assetPtr->getSaveInfo().relativeAssetStorePath().u16string()));
+
+						loadAsset(snapshotData, assetPtr->getSnapshotPath());
+					}
+					memcpy(mapped, snapshotData.data(), textureAsset->getSize());
+				}
+
+
+				textureAsset->prepareToUpload(cmd, queueFamily, range);
+				{
+					const auto destLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+					VkBufferImageCopy region{ };
+					region.bufferOffset = offset;
+					region.bufferRowLength = 0;
+					region.bufferImageHeight = 0;
+					region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+					region.imageSubresource.mipLevel = 0;
+					region.imageSubresource.baseArrayLayer = 0;
+					region.imageSubresource.layerCount = 1;
+					region.imageOffset = { 0, 0, 0 };
+					region.imageExtent = texture->getExtent();
+
+					vkCmdCopyBufferToImage(cmd, buffer, *texture, destLayout, 1, &region);
+				}
+
+				// Finish upload we change to graphics family.
+				textureAsset->finishUpload(cmd, getContext().getQueuesInfo().graphicsFamily.get(), range);
+			},
+			[textureAsset]() // Finish loading.
+			{
+				textureAsset->setLoadingState(false);
+			});
+
+		// Add in weak ptr.
+		m_snapshotWeakPtr = textureAsset;
+		return textureAsset;
+	}
+
+	void uiDrawImportConfig(TextureAssetImportConfigRef config)
+	{
+		ImGui::Spacing();
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+		ImGui::PushID(std::hash<std::filesystem::path>{}(config->storeFilePath));
+		ImGui::Indent();
+		{
+			std::string utf8Name = utf8::utf16to8(config->importFilePath.u16string());
+			std::string saveUtf8 = utf8::utf16to8(config->storeFilePath.u16string());
+
+			ImGui::TextDisabled(std::format("Load from: {}", utf8Name).c_str());
+			ImGui::TextDisabled(std::format("Save to: {}", saveUtf8).c_str());
+			ImGui::Spacing();
+
+			const float sizeLable = ImGui::GetFontSize();
+
+			if (ImGui::BeginTable("##ConfigTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders))
+			{
+				ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Is sRGB");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Checkbox("##SRGB", &config->bSRGB);
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Build Mipmap");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Checkbox("##MipMap", &config->bGenerateMipmap);
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Alpha Cutoff");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::SliderFloat("##AlphaCutoff", &config->alphaMipmapCutoff, 0.0f, 1.0f, "%.2f");
+
+				int formatValue = (int)config->format;
+
+				std::array<std::string, (size_t)ETextureFormat::MAX> formatList { };
+				std::array<const char*, (size_t)ETextureFormat::MAX> formatListChar{ };
+				for (size_t i = 0; i < formatList.size(); i++)
+				{
+					std::string prefix = (formatValue == i) ? "  * " : "    ";
+					formatList[i] = std::format("{0} {1}", prefix, nameof::nameof_enum(ETextureFormat(i)));
+					formatListChar[i] = formatList[i].c_str();
+				}
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Format");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Combo("##Format", &formatValue, formatListChar.data(), formatListChar.size());
+				config->format = ETextureFormat(formatValue);
+
+				ImGui::EndTable();
+			}
+		}
+		ImGui::Unindent();
+		ImGui::PopStyleVar();
+		ImGui::PopID();
+
+		ImGui::NewLine();
+		ImGui::Separator();
+	}
+
+	bool importFromConfig(TextureAssetImportConfigRef config)
+	{
+		const std::filesystem::path& srcPath = config->importFilePath;
+		const std::filesystem::path& savePath = config->storeFilePath;
+		const auto& projectPaths = Project::get().getPath();
+
+		auto& assetManager = Application::get().getAssetManager();
+		const auto& meta = TextureAsset::kAssetTypeMeta;
+
+		TextureAssetRef texturePtr;
+		{
+			const auto texPath = utf8::utf16to8(srcPath.u16string());
+
+			// Build texture ptr.
+			const auto name = savePath.filename().u16string() + utf8::utf8to16(meta.suffix);
+			const auto relativePath =
+				buildRelativePath(projectPaths.assetPath.u16(), savePath.parent_path());
+
+			// Create asset texture.
+			AssetSaveInfo saveInfo(name, relativePath);
+
+			texturePtr = assetManager.createAsset<TextureAsset>(saveInfo, true);
+		}
+		texturePtr->markDirty();
+
+		uint32 channelCount;
+		uint32 pixelSampleOffset;
+		getChannelCountOffset(channelCount, pixelSampleOffset, config->format);
+
+		auto importLdrTexture = [&]() -> bool
+		{
+			auto imageLdr = std::make_unique<ImageLdr2D>();
+			if (!imageLdr->fillFromFile(srcPath.string(), 4))
+			{
+				return false;
+			}
+
+			const int32 texWidth = imageLdr->getWidth();
+			const int32 texHeight = imageLdr->getHeight();
+
+			const auto* pixels = imageLdr->getPixels();
+
+			// Texture is power of two.
+			const bool bPOT = isPOT(texWidth) && isPOT(texHeight);
+
+			// Override mipmap state by texture dimension.
+			config->bGenerateMipmap = bPOT ? config->bGenerateMipmap : false;
+
+			// Only compressed bc when src image all dimension is small than 4.
+			const bool bCanCompressed = bPOT && (texWidth >= 4) && (texHeight >= 4);
+
+			texturePtr->initBasicInfo(
+				config->bSRGB,
+				config->bGenerateMipmap ? getMipLevelsCount(texWidth, texHeight) : 1U,
+				getFormatFromConfig(*config, bCanCompressed),
+				{ texWidth, texHeight, 1 },
+				config->alphaMipmapCutoff);
+
+			// Build snapshot.
+			{
+				math::uvec2 dimSnapshot;
+				std::vector<uint8> data{};
+
+				// NOTE: we current only use srgb for snapshot texture.
+				snapshot::build8bit(*texturePtr, data, (unsigned char*)pixels, 4, dimSnapshot);
+
+				texturePtr->saveSnapShot(dimSnapshot, data);
+			}
+
+			// Build mipmap.
+			{
+				TextureAssetBin bin{};
+				mipmap::buildMipmapData<uint8>(
+					channelCount, 
+					pixelSampleOffset, 
+					pixels, 
+					bin,
+					texturePtr->m_mipmapCount,
+					texturePtr->m_dimension.x,
+					texturePtr->m_dimension.y,
+					texturePtr->m_mipmapAlphaCutoff,
+					texturePtr->m_bSRGB);
+
+				switch (texturePtr->getFormat())
+				{
+				case VK_FORMAT_R8G8B8A8_UNORM:
+				case VK_FORMAT_R8G8B8A8_SRGB:
+				case VK_FORMAT_R8G8_UNORM:
+				{
+					// Do nothing.
+				}
+				break;
+				case VK_FORMAT_BC3_UNORM_BLOCK:
+				case VK_FORMAT_BC3_SRGB_BLOCK:
+				case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
+				case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+				case VK_FORMAT_BC5_UNORM_BLOCK:
+				case VK_FORMAT_BC4_UNORM_BLOCK:
+				{
+					check(bCanCompressed);
+					dxt::mipmapCompressBC(bin, *texturePtr);
+				}
+				break;
+				default: checkEntry();
+				}
+
+				saveAsset(bin, ECompressionMode::Lz4, texturePtr->getBinPath(), false);
+			}
+
+			return true;
+		};
+
+		auto importHalfTexture = [&]() -> bool
+		{
+			auto imageHalf = std::make_unique<ImageHalf2D>();
+			if (!imageHalf->fillFromFile(srcPath.string(), 4))
+			{
+				return false;
+			}
+
+			const auto* pixels = imageHalf->getPixels();
+
+			const int32 texWidth = imageHalf->getWidth();
+			const int32 texHeight = imageHalf->getHeight();
+
+			// Texture is power of two.
+			const bool bPOT = isPOT(texWidth) && isPOT(texHeight);
+
+			// Override mipmap state by texture dimension.
+			config->bGenerateMipmap = bPOT ? config->bGenerateMipmap : false;
+
+			// Only compressed bc when src image all dimension is small than 4.
+			const bool bCanCompressed = bPOT && (texWidth >= 4) && (texHeight >= 4);
+
+			texturePtr->initBasicInfo(
+				false, // No srgb for half texture.
+				config->bGenerateMipmap ? getMipLevelsCount(texWidth, texHeight) : 1U,
+				getFormatFromConfig(*config, bCanCompressed),
+				{ texWidth, texHeight, 1 },
+				config->alphaMipmapCutoff);
+
+			// Build snapshot.
+			{
+				math::uvec2 dimSnapshot;
+				std::vector<uint8> data{};
+
+				snapshot::build16bit(*texturePtr, data, pixels, 4, dimSnapshot);
+
+				texturePtr->saveSnapShot(dimSnapshot, data);
+			}
+
+			// Build mipmap.
+			{
+				TextureAssetBin bin{};
+				mipmap::buildMipmapData<uint16>(
+					channelCount,
+					pixelSampleOffset,
+					pixels,
+					bin,
+					texturePtr->m_mipmapCount,
+					texturePtr->m_dimension.x,
+					texturePtr->m_dimension.y,
+					texturePtr->m_mipmapAlphaCutoff,
+					texturePtr->m_bSRGB);
+
+				switch (texturePtr->getFormat())
+				{
+				case VK_FORMAT_R16G16B16A16_UNORM:
+				case VK_FORMAT_R16_UNORM:
+				{
+					// Do nothing.
+				}
+				break;
+				default: checkEntry();
+				}
+
+				saveAsset(bin, ECompressionMode::Lz4, texturePtr->getBinPath(), false);
+			}
+
+			return true;
+		};
+
+
+		bool bImportSucceed = false;
+		switch (config->format)
+		{
+		case ETextureFormat::R8G8B8A8:
+		case ETextureFormat::BC3:
+		case ETextureFormat::BC1:
+		case ETextureFormat::BC5:
+		case ETextureFormat::R8G8:
+		case ETextureFormat::Greyscale:
+		case ETextureFormat::R8:
+		case ETextureFormat::G8:
+		case ETextureFormat::B8:
+		case ETextureFormat::A8:
+		case ETextureFormat::BC4Greyscale:
+		case ETextureFormat::BC4R8:
+		case ETextureFormat::BC4G8:
+		case ETextureFormat::BC4B8:
+		case ETextureFormat::BC4A8:
+		{
+			bImportSucceed = importLdrTexture();
+			break;
+		}
+		case ETextureFormat::RGBA16Unorm:
+		case ETextureFormat::R16Unorm:
+		{
+			bImportSucceed = importHalfTexture();
+			break;
+		}
+		default:
+			checkEntry();
+		}
+
+		// Copy raw asset to project asset.
+		if (bImportSucceed)
+		{
+			auto copyDest = savePath.u16string() + srcPath.filename().extension().u16string();
+			checkMsgf(!std::filesystem::exists(copyDest), "Can't copy same resource multi times.");
+			std::filesystem::copy(srcPath, copyDest);
+			std::filesystem::path copyDestPath = copyDest;
+
+			texturePtr->m_rawAssetPath = buildRelativePath(projectPaths.assetPath.u16(), copyDestPath);
+		}
+
+		return texturePtr->save();
+	}
+
+	AssetTypeMeta TextureAsset::createTextureTypeMeta()
+	{
+		AssetTypeMeta result;
+		// 
+		result.name = "Texture";
+		result.icon = ui::fontIcon::image;
+		result.decoratedName = std::string("  ") + ui::fontIcon::image + "    Texture";
+
+		//
+		result.suffix = ".assettexture";
+
+		// Import config.
+		result.bImportable = true;
+		result.rawDataExtension = "jpg,jpeg,png,tga,exr;jpg,jpeg;png;tga;exr";
+		result.getAssetImportConfig = [] { return std::make_shared<TextureAssetImportConfig>(); };
+		result.uiDrawAssetImportConfig = [](IAssetImportConfigRef config)
+		{
+			uiDrawImportConfig(std::static_pointer_cast<TextureAssetImportConfig>(config));
+		};
+		result.importAssetFromConfig = [](IAssetImportConfigRef config)
+		{
+			return importFromConfig(std::static_pointer_cast<TextureAssetImportConfig>(config));
+		};
+
+		return result;
+	};
+
+}

@@ -14,6 +14,21 @@ chord::UUID chord::generateUUID()
 	return uuids::to_string(uuids::uuid_system_generator{}());
 }
 
+std::filesystem::path chord::buildStillNonExistPath(const std::filesystem::path& p)
+{
+	const std::u16string rawPath = p.u16string();
+	std::u16string pUnique = rawPath;
+	auto num = 1;
+
+	while (std::filesystem::exists(pUnique))
+	{
+		pUnique = rawPath + utf8::utf8to16(std::format("_{}", num));
+		num++;
+	}
+
+	return pUnique;
+}
+
 void chord::setConsoleTitle(const std::string& title)
 {
 	std::cout << "\033]0;" << title.c_str() << "\007";

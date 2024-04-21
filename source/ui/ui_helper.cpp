@@ -40,6 +40,53 @@ namespace chord::ui
 			ImGui::EndTooltip();
 		}
 	}
+
+	ImGuiPopupSelfManagedOpenState::ImGuiPopupSelfManagedOpenState(
+		const std::string& titleName,
+		ImGuiWindowFlags flags)
+		: m_flags(flags)
+		, m_popupName(titleName)
+	{
+
+	}
+
+	void ImGuiPopupSelfManagedOpenState::draw()
+	{
+		if (m_bShouldOpenPopup)
+		{
+			ImGui::OpenPopup(m_popupName.c_str());
+			m_bShouldOpenPopup = false;
+		}
+
+		bool state = m_bPopupOpenState;
+		if (ImGui::BeginPopupModal(m_popupName.c_str(), &m_bPopupOpenState, m_flags))
+		{
+			ImGui::PushID(m_uuid.c_str());
+
+			onDraw();
+
+			ImGui::PopID();
+			ImGui::EndPopup();
+		}
+
+		if (state != m_bPopupOpenState)
+		{
+			onClosed();
+		}
+	}
+
+	bool ImGuiPopupSelfManagedOpenState::open()
+	{
+		if (m_bShouldOpenPopup)
+		{
+			return false;
+		}
+
+		m_bShouldOpenPopup = true;
+		m_bPopupOpenState  = true;
+
+		return true;
+	}
 }
 
 

@@ -6,39 +6,90 @@
 
 namespace chord
 {
-	class ImageLdr2D : NonCopyable
+	template<class DataType>
+	class ImageGeneric
 	{
 	public:
-		explicit ImageLdr2D() = default;
-		virtual ~ImageLdr2D();
+		explicit ImageGeneric() = default;
+		virtual ~ImageGeneric()
+		{
+			clear();
+		}
 
-		void fillColor(RGBA c, int32 width = 1, int32 height = 1);
-		void fillChessboard(RGBA c0, RGBA c1, int32 width, int32 height, int32 blockDim);
-		bool fillFromFile(const std::string& path, int32 requiredComponent = 4);
-
-		auto getWidth() const { return m_width; }
-		auto getHeight() const { return m_height; }
+		auto getWidth() const { return m_dimension.x; }
+		auto getHeight() const { return m_dimension.y; }
+		auto getDepth() const { return m_dimension.z; }
 		auto getComponent() const { return m_component; }
 		auto getRequiredComponent() const { return m_requiredComponent; }
-		uint32 getSize() const { return m_width * m_height * m_requiredComponent; }
-		const auto* getPixels() const { return m_pixels.data(); }
-		SizedBuffer getSizeBuffer() const { return SizedBuffer(getSize(), (void*)getPixels()); }
-		bool isEmpty() const { return m_pixels.empty(); }
 
-	private:
-		void clear();
+		uint32 getSize() const 
+		{ 
+			return m_dimension.x * m_dimension.y * m_dimension.z * m_requiredComponent * sizeof(DataType);
+		}
 
-	private:
-		std::vector<uint8> m_pixels = { };
-		int32 m_width = 0;
-		int32 m_height = 0;
+		const auto* getPixels() const 
+		{
+			return m_pixels.data(); 
+		}
+
+		bool isEmpty() const 
+		{ 
+			return m_pixels.empty(); 
+		}
+
+		SizedBuffer getSizeBuffer() const
+		{ 
+			return SizedBuffer(getSize(), (void*)getPixels()); 
+		}
+
+	protected:
+		void clear()
+		{
+			m_dimension = { };
+			m_component = 0;
+			m_requiredComponent = 0;
+		}
+
+	protected:
+		math::ivec3 m_dimension;
+
+		//
 		int32 m_component = 0;
 		int32 m_requiredComponent = 0;
+
+		// 
+		std::vector<DataType> m_pixels = { };
 
 	public:
 		template<class Ar> void serialize(Ar& ar, uint32 ver)
 		{
-			ar(m_pixels, m_width, m_height, m_component, m_requiredComponent);
+			ar(m_pixels, m_dimension, m_component, m_requiredComponent);
+		}
+	};
+
+	class ImageLdr2D : public ImageGeneric<uint8>
+	{
+	public:
+		void fillColor(RGBA c, int32 width = 1, int32 height = 1);
+		void fillChessboard(RGBA c0, RGBA c1, int32 width, int32 height, int32 blockDim);
+		bool fillFromFile(const std::string& path, int32 requiredComponent = 4);
+
+	public:
+		template<class Ar> void serialize(Ar& ar, uint32 ver)
+		{
+			ar(cereal::base_class<ImageGeneric<uint8>>(this));
+		}
+	};
+
+	class ImageHalf2D : public ImageGeneric<uint16>
+	{
+	public:
+		bool fillFromFile(const std::string& path, int32 requiredComponent = 4);
+
+	public:
+		template<class Ar> void serialize(Ar& ar, uint32 ver)
+		{
+			ar(cereal::base_class<ImageGeneric<uint16>>(this));
 		}
 	};
 }

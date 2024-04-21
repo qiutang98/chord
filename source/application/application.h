@@ -8,11 +8,12 @@
 #include <utils/optional.h>
 #include <graphics/graphics.h>
 #include <utils/timer.h>
+#include <utils/threadpool.h>
 
 namespace chord
 {
 	class Engine;
-
+	class AssetManager;
 	namespace graphics
 	{
 		class Context;
@@ -90,6 +91,11 @@ namespace chord
 
 		Timer m_timer;
 
+		std::unique_ptr<ThreadPool> m_threadPool = nullptr;
+
+		// App asset manager.
+		std::unique_ptr<AssetManager> m_assetManager = nullptr;
+
 	public:
 		static Application& get();
 
@@ -101,6 +107,16 @@ namespace chord
 		const auto getRuntimePeriod() const
 		{
 			return m_runtimePeriod;
+		}
+
+		ThreadPool& getThreadPool() const
+		{
+			return *m_threadPool;
+		}
+
+		AssetManager& getAssetManager() const
+		{
+			return *m_assetManager;
 		}
 
 		// Init application.

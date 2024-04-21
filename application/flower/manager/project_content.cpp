@@ -2,6 +2,7 @@
 #include "../flower.h"
 
 #include <project.h>
+#include <asset/asset.h>
 
 using namespace chord;
 using namespace chord::graphics;
@@ -47,17 +48,64 @@ ImTextureID ProjectContentEntry::getSet(ImVec2& outUv0, ImVec2& outUv1)
 		const auto& builtinResources = Flower::get().getBuiltinTextures();
 		if (m_bFolder)
 		{
-			result = builtinResources.folderImage->requireView(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get();
+			result = builtinResources.folderImage->getSRV(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D);
+
+			uv0 = -kUvScale;
+			uv1 = 1.0f + kUvScale;
 		}
 		else
 		{
-			kUvScale.x = 0.2f;
-			kUvScale.y = 0.15f;
-			result = builtinResources.fileImage->requireView(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get();
-		}
+			std::filesystem::path path = m_path.u16();
+			auto& manager = Application::get().getAssetManager();
 
-		uv0 = -kUvScale;
-		uv1 = 1.0f + kUvScale;
+			bool bSetFound = false;
+			if (path.extension().string().starts_with(".asset"))
+			{
+				if (auto asset = manager.getOrLoadAsset<IAsset>(path, true))
+				{
+					auto snapshot = asset->getSnapshotImage();
+
+					// Add in lru cache.
+					Flower::get().getSnapshotCache().insert(asset->getSnapshotPath(), snapshot);
+
+					// Found SRV.
+					result = snapshot->getSRV(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D);
+
+					const auto w = snapshot->getReadyImage()->getExtent().width;
+					const auto h = snapshot->getReadyImage()->getExtent().height;
+
+					if (w < h)
+					{
+						uv0.x = 0.0f - (1.0f - float(w) / float(h)) * 0.5f;
+						uv1.x = 1.0f + (1.0f - float(w) / float(h)) * 0.5f;
+
+						uv0.y = -kUvScale.y;
+						uv1.y = 1.0f + kUvScale.y;
+
+					}
+					else if (w > h)
+					{
+						uv0.y = 0.0f - (1.0f - float(h) / float(w)) * 0.5f;
+						uv1.y = 1.0f + (1.0f - float(h) / float(w)) * 0.5f;
+
+						uv0.x = -kUvScale.x;
+						uv1.x = 1.0f + kUvScale.x;
+					}
+
+					bSetFound = true;
+				}
+			}
+			
+			if (!bSetFound)
+			{
+				kUvScale.x = 0.2f;
+				kUvScale.y = 0.15f;
+				result = builtinResources.fileImage->getSRV(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D);
+
+				uv0 = -kUvScale;
+				uv1 = 1.0f + kUvScale;
+			}
+		}
 	}
 
 	outUv0 = uv0;
@@ -75,7 +123,7 @@ void ProjectContentEntry::build(bool bRecursive)
 			const bool bFolder = std::filesystem::is_directory(entry);
 
 			// Only scan meta file.
-			const bool bSkip = (!bFolder) && (!entry.path().extension().string().starts_with(".meta"));
+			const bool bSkip = (!bFolder) && (!entry.path().extension().string().starts_with(".asset"));
 			if (!bSkip)
 			{
 				auto u16FileNameString = entry.path().filename().replace_extension().u16string();

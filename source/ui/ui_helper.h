@@ -7,6 +7,29 @@ namespace chord::ui
 	extern void hoverTip(const char* desc);
 	extern bool treeNodeEx(const char* idLabel, const char* showlabel, ImGuiTreeNodeFlags flags);
 
+	class ImGuiPopupSelfManagedOpenState
+	{
+	public:
+		explicit ImGuiPopupSelfManagedOpenState(
+			const std::string& titleName,
+			ImGuiWindowFlags flags);
+
+		void draw();
+		bool open();
+
+	protected:
+		virtual void onDraw() { }
+		virtual void onClosed() { }
+
+	private:
+		const UUID m_uuid = chord::generateUUID();
+
+		ImGuiWindowFlags m_flags;
+		std::string m_popupName;
+		bool m_bShouldOpenPopup = false;
+		bool m_bPopupOpenState  = true;
+	};
+
 	namespace fontIcon
 	{
 		constexpr const char* clone      = "\ue16f";
@@ -29,7 +52,8 @@ namespace chord::ui
 		constexpr const char* folder4    = "\ued42";
 		constexpr const char* folderopen = "\ued44";
 		constexpr const char* folderopen2 = "\ued25";
-
+		constexpr const char* image      = "\ue9d9";
+		constexpr const char* message2   = "\uec42";
 	}
 }
 

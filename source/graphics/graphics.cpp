@@ -16,6 +16,7 @@
 #include <ui/ui.h>
 #include <graphics/rendertargetpool.h>
 #include <graphics/bufferpool.h>
+#include <graphics/uploader.h>
 
 namespace chord::graphics
 {
@@ -64,6 +65,22 @@ namespace chord::graphics
 		"r.graphics.bufferpool.freeframecount",
 		sPoolBufferFreeFrameCount,
 		"Graphics buffer pool free frame count, min is 1, max is 10.",
+		EConsoleVarFlags::ProjectIni
+	);
+
+	static uint32 sAsyncUploaderStaticMaxSize = 8;
+	static AutoCVarRef<uint32> cVarAsyncUploaderStaticMaxSize(
+		"r.graphics.asyncuploader.staticmaxsize",
+		sAsyncUploaderStaticMaxSize,
+		"Async uploader static buffer max size (MB).",
+		EConsoleVarFlags::ProjectIni
+	);
+
+	static uint32 sAsyncUploaderDynamicMinSize = 6;
+	static AutoCVarRef<uint32> cVarAsyncUploaderDynamicMinSize(
+		"r.graphics.asyncuploader.dynamicminsize",
+		sAsyncUploaderDynamicMinSize,
+		"Async uploader dynamic buffer min size (MB).",
 		EConsoleVarFlags::ProjectIni
 	);
 
@@ -850,6 +867,8 @@ namespace chord::graphics
 				m_shaderLibrary->init();
 			}
 
+			m_asyncUploader = std::make_unique<AsyncUploaderManager>(sAsyncUploaderStaticMaxSize, sAsyncUploaderDynamicMinSize);
+
 			{
 				m_samplerManager = std::make_unique<GPUSamplerManager>();
 			}
@@ -858,6 +877,8 @@ namespace chord::graphics
 			m_bufferPool = std::make_unique<GPUBufferPool>(math::clamp(sPoolBufferFreeFrameCount, 1u, 10u));
 
 			initBuiltinTextures(); 
+
+
 
 			// Imgui manager init.
 			m_imguiManager = std::make_unique<ImGuiManager>();
@@ -871,6 +892,7 @@ namespace chord::graphics
 		// Update texture pool.
 		m_texturePool->tick(tickData);
 		m_bufferPool->tick(tickData);
+		m_asyncUploader->tick(tickData);
 
 		// Imgui new frame.
 		m_imguiManager->newFrame();
@@ -904,6 +926,7 @@ namespace chord::graphics
 
 	void Context::release()
 	{
+		m_asyncUploader.reset();
 		m_imguiManager.reset();
 
 		// Clear all builtin textures.
@@ -956,22 +979,28 @@ namespace chord::graphics
 
 		// Sync upload builtin textures.
 		{
-			m_builtinTextures.white = std::make_shared<GPUTexture>("Builtin::White", imageCI1x1, uploadVMACI);
+			auto white = std::make_shared<GPUTexture>("Builtin::White", imageCI1x1, uploadVMACI);
 
 			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kWhite.getData());
-			syncUploadTexture(*m_builtinTextures.white, buffer1x1);
+			syncUploadTexture(*white, buffer1x1);
+
+			m_builtinTextures.white = std::make_shared<GPUTextureAsset>(white);
 		}
 		{
-			m_builtinTextures.transparent = std::make_shared<GPUTexture>("Builtin::Transparent", imageCI1x1, uploadVMACI);
+			auto transparent = std::make_shared<GPUTexture>("Builtin::Transparent", imageCI1x1, uploadVMACI);
 
 			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kTransparent.getData());
-			syncUploadTexture(*m_builtinTextures.transparent, buffer1x1);
+			syncUploadTexture(*transparent, buffer1x1);
+
+			m_builtinTextures.transparent = std::make_shared<GPUTextureAsset>(transparent);
 		}
 		{
-			m_builtinTextures.black = std::make_shared<GPUTexture>("Builtin::Black", imageCI1x1, uploadVMACI);
+			auto black = std::make_shared<GPUTexture>("Builtin::Black", imageCI1x1, uploadVMACI);
 
 			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kBlack.getData());
-			syncUploadTexture(*m_builtinTextures.black, buffer1x1);
+			syncUploadTexture(*black, buffer1x1);
+
+			m_builtinTextures.black = std::make_shared<GPUTextureAsset>(black);
 		}
 	}
 

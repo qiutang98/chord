@@ -3,25 +3,38 @@
 #include <utils/utils.h>
 #include <asset/asset_common.h>
 #include <graphics/graphics.h>
+#include <utils/thread.h>
+#include <graphics/resource.h>
+#include <graphics/uploader.h>
 
 namespace chord
 {
+	class IAsset;
+
+	template<typename T>
+	void checkAssetDerivedType()
+	{
+		if constexpr (!std::is_same_v<T, IAsset>)
+		{
+			static_assert(std::is_constructible_v<T, const AssetSaveInfo&>);
+			static_assert(std::is_base_of_v<IAsset, T>);
+
+			T::kAssetTypeMeta;
+		}
+	}
+
+	// We always store asset meta data, bin data only load when required.
 	class IAsset : public std::enable_shared_from_this<IAsset>
 	{
+		REGISTER_BODY_DECLARE();
+		friend class AssetManager;
+
 	public:
-		explicit IAsset() = default;
+		IAsset() = default;
 		virtual ~IAsset() = default;
 
 		// 
 		explicit IAsset(const AssetSaveInfo& saveInfo);
-
-	public:
-		// ~IAsset virtual function.
-		virtual IAssetType& getType() const = 0;
-		virtual void onPostConstruct() = 0; // Call back when call AssetManager::createAsset
-		virtual graphics::GPUTextureRef getSnapshotImage();
-		virtual const std::string& getSuffix() const = 0; // Get suffix of asset.
-		// ~IAsset virtual function.
 
 	protected:
 		// ~IAsset virtual function.
@@ -30,24 +43,36 @@ namespace chord
 		// ~IAsset virtual function.
 
 	public:
+		graphics::GPUTextureAssetRef getSnapshotImage();
+
 		// Get shared ptr.
 		template<typename T> 
 		std::shared_ptr<T> ptr()
 		{
-			static_assert(std::is_base_of_v<IAsset, T>, "T must derive from IAsset!");
+			checkAssetDerivedType<T>();
 			return std::static_pointer_cast<T>(IAsset::shared_from_this());
 		}
 
 		// Save asset.
 		bool save();
 
+		// Save snapshot in disk, will change snapshot dimension.
+		bool saveSnapShot(const math::uvec2& snapshot, const std::vector<uint8>& datas);
+
+	protected:
+		// ~IAsset virtual function.
+		// Call back when call AssetManager::createAsset
+		virtual void onPostConstruct() = 0; 
+		// ~IAsset virtual function.
+
+		// Unload asset, only call from AssetManager.
 		void unload();
 
 	public:
 		// Get asset store path.
 		std::filesystem::path getStorePath() const 
 		{
-			return std::move(m_saveInfo.relativeAssetStorePath());
+			return m_saveInfo.relativeAssetStorePath();
 		}
 
 		const AssetSaveInfo& getSaveInfo() const
@@ -82,9 +107,15 @@ namespace chord
 		// Mark asset is dirty.
 		bool markDirty();
 
+		std::filesystem::path getSnapshotPath() const;
+		std::filesystem::path getBinPath() const;
+
 	private:
 		// Asset is dirty or not.
 		bool m_bDirty = false;
+
+		// Snapshot texture weak object pointer.
+		graphics::GPUTextureAssetWeak m_snapshotWeakPtr { };
 
 	protected:
 		// Asset save info.
@@ -93,28 +124,105 @@ namespace chord
 		// Raw asset save path relative to asset folder.
 		u16str m_rawAssetPath {};
 
-	public:
-		template<class Ar> void serialize(Ar& ar, uint32 ver)
-		{
-			ar(m_saveInfo, m_rawAssetPath);
-		}
+		// Snapshot dimension.
+		math::uvec2 m_snapshotDimension { 0, 0 };
 	};
+	using AssetRef = std::shared_ptr<IAsset>;
 
+	// Global events when asset mark dirty.
+	extern Events<IAsset, AssetRef> onAssetMarkDirtyEvents;
+
+	// Global events when asset saved.
+	extern Events<IAsset, AssetRef> onAssetSavedEvents;
+
+	// Global events when asset newly save to disk.
+	extern Events<IAsset, AssetRef> onAssetNewlySaveToDiskEvents;
+
+	// Global events when asset unload.
+	extern Events<IAsset, AssetRef> onAssetUnloadEvents;
+
+	// Engine asset manager.
 	class AssetManager : NonCopyable
 	{
 	public:
+		explicit AssetManager();
+
 		void setupProject();
 
 	private:
 		void setupProjectRecursive(const std::filesystem::path& path);
 
-		// Try load asset from path.
-		std::shared_ptr<IAsset> tryLoadAsset(const std::filesystem::path& savePath);
+		// Try load asset from path which store in disk.
+		AssetRef tryLoadAsset(const std::filesystem::path& savePath, bool bThreadSafe);
 
-		void insertAsset(const UUID& uuid, std::shared_ptr<AssetInterface> asset, bool bCareDirtyState);
+		// Register asset type.
+		void registerAsset(const AssetTypeMeta& type);
+
+	public:
+
+		template<typename T>
+		std::shared_ptr<T> getOrLoadAsset(const std::filesystem::path& savePath, bool bThreadSafe)
+		{
+			checkAssetDerivedType<T>();
+			return std::dynamic_pointer_cast<T>(tryLoadAsset(savePath, bThreadSafe));
+		}
+
+		template<typename T>
+		std::shared_ptr<T> createAsset(const AssetSaveInfo& saveInfo, bool bThreadSafe)
+		{
+			if (!bThreadSafe)
+			{
+				check(isInMainThread());
+			}
+
+			checkAssetDerivedType<T>();
+			const uint64 hash = saveInfo.hash();
+
+			std::shared_ptr<T> newAsset = nullptr;
+			{
+				auto lockScope = bThreadSafe
+					? std::unique_lock<std::mutex>(m_assetsMapMutex)
+					: std::unique_lock<std::mutex>();
+
+				check(!m_assets[hash] && "Don't create asset with same save info.");
+				newAsset = std::make_shared<T>(saveInfo);
+				m_assets[hash] = newAsset;
+			}
+
+			// Call post construct function.
+			newAsset->onPostConstruct();
+
+			// Return result.
+			return newAsset;
+		}
+
+		template<typename T>
+		void unload(std::shared_ptr<T> asset, bool bThreadSafe)
+		{
+			checkAssetDerivedType<T>();
+			const uint64 hash = asset->getSaveInfo().hash();
+
+			auto lockScope = bThreadSafe
+				? std::unique_lock<std::mutex>(m_assetsMapMutex)
+				: std::unique_lock<std::mutex>();
+
+			asset->unload();
+			m_assets.erase(hash);
+		}
+
+		// Get all exist asset type map.
+		const auto& getRegisteredAssetMap() const
+		{
+			return m_registeredAssetType;
+		}
+
 
 	protected:
+		std::unordered_map<std::string, const AssetTypeMeta*> m_registeredAssetType;
+
 		// Map store all engine assetes.
-		std::map<uint64, std::shared_ptr<IAsset>> m_assets;
+		mutable std::mutex m_assetsMapMutex;
+		std::map<uint64, AssetRef> m_assets;
 	};
 }
+

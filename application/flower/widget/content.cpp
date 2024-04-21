@@ -1,7 +1,13 @@
 #include "content.h"
 #include "../flower.h"
+#include "dockspace.h"
+
 #include <project.h>
 #include <ui/ui_helper.h>
+#include <asset/asset_common.h>
+#include <asset/asset.h>
+#include <nfd.h>
+#include "asset.h"
 
 using namespace chord::graphics;
 using namespace chord;
@@ -404,7 +410,59 @@ void WidgetContent::drawRightClickedMenu()
 
 void WidgetContent::drawAssetImport()
 {
-	// TODO:
+	ImGui::TextDisabled("Import  Assets:");
+	ImGui::Separator();
+
+	const auto& assetList = Application::get().getAssetManager().getRegisteredAssetMap();
+	for (auto& assetType : assetList)
+	{
+		const auto& assetMeta = assetType.second;
+		const auto& assetMetaName = assetType.first;
+
+		if (assetMeta->bImportable)
+		{
+			ImGui::PushID(assetMetaName.c_str());
+			{
+				if (ImGui::Selectable(assetMeta->decoratedName.c_str()))
+				{
+					nfdpathset_t pathSet;
+					nfdresult_t result = NFD_OpenDialogMultiple(assetMeta->rawDataExtension.c_str(), NULL, &pathSet);
+					if (result == NFD_OKAY)
+					{
+						const auto count = NFD_PathSet_GetCount(&pathSet);
+						if (count > 0)
+						{
+							auto& contentImport = Flower::get().getDockSpace().contentAssetImport;
+							if (contentImport.open())
+							{
+								check(contentImport.importConfigs.empty());
+								check(contentImport.typeName.empty());
+								contentImport.typeName = assetMetaName;
+
+								for (size_t i = 0; i < NFD_PathSet_GetCount(&pathSet); ++i)
+								{
+									nfdchar_t* path = NFD_PathSet_GetPath(&pathSet, i);
+									std::string utf8Path = path;
+
+									const std::filesystem::path u16Path = utf8::utf8to16(utf8Path);
+									auto folderPath = std::filesystem::path(m_activeFolder.lock()->getPath().u16()) / u16Path.filename().replace_extension();
+									folderPath = buildStillNonExistPath(folderPath);
+
+									auto config = assetMeta->getAssetImportConfig();
+									config->importFilePath = u16Path;
+									config->storeFilePath  = folderPath;
+
+									contentImport.importConfigs.push_back(config);
+								}
+							}
+						}
+						NFD_PathSet_Free(&pathSet);
+					}
+				}
+			}
+			ImGui::PopID();
+		}
+	}
 }
 
 void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef entry)
@@ -441,8 +499,10 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 				}
 				else
 				{
-					auto copyPath = entry->getPath();
-					// TODO:
+					std::filesystem::path copyPath = entry->getPath().u16();
+					{
+						Flower::get().getAssetConfigWidgetManager().openWidget(copyPath);
+					}
 				}
 			}
 

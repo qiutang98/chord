@@ -6,6 +6,7 @@
 #include <graphics/bindless.h>
 #include <graphics/pipeline.h>
 #include <graphics/rendertargetpool.h>
+#include <graphics/uploader.h>
 
 namespace chord::graphics
 {
@@ -52,9 +53,9 @@ namespace chord::graphics
 	class BuiltinTextures
 	{
 	public:
-		GPUTextureRef white = nullptr;       // 1x1 RGBA(255,255,255,255)
-		GPUTextureRef transparent = nullptr; // 1x1 RGBA(  0,  0,  0,  0)
-		GPUTextureRef black = nullptr;       // 1x1 RGBA(  0,  0,  0,255) 
+		GPUTextureAssetRef white = nullptr;       // 1x1 RGBA(255,255,255,255)
+		GPUTextureAssetRef transparent = nullptr; // 1x1 RGBA(  0,  0,  0,  0)
+		GPUTextureAssetRef black = nullptr;       // 1x1 RGBA(  0,  0,  0,255) 
 	};
 
 	class Context : NonCopyable
@@ -109,6 +110,9 @@ namespace chord::graphics
 
 		auto& getShaderLibrary() { return *m_shaderLibrary; }
 		const auto& getShaderLibrary() const { return *m_shaderLibrary; }
+
+		auto& getAsyncUploader() { return *m_asyncUploader; }
+		const auto& getAsyncUploader() const { return *m_asyncUploader; }
 
 		// Vulkan memory allocator handle.
 		VmaAllocator getVMA() const { return m_vmaAllocator; }
@@ -197,6 +201,8 @@ namespace chord::graphics
 		// Vulkan pipeline cache.
 		VkPipelineCache m_pipelineCache = VK_NULL_HANDLE;
 
+		std::mutex m_graphicsLock;
+
 		// VMA allocator.
 		VmaAllocator m_vmaAllocator = VK_NULL_HANDLE;
 		
@@ -220,6 +226,7 @@ namespace chord::graphics
 		std::unique_ptr<ImGuiManager> m_imguiManager = nullptr;
 		std::unique_ptr<GPUTexturePool> m_texturePool = nullptr;
 		std::unique_ptr<GPUBufferPool> m_bufferPool = nullptr;
+		std::unique_ptr<AsyncUploaderManager> m_asyncUploader = nullptr;
 	};
 
 	// Helper function save some time.

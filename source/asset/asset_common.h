@@ -1,16 +1,11 @@
 #pragma once
 
 #include <utils/utils.h>
+#include <utils/log.h>
 
 namespace chord
 {
-	enum class ECompressionMode
-	{
-		None,
-		Lz4,
 
-		MAX
-	};
 
 	// There are three type asset.
 	//	#0. Temp: newly created, no save in disk yet.
@@ -25,14 +20,21 @@ namespace chord
 		AssetSaveInfo() = default;
 		explicit AssetSaveInfo(const u16str& name, const u16str& storeFolder);
 
+		// Generate temp save info. NOTE: All non store in disk asset is temp.
 		static AssetSaveInfo buildTemp(const u16str& name);
+
+		// Generate builtin save info, also is temp file.
 		static AssetSaveInfo buildBuiltin(const std::string& name);
+
+		// Generate project asset relative path.
 		static AssetSaveInfo buildRelativeAsset(const std::filesystem::path& savePath);
 
 		// Default compare.
 		bool operator==(const AssetSaveInfo&) const = default;
 
 	public:
+		const uint64 hash() const;
+
 		// Temp asset folder start with "*".
 		bool isTemp() const;
 
@@ -68,10 +70,10 @@ namespace chord
 			return m_name.empty();
 		}
 
-		// Snapshot file cache path, not for temp.
+		// Snapshot file cache path hash name, not for temp.
 		std::string getSnapshotCachePath() const;
 
-		// Bin file cache path, not for temp.
+		// Bin file cache path hash name, not for temp.
 		std::string getBinCachePath() const;
 
 	private:
@@ -79,158 +81,37 @@ namespace chord
 		u16str m_storeFolder; // Asset store folder relative to project asset folder.
 
 	public:
-		template<class Ar> void serialize(Ar& ar, uint32 ver)
+		template<class Ar> void serialize(Ar& ar)
 		{
 			ar(m_name, m_storeFolder);
 		}
 	};
 
-	class AssetCompressedMeta
+	// Asset import config.
+	struct IAssetImportConfig
 	{
-	public:
-		ECompressionMode compressionMode;
-		int32 rawSize;
-		int32 compressionSize;
-
-		template<class Ar> void serialize(Ar& ar, uint32 ver)
-		{
-			ARCHIVE_ENUM_CLASS(compressionMode);
-			ar(rawSize, compressionSize);
-		}
+		std::filesystem::path importFilePath;
+		std::filesystem::path storeFilePath;
 	};
-
-	template<typename T>
-	static bool saveAsset(const T& in, ECompressionMode compressionMode, const std::filesystem::path& savePath, bool bRequireNoExist = true)
-	{
-		std::filesystem::path rawSavePath = savePath;
-		if (bRequireNoExist && std::filesystem::exists(rawSavePath))
-		{
-			LOG_ERROR("Meta data {} already exist, make sure never import save resource at same folder!",
-				utf8::utf16to8(rawSavePath.u16string()));
-			return false;
-		}
-
-		std::string rawData;
-		{
-			std::stringstream ss;
-			cereal::BinaryOutputArchive archive(ss);
-			archive(in);
-
-			// Exist copy construct.
-			rawData = std::move(ss.str());
-		}
-
-		AssetCompressedMeta meta;
-		meta.compressionMode = compressionMode;
-		meta.rawSize = (int32)rawData.size();
-
-		std::string compressedData;
-		if (compressionMode == ECompressionMode::Lz4)
-		{
-			compressedData.resize(LZ4_compressBound((int32)rawData.size()));
-			meta.compressionSize = LZ4_compress_default(
-				rawData.c_str(),
-				compressedData.data(),
-				(int32)rawData.size(),
-				(int32)compressedData.size());
-
-			compressedData.resize(meta.compressionSize);
-		}
-		else if (meta.compressionMode == ECompressionMode::None)
-		{
-			meta.compressionSize = meta.rawSize;
-			compressedData = std::move(rawData);
-		}
-		else
-		{
-			checkEntry();
-		}
-		check(compressedData.size() == meta.compressionSize);
-
-		{
-			std::ofstream os(rawSavePath, std::ios::binary);
-			cereal::BinaryOutputArchive archive(os);
-			archive(meta, compressedData);
-		}
-		return true;
-	}
-
-	template<typename T>
-	static bool loadAsset(T& out, const std::filesystem::path& savePath)
-	{
-		if (!std::filesystem::exists(savePath))
-		{
-			LOG_ERROR("Asset data {} miss!", utf8::utf16to8(savePath.u16string()));
-			return false;
-		}
-
-		AssetCompressedMeta meta;
-		std::string compressedData;
-		{
-			std::ifstream is(savePath, std::ios::binary);
-			cereal::BinaryInputArchive archive(is);
-			archive(meta, compressedData);
-
-			check(meta.compressionSize == compressedData.size());
-		}
-
-		// Allocate raw data memory.
-		std::string rawData;
-		if (meta.compressionMode == ECompressionMode::Lz4)
-		{
-			rawData.resize(meta.rawSize);
-
-			const int32 rawSize = LZ4_decompress_safe(compressedData.data(), rawData.data(), meta.compressionSize, meta.rawSize);
-			check(decompressSize == meta.rawSize);
-		}
-		else if (meta.compressionMode == ECompressionMode::None)
-		{
-			// Just move compression data to raw data.
-			rawData = std::move(compressedData);
-			check(meta.compressionSize == meta.rawSize);
-		}
-		else
-		{
-			checkEntry();
-		}
-
-		{
-			std::stringstream ss;
-			// Exist copy-construct.
-			ss << std::move(rawData);
-			cereal::BinaryInputArchive archive(ss);
-			archive(out)
-		}
-
-		return true;
-	}
-
+	using IAssetImportConfigRef = std::shared_ptr<IAssetImportConfig>;
 
 	// Asset type meta info, register in runtime.
-	class IAssetType
+	class AssetTypeMeta
 	{
 	public:
 		std::string name;
 		std::string icon;
 		std::string decoratedName;
 
+		// Store asset suffix.
+		std::string suffix;
+
 		// Asset import config.
-		struct
-		{
-			bool bImportable;
-			std::string rawDataExtension;
-		} importConfigs;
-	};
+		bool bImportable;
+		std::string rawDataExtension;
 
-	class AssetRegistry
-	{
-	public:
-		static AssetRegistry& get();
-
-	private:
-		explicit AssetRegistry() = default;
-
-	private:
-		std::unordered_map<const char*, std::unique_ptr<IAssetType>> m_registeredAssetType;
+		std::function<IAssetImportConfigRef()> getAssetImportConfig = nullptr;
+		std::function<void(IAssetImportConfigRef)> uiDrawAssetImportConfig = nullptr;
+		std::function<bool(IAssetImportConfigRef)> importAssetFromConfig = nullptr;
 	};
 }

@@ -29,7 +29,7 @@ namespace chord
 	AssetSaveInfo AssetSaveInfo::buildBuiltin(const std::string& name)
 	{
 		check(name.starts_with(kBuiltinFileStartChar));
-		return AssetSaveInfo(u16str(name), u16str(kTempFolderStartChar + generateUUID()));
+		return buildTemp(u16str(name));
 	}
 
 	AssetSaveInfo AssetSaveInfo::buildRelativeAsset(const std::filesystem::path& savePath)
@@ -41,6 +41,11 @@ namespace chord
 
 		const auto relativePath = buildRelativePath(Project::get().getPath().assetPath.u16(), saveFolder);
 		return AssetSaveInfo(fileName.u16string(), relativePath);
+	}
+
+	const uint64 AssetSaveInfo::hash() const
+	{
+		return hashCombine(m_name.hash(), m_storeFolder.hash());
 	}
 
 	bool AssetSaveInfo::isTemp() const
@@ -107,12 +112,6 @@ namespace chord
 	bool AssetSaveInfo::alreadyInDisk() const
 	{
 		return std::filesystem::exists(path());
-	}
-
-	AssetRegistry& AssetRegistry::get()
-	{
-		static AssetRegistry registry;
-		return registry;
 	}
 
 }
