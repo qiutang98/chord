@@ -138,6 +138,11 @@ namespace chord
 		// Application release.
 		void release();
 
+		void close()
+		{
+			m_windowData.bContinue = false;
+		}
+
 		inline const ImageLdr2D& getIcon() const 
 		{
 			return *m_icon; 

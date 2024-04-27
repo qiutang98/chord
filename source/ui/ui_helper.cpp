@@ -152,6 +152,20 @@ namespace chord::ui
 		}
 	}
 
+	bool ui::buttonCenteredOnLine(const char* label, math::vec2 widgetSize, float alignment)
+	{
+		ImGuiStyle& style = ImGui::GetStyle();
+
+		float size = widgetSize.x;
+		float avail = ImGui::GetContentRegionAvail().x;
+
+		float off = (avail - size) * alignment;
+		if (off > 0.0f)
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + off);
+
+		return ImGui::Button(label, widgetSize);
+	}
+
 	void ui::hoverTip(const char* desc)
 	{
 		if (ImGui::IsItemHovered())

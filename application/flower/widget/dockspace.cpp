@@ -81,6 +81,46 @@ void MainViewportDockspaceAndMenu::drawDockspaceMenu()
 {
     if (ImGui::BeginMenu("  FILE  "))
     {
+        auto& projectContent = Flower::get().getContentManager();
+        const bool bSceneDirty = !projectContent.getDirtyAsset<Scene>().empty();
+        if (ImGui::MenuItem(combineIcon("New Scene", ICON_FA_NONE).c_str()))
+        {
+            if (bSceneDirty)
+            {
+                if (sceneAssetSave.open())
+                {
+                    check(!sceneAssetSave.afterEventAccept);
+                    sceneAssetSave.afterEventAccept = []()
+                    {
+                        auto& sceneManager = Application::get().getEngine().getSubsystem<SceneManager>();
+                        sceneManager.releaseScene();
+                    };
+                }
+            }
+            else
+            {
+                Application::get().getEngine().getSubsystem<SceneManager>().releaseScene();
+            }
+        }
+
+        if (!bSceneDirty) { ImGui::BeginDisabled(); }
+        if (ImGui::MenuItem(combineIcon("Save Scene", ICON_FA_NONE).c_str()))
+        {
+            if (bSceneDirty)
+            {
+                sceneAssetSave.open();
+            }
+        }
+        if (!bSceneDirty) { ImGui::EndDisabled(); }
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem(combineIcon(" Exit", ICON_FA_POWER_OFF).c_str()))
+        {
+            Application::get().close();
+        }
+
+
 
         ImGui::EndMenu();
     }
@@ -197,8 +237,10 @@ void SceneAssetSaveWidget::onDraw()
     ImGui::NewLine();
 
     bool bAccept = false;
-
-    if (ImGui::Button("Save", ImVec2(120, 0)))
+    const auto buttonSize = ImVec2(6.0f * ImGui::GetFontSize(), 0.0f);
+    float curStartX = ImGui::GetCursorPos().x + ImGui::GetContentRegionAvail().x * 0.5f - (buttonSize.x + ImGui::GetItemSpacing() * 0.5f);
+    ImGui::SetCursorPosX(curStartX);
+    if (ImGui::Button("Save", buttonSize))
     {
         bAccept = true;
         if (m_bSelected)
@@ -258,7 +300,7 @@ void SceneAssetSaveWidget::onDraw()
 
     ImGui::SetItemDefaultFocus();
     ImGui::SameLine();
-    if (ImGui::Button("Discard", ImVec2(120, 0)))
+    if (ImGui::Button("Discard", buttonSize))
     {
         bAccept = true;
         if (m_bSelected)
@@ -269,6 +311,7 @@ void SceneAssetSaveWidget::onDraw()
             if (!saveInfo.isTemp())
             {
                 // Reload src scene in disk.
+                sceneManager.releaseScene();
                 sceneManager.loadScene(saveInfo.path());
             }
         }
@@ -284,6 +327,9 @@ void SceneAssetSaveWidget::onDraw()
         }
         onClosed();
     }
+
+    ImGui::Spacing();
+    ImGui::Spacing();
 }
 
 
@@ -317,8 +363,14 @@ void ContentAssetImportWidget::onDrawState()
     }
 
     bool bAccept = false;
+    const auto buttonSize = ImVec2(8.0f * ImGui::GetFontSize(), 0.0f);
 
-    if (ImGui::Button("OK", ImVec2(120, 0)))
+    
+
+    float curStartX = ImGui::GetCursorPos().x + ImGui::GetContentRegionAvail().x * 0.5f - (buttonSize.x + ImGui::GetItemSpacing() * 0.5f);
+    ImGui::SetCursorPosX(curStartX);
+
+    if (ImGui::Button("OK", buttonSize))
     {
         m_bImporting = true;
         {
@@ -355,7 +407,7 @@ void ContentAssetImportWidget::onDrawState()
 
     ImGui::SetItemDefaultFocus();
     ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(120, 0)))
+    if (ImGui::Button("Cancel", buttonSize))
     {
         bAccept = true;
         ImGui::CloseCurrentPopup();
@@ -369,6 +421,8 @@ void ContentAssetImportWidget::onDrawState()
         }
         onClosed();
     }
+    ImGui::Spacing();
+    ImGui::Spacing();
 }
 
 void ContentAssetImportWidget::onDrawImporting()

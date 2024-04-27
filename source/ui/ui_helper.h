@@ -10,6 +10,7 @@ namespace chord::ui
 	extern bool treeNodeEx(const char* idLabel, const char* showlabel, ImGuiTreeNodeFlags flags);
 	extern bool drawVector3(const std::string& label, math::vec3& values, const math::vec3& resetValue, float labelWidth);
 	extern void helpMarker(const char* desc);
+	extern bool buttonCenteredOnLine(const char* label, math::vec2 size, float alignment = 0.5f);
 
 	class ImGuiPopupSelfManagedOpenState
 	{
