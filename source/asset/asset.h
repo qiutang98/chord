@@ -141,6 +141,8 @@ namespace chord
 	// Global events when asset unload.
 	extern Events<IAsset, AssetRef> onAssetUnloadEvents;
 
+
+
 	// Engine asset manager.
 	class AssetManager : NonCopyable
 	{
@@ -158,8 +160,13 @@ namespace chord
 		// Register asset type.
 		void registerAsset(const AssetTypeMeta& type);
 
-	public:
+		// Removae asset from map.
+		AssetRef removeAsset(uint64 id);
 
+		// Insert asset to map.
+		void insertAsset(uint64 id, AssetRef asset);
+
+	public:
 		template<typename T>
 		std::shared_ptr<T> getOrLoadAsset(const std::filesystem::path& savePath, bool bThreadSafe)
 		{
@@ -186,11 +193,13 @@ namespace chord
 
 				check(!m_assets[hash] && "Don't create asset with same save info.");
 				newAsset = std::make_shared<T>(saveInfo);
-				m_assets[hash] = newAsset;
-			}
 
-			// Call post construct function.
-			newAsset->onPostConstruct();
+				// Call post construct function.
+				newAsset->onPostConstruct();
+
+				// Call insert asset first.
+				insertAsset(hash, newAsset);
+			}
 
 			// Return result.
 			return newAsset;
@@ -206,8 +215,9 @@ namespace chord
 				? std::unique_lock<std::mutex>(m_assetsMapMutex)
 				: std::unique_lock<std::mutex>();
 
+			// No only unload datas also erase all meta.
 			asset->unload();
-			m_assets.erase(hash);
+			removeAsset(hash);
 		}
 
 		// Get all exist asset type map.
@@ -216,6 +226,14 @@ namespace chord
 			return m_registeredAssetType;
 		}
 
+		AssetRef at(uint64 id) const
+		{
+			return m_assets.at(id);
+		}
+
+		bool changeSaveInfo(const AssetSaveInfo& newInfo, AssetRef asset);
+
+		void release();
 
 	protected:
 		std::unordered_map<std::string, const AssetTypeMeta*> m_registeredAssetType;
@@ -223,6 +241,10 @@ namespace chord
 		// Map store all engine assetes.
 		mutable std::mutex m_assetsMapMutex;
 		std::map<uint64, AssetRef> m_assets;
+		std::unordered_map<std::string, std::unordered_set<uint64>> m_classifiedAssets; // classify by save info extension.
 	};
+
+	extern Events<AssetManager, AssetRef> onAssetRemoveEvents;
+	extern Events<AssetManager, AssetRef> onAssetInsertEvents;
 }
 

@@ -43,20 +43,6 @@ namespace chord
 	public:
 	};
 
-	class ApplicationTickData
-	{
-	public:
-		uint64 tickCount;
-		double totalTime;
-
-		double fps;
-		double dt;
-
-		// Update persecond fps this frame or not.
-		bool bFpsUpdatedPerSecond;
-		double fpsUpdatedPerSecond;
-	};
-
 	class WindowData : NonCopyable
 	{
 	public:
@@ -95,6 +81,7 @@ namespace chord
 
 		// App asset manager.
 		std::unique_ptr<AssetManager> m_assetManager = nullptr;
+		std::unique_ptr<Engine> m_engine = nullptr;
 
 	public:
 		static Application& get();
@@ -117,6 +104,11 @@ namespace chord
 		AssetManager& getAssetManager() const
 		{
 			return *m_assetManager;
+		}
+
+		Engine& getEngine() const
+		{
+			return *m_engine;
 		}
 
 		// Init application.
@@ -170,6 +162,8 @@ namespace chord
 		{
 			return m_windowData;
 		}
+
+		void setMainWindowTitle(const std::string& name) const;
 
 		// Query main window framebuffer size.
 		void queryFramebufferSize(int32& width, int32& height) const;

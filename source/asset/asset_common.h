@@ -107,11 +107,14 @@ namespace chord
 		std::string suffix;
 
 		// Asset import config.
-		bool bImportable;
-		std::string rawDataExtension;
+		struct
+		{
+			bool bImportable;
+			std::string rawDataExtension;
 
-		std::function<IAssetImportConfigRef()> getAssetImportConfig = nullptr;
-		std::function<void(IAssetImportConfigRef)> uiDrawAssetImportConfig = nullptr;
-		std::function<bool(IAssetImportConfigRef)> importAssetFromConfig = nullptr;
+			std::function<IAssetImportConfigRef()> getAssetImportConfig = nullptr;
+			std::function<void(IAssetImportConfigRef)> uiDrawAssetImportConfig = nullptr;
+			std::function<bool(IAssetImportConfigRef)> importAssetFromConfig = nullptr;
+		} importConfig;
 	};
 }

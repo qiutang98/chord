@@ -15,4 +15,10 @@
 #include <utils/lru.h>
 #include <graphics/resource.h>
 
+#include <scene/scene.h>
+#include <scene/scene_manager.h>
+#include <scene/scene_node.h>
+#include <scene/component/transform.h>
+#include <project.h>
+
 constexpr chord::uint32 kMultiWidgetMaxNum = 4;

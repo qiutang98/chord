@@ -12,6 +12,9 @@ namespace chord
 	Events<IAsset, AssetRef> onAssetNewlySaveToDiskEvents;
 	Events<IAsset, AssetRef> onAssetUnloadEvents;
 
+	Events<AssetManager, AssetRef> onAssetRemoveEvents;
+	Events<AssetManager, AssetRef> onAssetInsertEvents;
+
 	IAsset::IAsset(const AssetSaveInfo& saveInfo)
 		: m_saveInfo(saveInfo)
 	{
@@ -86,14 +89,14 @@ namespace chord
 	AssetManager::AssetManager()
 	{
 		registerAsset(TextureAsset::kAssetTypeMeta);
+		registerAsset(Scene::kAssetTypeMeta);
 	}
 
 	void AssetManager::setupProject()
 	{
 		check(Project::get().isSetup());
 
-		// Clear all cache assets before setup project.
-		m_assets.clear();
+		release();
 		
 		// Build from asset path recursive.
 		setupProjectRecursive(Project::get().getPath().assetPath.u16());
@@ -142,8 +145,7 @@ namespace chord
 				// Load asset from disk.
 				check(chord::loadAsset(result, savePath));
 
-				// Update in map.
-				m_assets[hash] = result;
+				insertAsset(hash, result);
 			}
 		}
 		return result;
@@ -153,5 +155,58 @@ namespace chord
 	{
 		check(m_registeredAssetType[type.name] == nullptr);
 		m_registeredAssetType[type.name] = &type;
+	}
+
+	AssetRef AssetManager::removeAsset(uint64 id)
+	{
+		if (m_assets.contains(id))
+		{
+			auto asset = m_assets[id];
+			onAssetRemoveEvents.broadcast(asset);
+
+			auto savePath = asset->getSaveInfo().path();
+			m_assets.erase(id);
+			m_classifiedAssets[savePath.extension().string()].erase(id);
+
+			return asset;
+		}
+
+		return nullptr;
+	}
+
+	void AssetManager::insertAsset(uint64 id, AssetRef asset)
+	{
+		auto savePath = asset->getSaveInfo().path();
+
+		m_assets[id] = asset;
+		m_classifiedAssets[savePath.extension().string()].insert(id);
+
+		onAssetInsertEvents.broadcast(asset);
+	}
+
+	bool AssetManager::changeSaveInfo(const AssetSaveInfo& newInfo, AssetRef asset)
+	{
+		if (newInfo == asset->getSaveInfo())
+		{
+			return false;
+		}
+
+		check(m_assets.at(asset->getSaveInfo().hash()));
+		check(!m_assets.contains(newInfo.hash()));
+
+		removeAsset(asset->getSaveInfo().hash());
+
+		asset->m_saveInfo = newInfo;
+		insertAsset(newInfo.hash(), asset);
+
+		asset->markDirty();
+		return true;
+	}
+
+	void AssetManager::release()
+	{
+		// Clear all cache assets before setup project.
+		m_assets.clear();
+		m_classifiedAssets.clear();
 	}
 }

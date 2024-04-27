@@ -13,12 +13,12 @@ using namespace chord::graphics;
 using namespace chord;
 using namespace chord::ui;
 
-static const std::string kIconContentImport  = fontIcon::fileIn  + utf8::utf16to8(u" 导入");
-static const std::string kIconContentNew     = fontIcon::newFile + utf8::utf16to8(u" 新建");
-static const std::string kIconContentSave    = fontIcon::save    + utf8::utf16to8(u" 保存");
-static const std::string kIconContentSaveAll = fontIcon::saveall + utf8::utf16to8(u" 全部保存");
-static constexpr const char* kIconContentSearch  = fontIcon::magnifying;
-static constexpr const char* kIconContentTitle   = fontIcon::folder2;
+static const std::string kIconContentImport  = ICON_FA_FILE_IMPORT + utf8::utf16to8(u" 导入");
+static const std::string kIconContentNew     = ICON_FA_FILE_CIRCLE_PLUS + utf8::utf16to8(u" 新建");
+static const std::string kIconContentSave    = ICON_FA_FILE_EXPORT + utf8::utf16to8(u" 保存");
+static const std::string kIconContentSaveAll = ICON_FA_FILE_SIGNATURE + utf8::utf16to8(u" 全部保存");
+static constexpr const char* kIconContentSearch  = ICON_FA_MAGNIFYING_GLASS;
+static constexpr const char* kIconContentTitle   = ICON_FA_FOLDER_CLOSED;
 
 static constexpr const char* kRightClickedMenuName = "##RightClickedMenu";
 
@@ -86,12 +86,12 @@ void WidgetContent::setActiveEntry(ProjectContentEntryRef entry)
 
 
 
-void WidgetContent::onTick(const chord::ApplicationTickData& tickData)
+void WidgetContent::onTick(const ApplicationTickData& tickData)
 {
 
 }
 
-void WidgetContent::onVisibleTick(const chord::ApplicationTickData& tickData)
+void WidgetContent::onVisibleTick(const ApplicationTickData& tickData)
 {
 	ImGui::Separator();
 	{
@@ -280,28 +280,27 @@ void WidgetContent::drawContentTreeView(ProjectContentEntryRef entry)
 
 	// Add icon decorate.
 	std::string showName = entry->getName().u8();
-	constexpr const char* padStr = "  ";
 	if (entry->isFoleder())
 	{
 		if (entry->isChildrenEmpty())
 		{
-			showName = std::string(fontIcon::folder3) + padStr + showName;
+			showName = ICON_FA_FOLDER_CLOSED"  " + showName;
 		}
 		else
 		{
 			if (m_openedEntry.contains(entry->getHashId()))
 			{
-				showName = std::string(fontIcon::folderopen) + padStr + showName; // Open.
+				showName = ICON_FA_FOLDER_OPEN"  " + showName;
 			}
 			else
 			{
-				showName = std::string(fontIcon::folder4) + padStr + showName;
+				showName = ICON_FA_FOLDER_CLOSED"  " + showName;
 			}
 		}
 	}
 	else
 	{
-		showName = std::string(fontIcon::file2) + padStr + showName;
+		showName = ICON_FA_FILE"  " + showName;
 	}
 
 	// Draw tree node.
@@ -363,11 +362,11 @@ void WidgetContent::drawRightClickedMenu()
 	ImGui::TextDisabled("Assets Menu");
 	ImGui::Separator();
 
-	static const std::string kNewItemName    = fontIcon::newFile + utf8::utf16to8(u"  新建 ...");
-	static const std::string kImportItemName = fontIcon::fileIn  + utf8::utf16to8(u"  导入 ...");
-	static const std::string kCopyItemName   = fontIcon::clone   + utf8::utf16to8(u"  复制");
-	static const std::string kPasteItemName  = fontIcon::paste + utf8::utf16to8(u"  粘贴");
-	static const std::string kDeleteItemName = fontIcon::trashCan + utf8::utf16to8(u"  删除");
+	static const std::string kNewItemName = combineIcon("New ...", ICON_FA_NONE);
+	static const std::string kImportItemName = combineIcon("Import ...", ICON_FA_NONE);
+	static const std::string kCopyItemName = combineIcon("Copy      ", ICON_FA_COPY);
+	static const std::string kPasteItemName = combineIcon("Paste      ", ICON_FA_PASTE);
+	static const std::string kDeleteItemName = combineIcon("Delete      ", ICON_FA_NONE);
 
 	const bool bSingleSelected = getSelections().num() == 1;
 	const bool bSingleFolderSelected = getSelections().getSelections().at(0).entry.lock()->isFoleder();
@@ -406,6 +405,8 @@ void WidgetContent::drawRightClickedMenu()
 	{
 
 	}
+
+	ImGui::Separator();
 }
 
 void WidgetContent::drawAssetImport()
@@ -418,15 +419,16 @@ void WidgetContent::drawAssetImport()
 	{
 		const auto& assetMeta = assetType.second;
 		const auto& assetMetaName = assetType.first;
+		const auto& importConfig = assetMeta->importConfig;
 
-		if (assetMeta->bImportable)
+		if (importConfig.bImportable)
 		{
 			ImGui::PushID(assetMetaName.c_str());
 			{
 				if (ImGui::Selectable(assetMeta->decoratedName.c_str()))
 				{
 					nfdpathset_t pathSet;
-					nfdresult_t result = NFD_OpenDialogMultiple(assetMeta->rawDataExtension.c_str(), NULL, &pathSet);
+					nfdresult_t result = NFD_OpenDialogMultiple(importConfig.rawDataExtension.c_str(), NULL, &pathSet);
 					if (result == NFD_OKAY)
 					{
 						const auto count = NFD_PathSet_GetCount(&pathSet);
@@ -448,7 +450,7 @@ void WidgetContent::drawAssetImport()
 									auto folderPath = std::filesystem::path(m_activeFolder.lock()->getPath().u16()) / u16Path.filename().replace_extension();
 									folderPath = buildStillNonExistPath(folderPath);
 
-									auto config = assetMeta->getAssetImportConfig();
+									auto config = importConfig.getAssetImportConfig();
 									config->importFilePath = u16Path;
 									config->storeFilePath  = folderPath;
 
@@ -500,6 +502,27 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 				else
 				{
 					std::filesystem::path copyPath = entry->getPath().u16();
+
+					if (copyPath.extension().string() == Scene::kAssetTypeMeta.suffix)
+					{
+						
+						if (!Flower::get().getContentManager().getDirtyAsset<Scene>().empty())
+						{
+							if (Flower::get().getDockSpace().sceneAssetSave.open())
+							{
+								check(!Flower::get().getDockSpace().sceneAssetSave.afterEventAccept);
+								Flower::get().getDockSpace().sceneAssetSave.afterEventAccept = [copyPath]()
+								{
+									Application::get().getEngine().getSubsystem<SceneManager>().loadScene(copyPath);
+								};
+							}
+						}
+						else
+						{
+							Application::get().getEngine().getSubsystem<SceneManager>().loadScene(copyPath);
+						}
+					}
+					else
 					{
 						Flower::get().getAssetConfigWidgetManager().openWidget(copyPath);
 					}

@@ -10,7 +10,7 @@ namespace chord
 	class SubsystemTickData
 	{
 	public:
-		uint64 tickCount = 0;
+		ApplicationTickData appTickDaata;
 	};
 
 	class ISubsystem : NonCopyable

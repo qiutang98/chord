@@ -25,6 +25,7 @@ ProjectContentEntry::ProjectContentEntry(
 	, m_path(path.u16string())
 	, m_parent(parent)
 	, m_tree(tree)
+	, m_bDirty(false)
 {
 	// Add in hash map.
 	tree.m_entryMap[path] = this;
@@ -66,7 +67,8 @@ ImTextureID ProjectContentEntry::getSet(ImVec2& outUv0, ImVec2& outUv1)
 					auto snapshot = asset->getSnapshotImage();
 
 					// Add in lru cache.
-					Flower::get().getSnapshotCache().insert(asset->getSnapshotPath(), snapshot);
+					Flower::get().getContentManager().getSnapshotCache().insert(asset->getSnapshotPath(), snapshot);
+					Flower::get().markAssetUsed(snapshot);
 
 					// Found SRV.
 					result = snapshot->getSRV(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D);
@@ -158,6 +160,23 @@ void ProjectContentEntry::build(bool bRecursive)
 	}
 }
 
+void ProjectContentEntry::update()
+{
+	if (m_bDirty)
+	{
+		m_children.clear();
+		build(true);
+		m_bDirty = false;
+	}
+	else
+	{
+		for (auto& child : m_children)
+		{
+			child->update();
+		}
+	}
+}
+
 ProjectContentEntryTree::~ProjectContentEntryTree()
 {
 	release();
@@ -187,22 +206,83 @@ void ProjectContentEntryTree::build()
 	m_root->build(true);
 }
 
+void ProjectContentEntryTree::update()
+{
+	m_root->update();
+}
+
 ProjectContentManager::ProjectContentManager()
 {
+	m_assetManager = &Application::get().getAssetManager();
+
+	// 16 MB snapshot cache, per snapshot is 64 KB, max cache 256.
+	// release 16 snapshot when prune.
+	m_snapshots = new SnapshotCache("FlowerSnapshotCache", 16, 1);
+
 	// Build asset tree.
 	m_assetTree.build();
 
 	// Call event after build.
 	onTreeUpdate.broadcast(m_assetTree);
+
+	auto* ptr = this;
+	m_onAssetNewlySavedHandle = onAssetNewlySaveToDiskEvents.add([ptr](AssetRef asset)
+	{
+		ptr->m_assetTree.getClosetFolder(asset)->markDirty();
+		Flower::get().onceEventAfterTick.add([ptr](const chord::ApplicationTickData&)
+		{ 
+			ptr->m_assetTree.update(); 
+		});
+	});
+
+	m_onAssetDirtyHandle = onAssetMarkDirtyEvents.add([this](AssetRef asset)
+	{
+		m_dirtyAssets.insert(asset->getSaveInfo().hash());
+	});
+
+	m_onAssetSavedHandle = onAssetSavedEvents.add([this](AssetRef asset)
+	{
+		m_dirtyAssets.erase(asset->getSaveInfo().hash());
+	});
+
+	m_onAssetRemoveHandle = onAssetRemoveEvents.add([this](AssetRef asset)
+	{
+		m_dirtyAssets.erase(asset->getSaveInfo().hash());
+	});
+
+	m_onAssetInsertHandle = onAssetInsertEvents.add([this](AssetRef asset)
+	{
+		if(asset->isDirty())
+		{
+			m_dirtyAssets.insert(asset->getSaveInfo().hash());
+		}
+	});
 }
 
 ProjectContentManager::~ProjectContentManager()
 {
-	
+	check(onAssetNewlySaveToDiskEvents.remove(m_onAssetNewlySavedHandle));
+	check(onAssetMarkDirtyEvents.remove(m_onAssetDirtyHandle));
+	check(onAssetSavedEvents.remove(m_onAssetSavedHandle));
+	check(onAssetRemoveEvents.remove(m_onAssetRemoveHandle));
+	check(onAssetInsertEvents.remove(m_onAssetInsertHandle));
+
+	if (m_snapshots)
+	{
+		delete m_snapshots;
+		m_snapshots = nullptr;
+	}
 }
 
-void ProjectContentManager::tick(const chord::ApplicationTickData& tickData)
+ProjectContentEntry* ProjectContentEntryTree::getClosetFolder(chord::AssetRef asset) const
 {
+	std::filesystem::path storeFolder = Project::get().getPath().assetPath.u16();
+	storeFolder /= asset->getSaveInfo().getStoreFolder().u16();
+	
+	while (!m_entryMap.contains(storeFolder))
+	{
+		storeFolder = storeFolder.parent_path();
+	}
 
-
+	return m_entryMap.at(storeFolder);
 }

@@ -9,10 +9,10 @@ using namespace chord::ui;
 
 #pragma warning(disable: 4996)
 
-constexpr const char* kIconConsoleClone  = fontIcon::clone;
-constexpr const char* kIconConsoleClear  = fontIcon::threePoint;
-constexpr const char* kIconConsoleTitle  = fontIcon::console;
-constexpr const char* kIconConsoleFilter = fontIcon::magnifying;
+constexpr const char* kIconConsoleClone  = ICON_FA_COPY;
+constexpr const char* kIconConsoleClear  = ICON_FA_NONE;
+constexpr const char* kIconConsoleTitle  = ICON_FA_COMMENT;
+constexpr const char* kIconConsoleFilter = ICON_FA_MAGNIFYING_GLASS;
 
 static inline bool isConsoleEditable(EConsoleVarFlags flags)
 {

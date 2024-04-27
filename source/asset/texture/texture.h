@@ -77,7 +77,7 @@ namespace chord
 		}
 
 	private:
-		static AssetTypeMeta createTextureTypeMeta();
+		static AssetTypeMeta createTypeMeta();
 
 		void initBasicInfo(
 			bool bSrgb,

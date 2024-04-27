@@ -152,6 +152,20 @@ namespace chord
 	// Asset version control all asset.
 	extern const uint32 kAssetVersion;
 
+	class ApplicationTickData
+	{
+	public:
+		uint64 tickCount;
+		double totalTime;
+
+		double fps;
+		double dt;
+
+		// Update persecond fps this frame or not.
+		bool bFpsUpdatedPerSecond;
+		double fpsUpdatedPerSecond;
+	};
+
 	// 
 	enum class ERuntimePeriod
 	{
@@ -188,6 +202,11 @@ namespace chord
 		bool operator==(const u16str& lhs) const
 		{
 			return m_u16str == lhs.m_u16str;
+		}
+
+		bool operator<(const u16str& lhs) const
+		{
+			return m_u16str < lhs.m_u16str;
 		}
 
 		operator const std::u16string&() const
@@ -473,4 +492,9 @@ namespace chord
 	}
 
 	extern std::filesystem::path buildStillNonExistPath(const std::filesystem::path& p);
+
+
+	// From https://github.com/TheCherno/Hazel/blob/master/Hazel/src/Hazel/Math/Math.cpp
+	extern bool decomposeTransform(const math::mat4& transform, math::vec3& translation, math::vec3& rotation, math::vec3& scale);
+
 }

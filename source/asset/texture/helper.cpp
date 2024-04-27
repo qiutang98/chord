@@ -698,10 +698,11 @@ namespace chord
 
 						loadAsset(snapshotData, assetPtr->getSnapshotPath());
 					}
-					memcpy(mapped, snapshotData.data(), textureAsset->getSize());
+					check(snapshotData.size() <= textureAsset->getSize());
+					memcpy(mapped, snapshotData.data(), snapshotData.size());
 				}
 
-
+				
 				textureAsset->prepareToUpload(cmd, queueFamily, range);
 				{
 					const auto destLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -1042,29 +1043,32 @@ namespace chord
 		return texturePtr->save();
 	}
 
-	AssetTypeMeta TextureAsset::createTextureTypeMeta()
+	AssetTypeMeta TextureAsset::createTypeMeta()
 	{
 		AssetTypeMeta result;
 		// 
 		result.name = "Texture";
-		result.icon = ui::fontIcon::image;
-		result.decoratedName = std::string("  ") + ui::fontIcon::image + "    Texture";
+		result.icon = ICON_FA_IMAGE;
+		result.decoratedName = std::string("  ") + ICON_FA_IMAGE + "    Texture";
 
 		//
 		result.suffix = ".assettexture";
 
 		// Import config.
-		result.bImportable = true;
-		result.rawDataExtension = "jpg,jpeg,png,tga,exr;jpg,jpeg;png;tga;exr";
-		result.getAssetImportConfig = [] { return std::make_shared<TextureAssetImportConfig>(); };
-		result.uiDrawAssetImportConfig = [](IAssetImportConfigRef config)
 		{
-			uiDrawImportConfig(std::static_pointer_cast<TextureAssetImportConfig>(config));
-		};
-		result.importAssetFromConfig = [](IAssetImportConfigRef config)
-		{
-			return importFromConfig(std::static_pointer_cast<TextureAssetImportConfig>(config));
-		};
+			result.importConfig.bImportable = true;
+			result.importConfig.rawDataExtension = "jpg,jpeg,png,tga,exr;jpg,jpeg;png;tga;exr";
+			result.importConfig.getAssetImportConfig = [] { return std::make_shared<TextureAssetImportConfig>(); };
+			result.importConfig.uiDrawAssetImportConfig = [](IAssetImportConfigRef config)
+			{
+				uiDrawImportConfig(std::static_pointer_cast<TextureAssetImportConfig>(config));
+			};
+			result.importConfig.importAssetFromConfig = [](IAssetImportConfigRef config)
+			{
+				return importFromConfig(std::static_pointer_cast<TextureAssetImportConfig>(config));
+			};
+		}
+
 
 		return result;
 	};

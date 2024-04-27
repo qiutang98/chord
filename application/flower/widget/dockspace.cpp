@@ -1,14 +1,20 @@
 #include "dockspace.h"
 #include "console.h"
+#include "../manager/project_content.h"
+#include "../flower.h"
 
+#include <project.h>
 #include <asset/asset.h>
+#include <scene/scene_manager.h>
+#include <nfd.h>
 
 using namespace chord;
 using namespace chord::graphics;
 
 MainViewportDockspaceAndMenu::MainViewportDockspaceAndMenu()
 	: IWidget("MainViewportDockspaceAndMenu", "MainViewportDockspaceAndMenu")
-    , contentAssetImport(combineIcon("Imported assets config...", ui::fontIcon::message2))
+    , sceneAssetSave(combineIcon("Save edited scenes...", ICON_FA_MESSAGE))
+    , contentAssetImport(combineIcon("Imported assets config...", ICON_FA_MESSAGE))
 {
     m_bShow = false;
 }
@@ -67,7 +73,7 @@ void MainViewportDockspaceAndMenu::onTick(const chord::ApplicationTickData& tick
         ImGui::End();
     }
 
-
+    sceneAssetSave.draw();
     contentAssetImport.draw();
 }
 
@@ -123,11 +129,163 @@ void MainViewportDockspaceAndMenu::drawDockspaceMenu()
 
     if (ImGui::BeginMenu("  HELP  "))
     {
+        if (ImGui::MenuItem(combineIcon(" About", ICON_FA_CIRCLE_QUESTION).c_str()))
+        {
 
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem(combineIcon("Developer", ICON_FA_NONE).c_str()))
+        {
+
+        }
+
+        if (ImGui::MenuItem(combineIcon("SDKs", ICON_FA_NONE).c_str()))
+        {
+
+        }
         ImGui::EndMenu();
     }
     ImGui::Separator();
 }
+
+SceneAssetSaveWidget::SceneAssetSaveWidget(const std::string& titleName)
+    : ImGuiPopupSelfManagedOpenState(titleName, ImGuiWindowFlags_AlwaysAutoResize)
+{
+
+}
+
+void SceneAssetSaveWidget::onDraw()
+{
+    auto& projectContent = Flower::get().getContentManager();
+    auto& sceneManager = Application::get().getEngine().getSubsystem<SceneManager>();
+
+    auto scenes = projectContent.getDirtyAsset<Scene>();
+
+    // Current only support one scene edit.
+    check(scenes.size() == 1);
+    auto& scene = scenes[0];
+
+    const bool bTemp = scene->getSaveInfo().isTemp();
+
+    if (m_processingAsset != scene->getSaveInfo())
+    {
+        m_processingAsset = scene->getSaveInfo();
+        m_bSelected = true;
+    }
+
+
+
+    ImGui::TextDisabled("Scene still un-save after edited, please decide discard or save.");
+    ImGui::NewLine();
+    ImGui::Indent();
+    {
+        std::string showName = scene->kAssetTypeMeta.decoratedName + ":  " + scene->getName().u8() +
+            (bTemp ? "*  (Created)" : "*  (Edited)");
+
+        if (bTemp) ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor::HSV(0.15f, 0.6f, 1.0f));
+        {
+            ImGui::Checkbox("##HideCheckBox", &m_bSelected); ImGui::SameLine();
+            ImGui::Selectable(showName.c_str(), &m_bSelected, ImGuiSelectableFlags_DontClosePopups);
+        }
+        if (bTemp) ImGui::PopStyleColor();
+    }
+    ImGui::Unindent();
+    ImGui::NewLine();
+    ImGui::NewLine();
+    ImGui::NewLine();
+
+    bool bAccept = false;
+
+    if (ImGui::Button("Save", ImVec2(120, 0)))
+    {
+        bAccept = true;
+        if (m_bSelected)
+        {
+            if (bTemp)
+            {
+                std::string path;
+
+   
+                std::string assetStartFolder = Project::get().getPath().assetPath.u8();
+                std::string suffix = std::string(scene->kAssetTypeMeta.suffix).erase(0, 1) + "\0";
+
+                nfdchar_t* outPathChars;
+
+                nfdchar_t* filterList = suffix.data();
+                nfdresult_t result = NFD_SaveDialog(filterList, assetStartFolder.c_str(), &outPathChars);
+                if (result == NFD_OKAY)
+                {
+                    path = outPathChars;
+                    free(outPathChars);
+                }
+
+                auto u16PathString = utf8::utf8to16(path);
+                std::filesystem::path fp(u16PathString);
+                if (!path.empty())
+                {
+                    std::filesystem::path assetName = fp.filename();
+                    std::string assetNameUtf8 = utf8::utf16to8(assetName.u16string()) + scene->kAssetTypeMeta.suffix;
+
+                    const auto relativePath = buildRelativePath(Project::get().getPath().assetPath.u16(), fp.remove_filename());
+
+                    const AssetSaveInfo newInfo(u16str(assetNameUtf8), relativePath);
+                    Application::get().getAssetManager().changeSaveInfo(newInfo, scene);
+
+                    if (!scene->save())
+                    {
+                        LOG_ERROR("Fail to save new created scene {0} in path {1}.", 
+                            scene->getName().u8(), 
+                            utf8::utf16to8(scene->getStorePath().u16string()));
+                    }
+                }
+            }
+            else
+            {
+                if (!scene->save())
+                {
+                    LOG_ERROR("Fail to save edited scene {0} in path {1}.", 
+                        scene->getName().u8(),
+                        utf8::utf16to8(scene->getStorePath().u16string()));
+                }
+            }
+        }
+
+        m_bSelected = true;
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SetItemDefaultFocus();
+    ImGui::SameLine();
+    if (ImGui::Button("Discard", ImVec2(120, 0)))
+    {
+        bAccept = true;
+        if (m_bSelected)
+        {
+            const auto saveInfo = scene->getSaveInfo();
+            Application::get().getAssetManager().unload(scene, true);
+
+            if (!saveInfo.isTemp())
+            {
+                // Reload src scene in disk.
+                sceneManager.loadScene(saveInfo.path());
+            }
+        }
+        m_bSelected = true;
+        ImGui::CloseCurrentPopup();
+    }
+
+    if (bAccept)
+    {
+        if (afterEventAccept)
+        {
+            afterEventAccept();
+        }
+        onClosed();
+    }
+}
+
 
 ContentAssetImportWidget::ContentAssetImportWidget(const std::string& titleName)
     : ImGuiPopupSelfManagedOpenState(titleName, ImGuiWindowFlags_AlwaysAutoResize)
@@ -155,7 +313,7 @@ void ContentAssetImportWidget::onDrawState()
     const auto* meta = Application::get().getAssetManager().getRegisteredAssetMap().at(typeName);
     for (auto& ptr : importConfigs)
     {
-        meta->uiDrawAssetImportConfig(ptr);
+        meta->importConfig.uiDrawAssetImportConfig(ptr);
     }
 
     bool bAccept = false;
@@ -182,7 +340,7 @@ void ContentAssetImportWidget::onDrawState()
                 {
                     for (size_t i = loopStart; i < loopEnd; ++i)
                     {
-                        if (!meta->importAssetFromConfig(importConfigs[i]))
+                        if (!meta->importConfig.importAssetFromConfig(importConfigs[i]))
                         {
                             LOG_ERROR("Import asset from '{}' to '{}' failed.",
                                 utf8::utf16to8(importConfigs[i]->importFilePath.u16string()),

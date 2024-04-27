@@ -12,6 +12,27 @@ struct WidgetInView
 	std::array<chord::IWidget*, kMultiWidgetMaxNum> widgets;
 };
 
+class SceneAssetSaveWidget : public chord::ui::ImGuiPopupSelfManagedOpenState
+{
+public:
+	explicit SceneAssetSaveWidget(const std::string& titleName);
+
+	std::function<void()> afterEventAccept = nullptr;
+
+protected:
+	virtual void onDraw() override;
+	virtual void onClosed() override
+	{
+		afterEventAccept = nullptr;
+		m_bSelected = true;
+		m_processingAsset = {};
+	}
+
+private:
+	bool m_bSelected = true;
+	chord::AssetSaveInfo m_processingAsset = {};
+};
+
 class ContentAssetImportWidget : public chord::ui::ImGuiPopupSelfManagedOpenState
 {
 public:
@@ -60,6 +81,7 @@ public:
 	// Multi widget.
 	chord::RegisterManager<WidgetInView> widgetInView;
 
+	SceneAssetSaveWidget sceneAssetSave;
 	ContentAssetImportWidget contentAssetImport;
 
 protected:

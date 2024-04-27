@@ -195,6 +195,11 @@ typedef enum {
   OBJECT_TYPE
 } Type;
 
+typedef enum {
+  Permissive,
+  Strict
+} ParseStrictness;
+
 static inline int32_t GetComponentSizeInBytes(uint32_t componentType) {
   if (componentType == TINYGLTF_COMPONENT_TYPE_BYTE) {
     return 1;
@@ -730,7 +735,7 @@ struct OcclusionTextureInfo {
 
 // pbrMetallicRoughness class defined in glTF 2.0 spec.
 struct PbrMetallicRoughness {
-  std::vector<double> baseColorFactor;  // len = 4. default [1,1,1,1]
+  std::vector<double> baseColorFactor{1.0, 1.0, 1.0, 1.0};  // len = 4. default [1,1,1,1]
   TextureInfo baseColorTexture;
   double metallicFactor{1.0};   // default 1
   double roughnessFactor{1.0};  // default 1
@@ -743,9 +748,9 @@ struct PbrMetallicRoughness {
   std::string extras_json_string;
   std::string extensions_json_string;
 
-  PbrMetallicRoughness()
-      : baseColorFactor(std::vector<double>{1.0, 1.0, 1.0, 1.0}) {}
+  PbrMetallicRoughness() = default;
   DEFAULT_METHODS(PbrMetallicRoughness)
+
   bool operator==(const PbrMetallicRoughness &) const;
 };
 
@@ -755,10 +760,11 @@ struct PbrMetallicRoughness {
 struct Material {
   std::string name;
 
-  std::vector<double> emissiveFactor;  // length 3. default [0, 0, 0]
-  std::string alphaMode;               // default "OPAQUE"
-  double alphaCutoff{0.5};             // default 0.5
-  bool doubleSided{false};             // default false;
+  std::vector<double> emissiveFactor{0.0, 0.0, 0.0};  // length 3. default [0, 0, 0]
+  std::string alphaMode{"OPAQUE"}; // default "OPAQUE"
+  double alphaCutoff{0.5};        // default 0.5
+  bool doubleSided{false};        // default false
+  std::vector<int> lods;          // level of detail materials (MSFT_lod)
 
   PbrMetallicRoughness pbrMetallicRoughness;
 
@@ -778,7 +784,7 @@ struct Material {
   std::string extras_json_string;
   std::string extensions_json_string;
 
-  Material() : alphaMode("OPAQUE") {}
+  Material() = default;
   DEFAULT_METHODS(Material)
 
   bool operator==(const Material &) const;
@@ -832,7 +838,7 @@ struct Accessor {
     int count;
     bool isSparse;
     struct {
-      int byteOffset;
+      size_t byteOffset;
       int bufferView;
       int componentType;  // a TINYGLTF_COMPONENT_TYPE_ value
       Value extras;
@@ -842,7 +848,7 @@ struct Accessor {
     } indices;
     struct {
       int bufferView;
-      int byteOffset;
+      size_t byteOffset;
       Value extras;
       ExtensionMap extensions;
       std::string extras_json_string;
@@ -1013,6 +1019,7 @@ class Node {
   int mesh{-1};
   int light{-1};    // light source index (KHR_lights_punctual)
   int emitter{-1};  // audio emitter index (KHR_audio)
+  std::vector<int> lods; // level of detail nodes (MSFT_lod)
   std::vector<int> children;
   std::vector<double> rotation;     // length must be 0 or 4
   std::vector<double> scale;        // length must be 0 or 3
@@ -1464,6 +1471,11 @@ class TinyGLTF {
                             bool prettyPrint, bool writeBinary);
 
   ///
+  /// Sets the parsing strictness.
+  ///
+  void SetParseStrictness(ParseStrictness strictness);
+
+  ///
   /// Set callback to use for loading image data
   ///
   void SetImageLoader(LoadImageDataFunction LoadImageData, void *user_data);
@@ -1551,6 +1563,8 @@ class TinyGLTF {
   const unsigned char *bin_data_ = nullptr;
   size_t bin_size_ = 0;
   bool is_binary_ = false;
+
+  ParseStrictness strictness_ = ParseStrictness::Strict;
 
   bool serialize_default_values_ = false;  ///< Serialize default values?
 
@@ -2551,6 +2565,10 @@ static bool LoadExternalFile(std::vector<unsigned char> *out, std::string *err,
 
   out->swap(buf);
   return true;
+}
+
+void TinyGLTF::SetParseStrictness(ParseStrictness strictness) {
+  strictness_ = strictness;
 }
 
 void TinyGLTF::SetImageLoader(LoadImageDataFunction func, void *user_data) {
@@ -4632,24 +4650,26 @@ static bool ParseSparseAccessor(
   const detail::json &indices_obj = detail::GetValue(indices_iterator);
   const detail::json &values_obj = detail::GetValue(values_iterator);
 
-  int indices_buffer_view = 0, indices_byte_offset = 0, component_type = 0;
+  int indices_buffer_view = 0, component_type = 0;
+  size_t indices_byte_offset = 0;
   if (!ParseIntegerProperty(&indices_buffer_view, err, indices_obj,
                             "bufferView", true, "SparseAccessor")) {
     return false;
   }
-  ParseIntegerProperty(&indices_byte_offset, err, indices_obj, "byteOffset",
+  ParseUnsignedProperty(&indices_byte_offset, err, indices_obj, "byteOffset",
                        false);
   if (!ParseIntegerProperty(&component_type, err, indices_obj, "componentType",
                             true, "SparseAccessor")) {
     return false;
   }
 
-  int values_buffer_view = 0, values_byte_offset = 0;
+  int values_buffer_view = 0;
+  size_t values_byte_offset = 0;
   if (!ParseIntegerProperty(&values_buffer_view, err, values_obj, "bufferView",
                             true, "SparseAccessor")) {
     return false;
   }
-  ParseIntegerProperty(&values_byte_offset, err, values_obj, "byteOffset",
+  ParseUnsignedProperty(&values_byte_offset, err, values_obj, "byteOffset",
                        false);
 
   sparse->count = count;
@@ -4857,8 +4877,9 @@ static bool GetAttributeForAllPoints(uint32_t componentType, draco::Mesh *mesh,
 }
 
 static bool ParseDracoExtension(Primitive *primitive, Model *model,
-                                std::string *err,
-                                const Value &dracoExtensionValue) {
+                                std::string *err, std::string *warn,
+                                const Value &dracoExtensionValue,
+                                ParseStrictness strictness) {
   (void)err;
   auto bufferViewValue = dracoExtensionValue.Get("bufferView");
   if (!bufferViewValue.IsInt()) return false;
@@ -4890,6 +4911,33 @@ static bool ParseDracoExtension(Primitive *primitive, Model *model,
 
   // create new bufferView for indices
   if (primitive->indices >= 0) {
+    if (strictness == ParseStrictness::Permissive) {
+      const draco::PointIndex::ValueType numPoint = mesh->num_points();
+      // handle the situation where the stored component type does not match the
+      // required type for the actual number of stored points
+      int supposedComponentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+      if (numPoint < static_cast<draco::PointIndex::ValueType>(
+                         std::numeric_limits<uint8_t>::max())) {
+        supposedComponentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+      } else if (
+          numPoint < static_cast<draco::PointIndex::ValueType>(
+                         std::numeric_limits<uint16_t>::max())) {
+        supposedComponentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+      } else {
+        supposedComponentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+      }
+
+      if (supposedComponentType > model->accessors[primitive->indices].componentType) {
+        if (warn) {
+          (*warn) +=
+              "GLTF component type " + std::to_string(model->accessors[primitive->indices].componentType) +
+              " is not sufficient for number of stored points,"
+              " treating as " + std::to_string(supposedComponentType) + "\n";
+        }
+        model->accessors[primitive->indices].componentType = supposedComponentType;
+      }
+    }
+
     int32_t componentSize = GetComponentSizeInBytes(
         model->accessors[primitive->indices].componentType);
     Buffer decodedIndexBuffer;
@@ -4955,9 +5003,11 @@ static bool ParseDracoExtension(Primitive *primitive, Model *model,
 }
 #endif
 
-static bool ParsePrimitive(Primitive *primitive, Model *model, std::string *err,
+static bool ParsePrimitive(Primitive *primitive, Model *model,
+                           std::string *err, std::string *warn,
                            const detail::json &o,
-                           bool store_original_json_for_extras_and_extensions) {
+                           bool store_original_json_for_extras_and_extensions,
+                           ParseStrictness strictness) {
   int material = -1;
   ParseIntegerProperty(&material, err, o, "material", false);
   primitive->material = material;
@@ -5006,18 +5056,22 @@ static bool ParsePrimitive(Primitive *primitive, Model *model, std::string *err,
   auto dracoExtension =
       primitive->extensions.find("KHR_draco_mesh_compression");
   if (dracoExtension != primitive->extensions.end()) {
-    ParseDracoExtension(primitive, model, err, dracoExtension->second);
+    ParseDracoExtension(primitive, model, err, warn, dracoExtension->second, strictness);
   }
 #else
   (void)model;
+  (void)warn;
+  (void)strictness;
 #endif
 
   return true;
 }
 
-static bool ParseMesh(Mesh *mesh, Model *model, std::string *err,
+static bool ParseMesh(Mesh *mesh, Model *model,
+                      std::string *err, std::string *warn,
                       const detail::json &o,
-                      bool store_original_json_for_extras_and_extensions) {
+                      bool store_original_json_for_extras_and_extensions,
+                      ParseStrictness strictness) {
   ParseStringProperty(&mesh->name, err, o, "name", false);
 
   mesh->primitives.clear();
@@ -5030,8 +5084,9 @@ static bool ParseMesh(Mesh *mesh, Model *model, std::string *err,
              detail::ArrayBegin(detail::GetValue(primObject));
          i != primEnd; ++i) {
       Primitive primitive;
-      if (ParsePrimitive(&primitive, model, err, *i,
-                         store_original_json_for_extras_and_extensions)) {
+      if (ParsePrimitive(&primitive, model, err, warn, *i,
+                         store_original_json_for_extras_and_extensions,
+                         strictness)) {
         // Only add the primitive if the parsing succeeds.
         mesh->primitives.emplace_back(std::move(primitive));
       }
@@ -5111,6 +5166,24 @@ static bool ParseNode(Node *node, std::string *err, const detail::json &o,
     }
   }
   node->emitter = emitter;
+
+  node->lods.clear();
+  if (node->extensions.count("MSFT_lod") != 0) {
+    auto const &msft_lod_ext = node->extensions["MSFT_lod"];
+    if (msft_lod_ext.Has("ids")) {
+      auto idsArr = msft_lod_ext.Get("ids");
+      for (size_t i = 0; i < idsArr.ArrayLen(); ++i) {
+        node->lods.emplace_back(idsArr.Get(i).GetNumberAsInt());
+      }
+    } else {
+      if (err) {
+        *err +=
+            "Node has extension MSFT_lod, but does not reference "
+            "other nodes via their ids.\n";
+      }
+      return false;
+    }
+  }
 
   return true;
 }
@@ -5192,15 +5265,24 @@ static bool ParsePbrMetallicRoughness(
   return true;
 }
 
-static bool ParseMaterial(Material *material, std::string *err,
+static bool ParseMaterial(Material *material, std::string *err, std::string *warn,
                           const detail::json &o,
-                          bool store_original_json_for_extras_and_extensions) {
+                          bool store_original_json_for_extras_and_extensions,
+                          ParseStrictness strictness) {
   ParseStringProperty(&material->name, err, o, "name", /* required */ false);
 
   if (ParseNumberArrayProperty(&material->emissiveFactor, err, o,
                                "emissiveFactor",
                                /* required */ false)) {
-    if (material->emissiveFactor.size() != 3) {
+    if (strictness==ParseStrictness::Permissive && material->emissiveFactor.size() == 4) {
+      if (warn) {
+        (*warn) +=
+            "Array length of `emissiveFactor` parameter in "
+            "material must be 3, but got 4\n";
+      }
+      material->emissiveFactor.resize(3);
+    }
+    else if (material->emissiveFactor.size() != 3) {
       if (err) {
         (*err) +=
             "Array length of `emissiveFactor` parameter in "
@@ -5301,6 +5383,24 @@ static bool ParseMaterial(Material *material, std::string *err,
   material->extensions.clear();  // Note(agnat): Why?
   ParseExtrasAndExtensions(material, err, o,
                            store_original_json_for_extras_and_extensions);
+
+  material->lods.clear();
+  if (material->extensions.count("MSFT_lod") != 0) {
+    auto const &msft_lod_ext = material->extensions["MSFT_lod"];
+    if (msft_lod_ext.Has("ids")) {
+      auto idsArr = msft_lod_ext.Get("ids");
+      for (size_t i = 0; i < idsArr.ArrayLen(); ++i) {
+        material->lods.emplace_back(idsArr.Get(i).GetNumberAsInt());
+      }
+    } else {
+      if (err) {
+        *err +=
+            "Material has extension MSFT_lod, but does not reference "
+            "other materials via their ids.\n";
+      }
+      return false;
+    }
+  }
 
   return true;
 }
@@ -6053,8 +6153,9 @@ bool TinyGLTF::LoadFromString(Model *model, std::string *err, std::string *warn,
         return false;
       }
       Mesh mesh;
-      if (!ParseMesh(&mesh, model, err, o,
-                     store_original_json_for_extras_and_extensions_)) {
+      if (!ParseMesh(&mesh, model, err, warn, o,
+                     store_original_json_for_extras_and_extensions_,
+                     strictness_)) {
         return false;
       }
 
@@ -6082,20 +6183,22 @@ bool TinyGLTF::LoadFromString(Model *model, std::string *err, std::string *warn,
           return false;
         }
 
-        auto bufferView =
+        const auto bufferView =
             model->accessors[size_t(primitive.indices)].bufferView;
-        if (bufferView < 0 || size_t(bufferView) >= model->bufferViews.size()) {
+        if (bufferView < 0) {
+          // skip, bufferView could be null(-1) for certain extensions
+        } else if (size_t(bufferView) >= model->bufferViews.size()) {
           if (err) {
             (*err) += "accessor[" + std::to_string(primitive.indices) +
                       "] invalid bufferView";
           }
           return false;
+        } else {
+          model->bufferViews[size_t(bufferView)].target =
+              TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
+          // we could optionally check if accessors' bufferView type is Scalar, as
+          // it should be
         }
-
-        model->bufferViews[size_t(bufferView)].target =
-            TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
-        // we could optionally check if accessors' bufferView type is Scalar, as
-        // it should be
       }
 
       for (auto &attribute : primitive.attributes) {
@@ -6198,8 +6301,9 @@ bool TinyGLTF::LoadFromString(Model *model, std::string *err, std::string *warn,
       Material material;
       ParseStringProperty(&material.name, err, o, "name", false);
 
-      if (!ParseMaterial(&material, err, o,
-                         store_original_json_for_extras_and_extensions_)) {
+      if (!ParseMaterial(&material, err, warn, o,
+                         store_original_json_for_extras_and_extensions_,
+                         strictness_)) {
         return false;
       }
 
@@ -6586,7 +6690,7 @@ bool TinyGLTF::LoadBinaryFromMemory(Model *model, std::string *err,
 
   memcpy(&version, bytes + 4, 4);
   swap4(&version);
-  memcpy(&length, bytes + 8, 4);
+  memcpy(&length, bytes + 8, 4); // Total glb size, including header and all chunks.
   swap4(&length);
   memcpy(&chunk0_length, bytes + 12, 4);  // JSON data length
   swap4(&chunk0_length);
@@ -6603,9 +6707,12 @@ bool TinyGLTF::LoadBinaryFromMemory(Model *model, std::string *err,
   // Use 64bit uint to avoid integer overflow.
   uint64_t header_and_json_size = 20ull + uint64_t(chunk0_length);
 
-  if (header_and_json_size > std::numeric_limits<uint32_t>::max()) {
+  if (header_and_json_size > (std::numeric_limits<uint32_t>::max)()) {
     // Do not allow 4GB or more GLB data.
-    (*err) = "Invalid glTF binary. GLB data exceeds 4GB.";
+    if (err) {
+      (*err) = "Invalid glTF binary. GLB data exceeds 4GB.";
+    }
+    return false;
   }
 
   if ((header_and_json_size > uint64_t(size)) || (chunk0_length < 1) ||
@@ -6624,6 +6731,7 @@ bool TinyGLTF::LoadBinaryFromMemory(Model *model, std::string *err,
     if (err) {
       (*err) = "JSON Chunk end does not aligned to a 4-byte boundary.";
     }
+    return false;
   }
 
   // std::cout << "header_and_json_size = " << header_and_json_size << "\n";
@@ -6638,68 +6746,89 @@ bool TinyGLTF::LoadBinaryFromMemory(Model *model, std::string *err,
     bin_size_ = 0;
   } else {
     // Read Chunk1 info(BIN data)
-    // At least Chunk1 should have 12 bytes(8 bytes(header) + 4 bytes(bin
-    // payload could be 1~3 bytes, but need to be aligned to 4 bytes)
-    if ((header_and_json_size + 12ull) > uint64_t(length)) {
+    //
+    // issue-440:
+    // 'SHOULD' in glTF spec means 'RECOMMENDED',
+    // So there is a situation that Chunk1(BIN) is composed of zero-sized BIN data
+    // (chunksize(0) + binformat(BIN) = 8bytes).
+    // 
+    if ((header_and_json_size + 8ull) > uint64_t(length)) {
       if (err) {
         (*err) =
             "Insufficient storage space for Chunk1(BIN data). At least Chunk1 "
-            "Must have 4 bytes or more bytes, but got " +
-            std::to_string((header_and_json_size + 12ull) - uint64_t(length)) +
+            "Must have 8 or more bytes, but got " +
+            std::to_string((header_and_json_size + 8ull) - uint64_t(length)) +
             ".\n";
       }
       return false;
     }
 
-    unsigned int chunk1_length;  // 4 bytes
-    unsigned int chunk1_format;  // 4 bytes;
+    unsigned int chunk1_length{0};  // 4 bytes
+    unsigned int chunk1_format{0};  // 4 bytes;
     memcpy(&chunk1_length, bytes + header_and_json_size,
-           4);  // JSON data length
+           4);  // Bin data length
     swap4(&chunk1_length);
     memcpy(&chunk1_format, bytes + header_and_json_size + 4, 4);
     swap4(&chunk1_format);
 
-    // std::cout << "chunk1_length = " << chunk1_length << "\n";
-
-    if (chunk1_length < 4) {
-      if (err) {
-        (*err) = "Insufficient Chunk1(BIN) data size.";
-      }
-      return false;
-    }
-
-    if ((chunk1_length % 4) != 0) {
-      if (err) {
-        (*err) = "BIN Chunk end does not aligned to a 4-byte boundary.";
-      }
-      return false;
-    }
-
-    if (uint64_t(chunk1_length) + header_and_json_size > uint64_t(length)) {
-      if (err) {
-        (*err) = "BIN Chunk data length exceeds the GLB size.";
-      }
-      return false;
-    }
-
     if (chunk1_format != 0x004e4942) {
       if (err) {
-        (*err) = "Invalid type for chunk1 data.";
+        (*err) = "Invalid chunkType for Chunk1.";
       }
       return false;
     }
 
-    // std::cout << "chunk1_length = " << chunk1_length << "\n";
+    if (chunk1_length == 0) {
 
-    bin_data_ = bytes + header_and_json_size +
-                8;  // 4 bytes (bin_buffer_length) + 4 bytes(bin_buffer_format)
+      if (header_and_json_size + 8 > uint64_t(length)) {
+        if (err) {
+          (*err) = "BIN Chunk header location exceeds the GLB size.";
+        }
+        return false;
+      }
+
+      bin_data_ = nullptr;
+
+    } else {
+
+      // When BIN chunk size is not zero, at least Chunk1 should have 12 bytes(8 bytes(header) + 4 bytes(bin
+      // payload could be 1~3 bytes, but need to be aligned to 4 bytes)
+
+      if (chunk1_length < 4) {
+        if (err) {
+          (*err) = "Insufficient Chunk1(BIN) data size.";
+        }
+        return false;
+      }
+
+      if ((chunk1_length % 4) != 0) {
+        if (strictness_==ParseStrictness::Permissive) {
+          if (warn) {
+            (*warn) += "BIN Chunk end is not aligned to a 4-byte boundary.\n";
+          }
+        }
+        else {
+          if (err) {
+            (*err) = "BIN Chunk end is not aligned to a 4-byte boundary.";
+          }
+          return false;
+        }
+      }
+
+      // +8 chunk1 header size.
+      if (uint64_t(chunk1_length) + header_and_json_size + 8 > uint64_t(length)) {
+        if (err) {
+          (*err) = "BIN Chunk data length exceeds the GLB size.";
+        }
+        return false;
+      }
+
+      bin_data_ = bytes + header_and_json_size +
+                  8;  // 4 bytes (bin_buffer_length) + 4 bytes(bin_buffer_format)
+    }
 
     bin_size_ = size_t(chunk1_length);
   }
-
-  // Extract JSON string.
-  std::string jsonString(reinterpret_cast<const char *>(&bytes[20]),
-                         chunk0_length);
 
   is_binary_ = true;
 
@@ -7098,7 +7227,7 @@ static void SerializeGltfAccessor(const Accessor &accessor, detail::json &o) {
     SerializeNumberProperty<int>("bufferView", accessor.bufferView, o);
 
   if (accessor.byteOffset != 0)
-    SerializeNumberProperty<int>("byteOffset", int(accessor.byteOffset), o);
+    SerializeNumberProperty<size_t>("byteOffset", accessor.byteOffset, o);
 
   SerializeNumberProperty<int>("componentType", accessor.componentType, o);
   SerializeNumberProperty<size_t>("count", accessor.count, o);
@@ -7169,7 +7298,7 @@ static void SerializeGltfAccessor(const Accessor &accessor, detail::json &o) {
       detail::json indices;
       SerializeNumberProperty<int>("bufferView",
                                    accessor.sparse.indices.bufferView, indices);
-      SerializeNumberProperty<int>("byteOffset",
+      SerializeNumberProperty<size_t>("byteOffset",
                                    accessor.sparse.indices.byteOffset, indices);
       SerializeNumberProperty<int>(
           "componentType", accessor.sparse.indices.componentType, indices);
@@ -7180,7 +7309,7 @@ static void SerializeGltfAccessor(const Accessor &accessor, detail::json &o) {
       detail::json values;
       SerializeNumberProperty<int>("bufferView",
                                    accessor.sparse.values.bufferView, values);
-      SerializeNumberProperty<int>("byteOffset",
+      SerializeNumberProperty<size_t>("byteOffset",
                                    accessor.sparse.values.byteOffset, values);
       SerializeExtrasAndExtensions(accessor.sparse.values, values);
       detail::JsonAddMember(sparse, "values", std::move(values));
@@ -7488,11 +7617,40 @@ static void SerializeGltfMaterial(const Material &material, detail::json &o) {
   }
 
   SerializeParameterMap(material.additionalValues, o);
-#else
-
 #endif
 
   SerializeExtrasAndExtensions(material, o);
+
+  // MSFT_lod
+  if (!material.lods.empty()) {
+    detail::json_iterator it;
+    if (!detail::FindMember(o, "extensions", it)) {
+      detail::json extensions;
+      detail::JsonSetObject(extensions);
+      detail::JsonAddMember(o, "extensions", std::move(extensions));
+      detail::FindMember(o, "extensions", it);
+    }
+    auto &extensions = detail::GetValue(it);
+    if (!detail::FindMember(extensions, "MSFT_lod", it)) {
+      detail::json lod;
+      detail::JsonSetObject(lod);
+      detail::JsonAddMember(extensions, "MSFT_lod", std::move(lod));
+      detail::FindMember(extensions, "MSFT_lod", it);
+    }
+    SerializeNumberArrayProperty<int>("ids", material.lods, detail::GetValue(it));
+  } else {
+    detail::json_iterator ext_it;
+    if (detail::FindMember(o, "extensions", ext_it)) {
+      auto &extensions = detail::GetValue(ext_it);
+      detail::json_iterator lp_it;
+      if (detail::FindMember(extensions, "MSFT_lod", lp_it)) {
+        detail::Erase(extensions, lp_it);
+      }
+      if (detail::IsEmpty(extensions)) {
+        detail::Erase(o, ext_it);
+      }
+    }
+  }
 }
 
 static void SerializeGltfMesh(const Mesh &mesh, detail::json &o) {
@@ -7683,7 +7841,7 @@ static void SerializeGltfNode(const Node &node, detail::json &o) {
       detail::JsonSetObject(lights_punctual);
       detail::JsonAddMember(extensions, "KHR_lights_punctual",
                             std::move(lights_punctual));
-      detail::FindMember(o, "KHR_lights_punctual", it);
+      detail::FindMember(extensions, "KHR_lights_punctual", it);
     }
     SerializeNumberProperty("light", node.light, detail::GetValue(it));
   } else {
@@ -7715,7 +7873,7 @@ static void SerializeGltfNode(const Node &node, detail::json &o) {
       detail::json audio;
       detail::JsonSetObject(audio);
       detail::JsonAddMember(extensions, "KHR_audio", std::move(audio));
-      detail::FindMember(o, "KHR_audio", it);
+      detail::FindMember(extensions, "KHR_audio", it);
     }
     SerializeNumberProperty("emitter", node.emitter, detail::GetValue(it));
   } else {
@@ -7724,6 +7882,37 @@ static void SerializeGltfNode(const Node &node, detail::json &o) {
       auto &extensions = detail::GetValue(ext_it);
       detail::json_iterator lp_it;
       if (detail::FindMember(extensions, "KHR_audio", lp_it)) {
+        detail::Erase(extensions, lp_it);
+      }
+      if (detail::IsEmpty(extensions)) {
+        detail::Erase(o, ext_it);
+      }
+    }
+  }
+
+  // MSFT_lod
+  if (!node.lods.empty()) {
+    detail::json_iterator it;
+    if (!detail::FindMember(o, "extensions", it)) {
+      detail::json extensions;
+      detail::JsonSetObject(extensions);
+      detail::JsonAddMember(o, "extensions", std::move(extensions));
+      detail::FindMember(o, "extensions", it);
+    }
+    auto &extensions = detail::GetValue(it);
+    if (!detail::FindMember(extensions, "MSFT_lod", it)) {
+      detail::json lod;
+      detail::JsonSetObject(lod);
+      detail::JsonAddMember(extensions, "MSFT_lod", std::move(lod));
+      detail::FindMember(extensions, "MSFT_lod", it);
+    }
+    SerializeNumberArrayProperty<int>("ids", node.lods, detail::GetValue(it));
+  } else {
+    detail::json_iterator ext_it;
+    if (detail::FindMember(o, "extensions", ext_it)) {
+      auto &extensions = detail::GetValue(ext_it);
+      detail::json_iterator lp_it;
+      if (detail::FindMember(extensions, "MSFT_lod", lp_it)) {
         detail::Erase(extensions, lp_it);
       }
       if (detail::IsEmpty(extensions)) {
@@ -7967,6 +8156,16 @@ static void SerializeGltfModel(const Model *model, detail::json &o) {
     for (unsigned int i = 0; i < model->nodes.size(); ++i) {
       detail::json node;
       SerializeGltfNode(model->nodes[i], node);
+
+      if (detail::JsonIsNull(node)) {
+        // Issue 457.
+        // `node` does not have any required parameters,
+        // so the result may be null(unmodified) when all node parameters
+        // have default value.
+        //
+        // null is not allowed thus we create an empty JSON object.
+        detail::JsonSetObject(node);
+      }
       detail::JsonPushBack(nodes, std::move(node));
     }
     detail::JsonAddMember(o, "nodes", std::move(nodes));
@@ -7984,6 +8183,15 @@ static void SerializeGltfModel(const Model *model, detail::json &o) {
     for (unsigned int i = 0; i < model->scenes.size(); ++i) {
       detail::json currentScene;
       SerializeGltfScene(model->scenes[i], currentScene);
+      if (detail::JsonIsNull(currentScene)) {
+        // Issue 464.
+        // `scene` does not have any required parameters,
+        // so the result may be null(unmodified) when all scene parameters
+        // have default value.
+        //
+        // null is not allowed thus we create an empty JSON object.
+        detail::JsonSetObject(currentScene);
+      }
       detail::JsonPushBack(scenes, std::move(currentScene));
     }
     detail::JsonAddMember(o, "scenes", std::move(scenes));

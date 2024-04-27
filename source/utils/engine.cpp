@@ -1,6 +1,7 @@
 #include <utils/engine.h>
 #include <application/application.h>
 #include <graphics/graphics.h>
+#include <scene/scene_manager.h>
 
 namespace chord
 {
@@ -26,10 +27,9 @@ namespace chord
 	bool Engine::init(const EngineInitConfig& config)
 	{
 		bool bResult = true;
-		if(bResult)
-		{
 
-		}
+		// Register necessary manager.
+		if(bResult) { bResult &= registerSubsystem<SceneManager>(); }
 
 		return bResult;
 	}
@@ -45,6 +45,9 @@ namespace chord
 		// Engine should continue or not.
 		bool bContinue = true;
 
+		// Update tick data.
+		m_subsystemTickData.appTickDaata = tickData;
+
 		// Loop all subsystems.
 		for (auto& subsystem : m_subsystems)
 		{
@@ -54,9 +57,6 @@ namespace chord
 				break;
 			}
 		}
-
-		// Update tick data.
-		m_subsystemTickData.tickCount ++;
 
 		return bContinue;
 	}

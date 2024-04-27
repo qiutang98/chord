@@ -3,6 +3,10 @@
 #include <asset/asset.h>
 #include <asset/texture/texture.h>
 
+#include <scene/scene.h>
+#include <scene/component.h>
+#include <scene/scene_node.h>
+
 registerClassMember(IAsset)
 {
 	ar(m_saveInfo, m_rawAssetPath, m_snapshotDimension);
@@ -14,6 +18,36 @@ registerClassMemberInherit(TextureAsset, IAsset)
 
 	ARCHIVE_ENUM_CLASS(m_format);
 	ARCHIVE_ENUM_CLASS(m_colorspace);
+}}
+
+registerClassMember(Component)
+{
+	ar(m_node);
+}
+
+registerClassMemberInherit(Transform, Component)
+{
+	ar(m_translation, m_rotation, m_scale);
+}}
+
+registerClassMember(SceneNode)
+{
+	ar(m_bVisibility);
+	ar(m_bStatic);
+	ar(m_id);
+	ar(m_name);
+	ar(m_parent);
+	ar(m_scene);
+	ar(m_components);
+	ar(m_children);
+}
+
+registerClassMemberInherit(Scene, IAsset)
+{
+	ar(m_currentId);
+	ar(m_root);
+	ar(m_components);
+	ar(m_sceneNodes);
 }}
 
 namespace chord

@@ -186,6 +186,15 @@ namespace chord
         m_threadPool = std::make_unique<ThreadPool>(L"ApplicationThreadPool", 1);
         m_assetManager = std::make_unique<AssetManager>();
 
+        // Engine context.
+        {
+            m_engine = std::make_unique<Engine>(*this);
+            EngineInitConfig engineConfig{};
+
+            m_bInit &= m_engine->init(engineConfig);
+        }
+
+
         // Return result.
         return m_bInit;
     }
@@ -210,6 +219,8 @@ namespace chord
             glfwPollEvents();
 
             const bool bFpsUpdatedPerSecond = m_timer.tick();
+
+            m_windowData.bContinue &= m_engine->tick(tickData);
 
             // Graphics context tick.
             m_windowData.bContinue &= m_context.tick(tickData);
@@ -249,6 +260,7 @@ namespace chord
     {
         m_runtimePeriod = ERuntimePeriod::BeforeReleasing;
 
+        m_engine->beforeRelease();
         m_context.beforeRelease();
 
         // Flush sync event in main thread.
@@ -259,6 +271,8 @@ namespace chord
         // Broadcast release event.
         onRelease.broadcast();
 
+        m_engine.reset();
+        m_assetManager.release();
         m_context.release();
 
         // Flush sync event in main.
@@ -269,6 +283,11 @@ namespace chord
 
         // Final terminate GLFW.
         glfwTerminate();
+    }
+
+    void Application::setMainWindowTitle(const std::string& name) const
+    {
+        glfwSetWindowTitle(m_windowData.window, name.c_str());
     }
 
     void Application::queryFramebufferSize(int32& width, int32& height) const

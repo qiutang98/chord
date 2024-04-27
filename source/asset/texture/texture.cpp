@@ -5,7 +5,7 @@ namespace chord
 {
 	using namespace graphics;
 
-	const AssetTypeMeta TextureAsset::kAssetTypeMeta = createTextureTypeMeta();
+	const AssetTypeMeta TextureAsset::kAssetTypeMeta = TextureAsset::createTypeMeta();
 
 	TextureAsset::TextureAsset(const AssetSaveInfo& saveInfo)
 		: IAsset(saveInfo)

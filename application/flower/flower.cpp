@@ -4,12 +4,18 @@
 #include "widget/downbar.h"
 #include "widget/console.h"
 
+#include "manager/scene_ui_content.h"
 #include "manager/project_content.h"
 #include "widget/content.h"
 #include "widget/asset.h"
+#include "widget/viewport.h"
+#include "widget/outliner.h"
+#include "widget/detail.h"
 
 using namespace chord;
 using namespace chord::graphics;
+
+constexpr auto kCacheAssetSafeFramePeriod = 4;
 
 Flower& Flower::get()
 {
@@ -22,25 +28,46 @@ void Flower::init()
     m_hubHandle = m_widgetManager.addWidget<HubWidget>();
 	m_onTickHandle = getContext().onTick.add([this](const ApplicationTickData& tickData) { this->onTick(tickData); });
 
-	// 16 MB snapshot cache, per snapshot is 0.25 MB, max cache 64.
-	// release 4 snapshot when prune.
-	m_snapshots = new SnapshotCache("FlowerSnapshotCache", 16, 1);
-
 	m_assetConfigWidgetManager = new AssetConfigWidgetManager();
 	m_builtinTextures.init();
+
+	m_resourceUsedHostRef.activeFrame = 0;
+	m_resourceUsedHostRef.cacheRef.resize(kCacheAssetSafeFramePeriod);
+
+	m_onShouldClosedHandle = Application::get().onShouldClosed.add([this]() -> bool
+	{
+		return this->onWindowRequireClosed();
+	});
 }
 
 void Flower::onTick(const chord::ApplicationTickData& tickData)
 {
+	m_resourceUsedHostRef.activeFrame++;
+	if (m_resourceUsedHostRef.activeFrame == kCacheAssetSafeFramePeriod)
+	{
+		m_resourceUsedHostRef.activeFrame = 0;
+	}
+	m_resourceUsedHostRef.cacheRef[m_resourceUsedHostRef.activeFrame].clear();
+
+	// Generic widget tick.
 	m_widgetManager.tick(tickData);
+
+	// Asset widgets tick.
 	m_assetConfigWidgetManager->tick(tickData);
 
+	// Some call once event tick.
 	onceEventAfterTick.brocast(tickData);
+
+	updateApplicationTitle();
+	shortcutHandle();
 }
 
 void Flower::release()
 {
+
+
 	m_builtinTextures = {};
+	m_resourceUsedHostRef.cacheRef.clear();
 
 	if (m_contentManager)
 	{
@@ -48,14 +75,76 @@ void Flower::release()
 		m_contentManager = nullptr;
 	}
 
-	if (m_snapshots)
+	if (m_sceneContentManager)
 	{
-		delete m_snapshots;
-		m_snapshots = nullptr;
+		delete m_sceneContentManager;
+		m_sceneContentManager = nullptr;
 	}
 
 
 	check(getContext().onTick.remove(m_onTickHandle));
+	check(Application::get().onShouldClosed.remove(m_onShouldClosedHandle));
+}
+
+void Flower::updateApplicationTitle()
+{
+	const auto& projectConfig = Project::get().getPath();
+	if (Project::get().isSetup())
+	{
+		auto activeScene = Application::get().getEngine().getSubsystem<SceneManager>().getActiveScene();
+
+		std::u16string showName = projectConfig.projectName.u16() + u" - " + activeScene->getName().u16();
+		if (activeScene->isDirty())
+		{
+			showName += u"*";
+		}
+
+		// Update title name.
+		Application::get().setMainWindowTitle(utf8::utf16to8(showName));
+	}
+}
+
+void Flower::shortcutHandle()
+{
+	if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl))
+	{
+		if (ImGui::IsKeyPressed(ImGuiKey_S))
+		{
+			if (m_contentManager)
+			{
+				if (!m_contentManager->getDirtyAsset<Scene>().empty())
+				{
+					m_dockSpaceHandle->sceneAssetSave.open();
+				}
+			}
+
+		}
+	}
+}
+
+bool Flower::onWindowRequireClosed()
+{
+	if (!Project::get().isSetup())
+	{
+		return true;
+	}
+
+	bool bReturn = true;
+
+	if (!m_contentManager->getDirtyAsset<Scene>().empty())
+	{
+		bReturn = false;
+		if (m_dockSpaceHandle->sceneAssetSave.open())
+		{
+			check(!m_dockSpaceHandle->sceneAssetSave.afterEventAccept);
+			m_dockSpaceHandle->sceneAssetSave.afterEventAccept = []()
+			{
+				glfwSetWindowShouldClose(Application::get().getWindowData().window, 1);
+			};
+		}
+	}
+
+	return bReturn;
 }
 
 int Flower::run(int argc, const char** argv)
@@ -148,6 +237,42 @@ void Flower::onProjectSetup()
 			m_contents[0]->setVisible(true);
 
 			m_dockSpaceHandle->widgetInView.add(contentView);
+		}
+
+		// Viewport
+		{
+			WidgetInView viewportView = { .bMultiWindow = true };
+			for (size_t i = 0; i < kMultiWidgetMaxNum; i++)
+			{
+				m_viewports[i] = m_widgetManager.addWidget<WidgetViewport>(i);
+				viewportView.widgets[i] = m_viewports[i];
+				m_viewports[i]->setVisible(false);
+			}
+			m_viewports[0]->setVisible(true);
+
+			m_dockSpaceHandle->widgetInView.add(viewportView);
+		}
+
+		// Outliner and detail.
+		{
+			m_sceneContentManager = new UISceneContentManager();
+
+			m_widgetOutlineHandle = m_widgetManager.addWidget<WidgetOutliner>();
+			{
+				WidgetInView outlineView = { .bMultiWindow = false, .widgets = { m_widgetOutlineHandle } };
+				m_dockSpaceHandle->widgetInView.add(outlineView);
+			}
+
+			WidgetInView detailView = { .bMultiWindow = true };
+			for (size_t i = 0; i < kMultiWidgetMaxNum; i++)
+			{
+				m_details[i] = m_widgetManager.addWidget<WidgetDetail>(i);
+				detailView.widgets[i] = m_details[i];
+				m_details[i]->setVisible(false);
+			}
+			m_details[0]->setVisible(true);
+
+			m_dockSpaceHandle->widgetInView.add(detailView);
 		}
 
 

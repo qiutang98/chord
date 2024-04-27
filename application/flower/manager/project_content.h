@@ -2,6 +2,7 @@
 
 #include <utils/utils.h>
 #include <application/application.h>
+#include <asset/asset.h>
 
 #include "../selection.h"
 
@@ -67,8 +68,15 @@ public:
 		return m_hashId;
 	}
 
+	void markDirty()
+	{
+		m_bDirty = true;
+	}
+
 private:
 	void build(bool bRecursive);
+
+	void update();
 
 private:
 	ProjectContentEntryTree& m_tree;
@@ -84,6 +92,7 @@ private:
 
 	// Current entry is folder or not.
 	bool m_bFolder : 1;     
+	bool m_bDirty  : 1; 
 
 	// Hierarchy structural.
 	std::weak_ptr<ProjectContentEntry> m_parent;
@@ -123,6 +132,10 @@ public:
 	// Fully build.
 	void build();
 
+	void update();
+
+	ProjectContentEntry* getClosetFolder(chord::AssetRef asset) const;
+
 private:
 	void release();
 
@@ -130,7 +143,7 @@ private:
 	// Root of folder map.
 	ProjectContentEntryRef m_root;
 
-	// Cache all entry map, hashed by path.
+	// Cache all entry map, hashed by path, auto registered in tree node construction and deconstruction.
 	std::map<std::filesystem::path, ProjectContentEntry*> m_entryMap;
 };
 
@@ -144,15 +157,14 @@ struct DragAndDropAssets
 	std::set<std::filesystem::path> selectAssets;
 };
 
+using SnapshotCache = chord::LRUCache<chord::graphics::GPUTextureAsset, std::filesystem::path>;
+
 class ProjectContentManager final : chord::NonCopyable
 {
 public:
 	// Init project content.
 	explicit ProjectContentManager();
 	~ProjectContentManager();
-
-	//
-	void tick(const chord::ApplicationTickData& tickData);
 
 	// Event on asset tree update.
 	chord::Events<ProjectContentManager, const ProjectContentEntryTree&> onTreeUpdate;
@@ -182,10 +194,54 @@ public:
 		return "flower_ContentAssetDragDrops";
 	}
 
+	const SnapshotCache& getSnapshotCache() const
+	{
+		return *m_snapshots;
+	}
+
+	SnapshotCache& getSnapshotCache()
+	{
+		return *m_snapshots;
+	}
+
+	bool existDirtyAsset() const
+	{
+		return !m_dirtyAssets.empty();
+	}
+
+	template<typename T>
+	std::vector<std::shared_ptr<T>> getDirtyAsset() const
+	{
+		std::vector<std::shared_ptr<T>> result{ };
+		for (const auto& id : m_dirtyAssets)
+		{
+			if (auto sp = std::dynamic_pointer_cast<T>(m_assetManager->at(id)))
+			{
+				result.push_back(sp);
+			}
+		}
+		return result;
+	}
+
 private:
+	chord::AssetManager* m_assetManager;
+
 	// Project asset tree.
 	ProjectContentEntryTree m_assetTree;
 
 	// Drag and droping assets.
 	DragAndDropAssets m_dragDropAssets;
+
+	// Lru cache.
+	SnapshotCache* m_snapshots = nullptr;
+
+	// Cache all dirty asset.
+	chord::EventHandle m_onAssetSavedHandle;
+	chord::EventHandle m_onAssetNewlySavedHandle;
+	chord::EventHandle m_onAssetDirtyHandle;
+
+	chord::EventHandle m_onAssetRemoveHandle;
+	chord::EventHandle m_onAssetInsertHandle;
+
+	std::unordered_set<chord::uint64> m_dirtyAssets;
 };

@@ -123,7 +123,7 @@ static void CopyNFDCharToWChar( const nfdchar_t *inStr, wchar_t **outStr )
                                   *outStr, charsNeeded);
     (*outStr)[charsNeeded-1] = '\0';
 
-#ifdef _DEBUG
+#if 0 // def _DEBUG
     int inStrCharacterCount = static_cast<int>(NFDi_UTF8_Strlen(inStr));
     assert( ret == inStrCharacterCount );
 #else

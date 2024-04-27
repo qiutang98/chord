@@ -12,6 +12,8 @@
 #include <graphics/pipeline.h>
 #include <ui/imgui/imgui_internal.h>
 #include <project.h>
+#include <fontawsome/IconsFontAwesome6.h>
+#include <fontawsome/IconsFontAwesome6Brands.h>
 
 namespace chord
 { 
@@ -57,13 +59,6 @@ namespace chord
 		"r.ui.font.size", 
 		sUIFontSize, 
 		"UI font base size.",
-		EConsoleVarFlags::ReadOnly);
-
-	static u16str sUIFontIconFilePath = u16str("resource/font/segmdl2.ttf");
-	static AutoCVarRef<u16str> cVarsUIFontIconFilePath(
-		"r.ui.font.icon",
-		sUIFontIconFilePath,
-		"ImGui icon font file path.",
 		EConsoleVarFlags::ReadOnly);
 
 	class ImGuiDrawVS : public GlobalShader
@@ -310,7 +305,7 @@ namespace chord
 				pushConst.translate.y = -1.0f - drawData->DisplayPos.y * pushConst.scale.y;
 			}
 
-			pushConst.samplerId = getSamplers().linearClampBorder0000MipPoint().index.get();
+			pushConst.samplerId = getSamplers().pointClampBorder0000().index.get();
 			pipeline->pushConst(commandBuffer, pushConst);
 		}
 
@@ -568,9 +563,13 @@ namespace chord
 			style.Colors[ImGuiCol_Button] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
 			style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.38f, 0.38f, 0.38f, 1.00f);
 			style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
-			style.Colors[ImGuiCol_Header] = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
-			style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+
+			style.Colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.25f, 0.25f, 0.25f, 0.1f);
+
+			style.Colors[ImGuiCol_Header] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+			style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.4f, 0.4f, 0.4f, 1.00f);
 			style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
+
 			style.Colors[ImGuiCol_Separator] = style.Colors[ImGuiCol_Border];
 			style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.41f, 0.42f, 0.44f, 1.00f);
 			style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
@@ -718,12 +717,27 @@ namespace chord
 		fonts->AddFontFromFileTTF(sUIFontFilePath.str().c_str(), fontSize, NULL, fonts->GetGlyphRangesChineseFull());
 
 		{
-			static const ImWchar iconsRanges[] = { 0xe001, 0xF8B3, 0 };
+			u16str filePath = u16str("resource/font/fa-solid-900.ttf");
+
+			static const ImWchar iconsRanges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
 			ImFontConfig iconsConfig;
 			iconsConfig.MergeMode  = true;
 			iconsConfig.PixelSnapH = true;
-			iconsConfig.GlyphOffset = math::vec2(0.0f, 4.0f) * dpiScale;
-			fonts->AddFontFromFileTTF(sUIFontIconFilePath.str().c_str(), fontSize, &iconsConfig, iconsRanges);
+			iconsConfig.GlyphOffset = math::vec2(0.0f, 1.0f) * dpiScale;
+
+			fonts->AddFontFromFileTTF(filePath.str().c_str(), fontSize, &iconsConfig, iconsRanges);
+		}
+
+		{
+			u16str filePath = u16str("resource/font/fa-brands-400.ttf");
+
+			static const ImWchar iconsRanges[] = { ICON_MIN_FAB, ICON_MAX_FAB, 0 };
+			ImFontConfig iconsConfig;
+			iconsConfig.MergeMode = true;
+			iconsConfig.PixelSnapH = true;
+			iconsConfig.GlyphOffset = math::vec2(0.0f, 1.0f) * dpiScale;
+
+			fonts->AddFontFromFileTTF(filePath.str().c_str(), fontSize, &iconsConfig, iconsRanges);
 		}
 
 		fonts->Build();

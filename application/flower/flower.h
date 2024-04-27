@@ -12,8 +12,10 @@ class DownbarWidget;
 class WidgetConsole;
 class AssetConfigWidgetManager;
 class WidgetContent;
-
-using SnapshotCache = chord::LRUCache<chord::graphics::GPUTextureAsset, std::filesystem::path>;
+class WidgetViewport;
+class WidgetDetail;
+class UISceneContentManager;
+class WidgetOutliner;
 
 class Flower
 {
@@ -55,16 +57,6 @@ public:
 		return *m_dockSpaceHandle;
 	}
 
-	const SnapshotCache& getSnapshotCache() const
-	{
-		return *m_snapshots;
-	}
-
-	SnapshotCache& getSnapshotCache()
-	{
-		return *m_snapshots;
-	}
-
 	const AssetConfigWidgetManager& getAssetConfigWidgetManager() const
 	{
 		return *m_assetConfigWidgetManager;
@@ -73,6 +65,21 @@ public:
 	AssetConfigWidgetManager& getAssetConfigWidgetManager()
 	{
 		return *m_assetConfigWidgetManager;
+	}
+
+	const UISceneContentManager& getUISceneContentManager() const
+	{
+		return *m_sceneContentManager;
+	}
+
+	UISceneContentManager& getUISceneContentManager()
+	{
+		return *m_sceneContentManager;
+	}
+
+	void markAssetUsed(chord::ResourceRef res)
+	{
+		m_resourceUsedHostRef.cacheRef[m_resourceUsedHostRef.activeFrame].insert(res);
 	}
 
 private:
@@ -87,15 +94,29 @@ private:
 	// Release all.
 	void release();
 
+	void updateApplicationTitle();
+	void shortcutHandle();
+
+	bool onWindowRequireClosed();
+
 private:
 	// Tick event handle.
 	chord::EventHandle m_onTickHandle;
+	chord::EventHandle m_onShouldClosedHandle;
 
 	// Widget manager.
 	chord::WidgetManager m_widgetManager;
 
 	// UI manager.
 	ProjectContentManager* m_contentManager = nullptr;
+
+	// Resource cache host ref.
+	struct
+	{
+		size_t activeFrame;
+		std::vector<std::unordered_set<chord::ResourceRef>> cacheRef;
+	} m_resourceUsedHostRef;
+
 
 	// Widget handles.
 	HubWidget* m_hubHandle = nullptr;
@@ -109,7 +130,12 @@ private:
 	// Builtin textures.
 	BuiltinTextures m_builtinTextures;
 
-	// Lru cache.
-	SnapshotCache* m_snapshots = nullptr;
 	AssetConfigWidgetManager* m_assetConfigWidgetManager = nullptr;
+
+	// Views of project content.
+	std::array<WidgetViewport*, kMultiWidgetMaxNum> m_viewports;
+	
+	UISceneContentManager* m_sceneContentManager = nullptr;
+	WidgetOutliner* m_widgetOutlineHandle = nullptr;
+	std::array<WidgetDetail*, kMultiWidgetMaxNum> m_details;
 };
