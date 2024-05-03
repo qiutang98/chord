@@ -65,9 +65,6 @@ namespace chord
 		virtual void onPostConstruct() = 0; 
 		// ~IAsset virtual function.
 
-		// Unload asset, only call from AssetManager.
-		void unload();
-
 	public:
 		// Get asset store path.
 		std::filesystem::path getStorePath() const 
@@ -137,11 +134,6 @@ namespace chord
 
 	// Global events when asset newly save to disk.
 	extern Events<IAsset, AssetRef> onAssetNewlySaveToDiskEvents;
-
-	// Global events when asset unload.
-	extern Events<IAsset, AssetRef> onAssetUnloadEvents;
-
-
 
 	// Engine asset manager.
 	class AssetManager : NonCopyable
@@ -215,8 +207,10 @@ namespace chord
 				? std::unique_lock<std::mutex>(m_assetsMapMutex)
 				: std::unique_lock<std::mutex>();
 
-			// No only unload datas also erase all meta.
-			asset->unload();
+			// Unload all data of asset.
+			asset->onUnload();
+
+			// Remove from map.
 			removeAsset(hash);
 		}
 
@@ -236,12 +230,17 @@ namespace chord
 		void release();
 
 	protected:
+		// Static const registered meta infos.
 		std::unordered_map<std::string, const AssetTypeMeta*> m_registeredAssetType;
 
 		// Map store all engine assetes.
 		mutable std::mutex m_assetsMapMutex;
+
+		// All meta asset cache.
 		std::map<uint64, AssetRef> m_assets;
-		std::unordered_map<std::string, std::unordered_set<uint64>> m_classifiedAssets; // classify by save info extension.
+
+		// Classify by save info extension.
+		std::map<std::string, std::set<uint64>> m_classifiedAssets; 
 	};
 
 	extern Events<AssetManager, AssetRef> onAssetRemoveEvents;

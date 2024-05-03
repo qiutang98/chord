@@ -20,5 +20,6 @@
 #include <scene/scene_node.h>
 #include <scene/component/transform.h>
 #include <project.h>
+#include <asset/pmx/pmx_importer.h>
 
 constexpr chord::uint32 kMultiWidgetMaxNum = 4;

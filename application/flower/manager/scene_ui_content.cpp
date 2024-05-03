@@ -26,7 +26,7 @@ void UISceneContentManager::onSceneUnload(chord::SceneRef scene)
 void UISceneContentManager::onSceneLoad(chord::SceneRef scene)
 {
 	// Clear all scene selections.
-	check(m_sceneSelections.empty());
+	m_sceneSelections.clear();
 	rebuildSceneNodeNameMap();
 }
 

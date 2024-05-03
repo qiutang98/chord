@@ -359,7 +359,25 @@ void ContentAssetImportWidget::onDrawState()
     const auto* meta = Application::get().getAssetManager().getRegisteredAssetMap().at(typeName);
     for (auto& ptr : importConfigs)
     {
-        meta->importConfig.uiDrawAssetImportConfig(ptr);
+        ImGui::Spacing();
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+        ImGui::PushID(std::hash<std::filesystem::path>{}(ptr->storeFilePath));
+        ImGui::Indent();
+        {
+            std::string utf8Name = utf8::utf16to8(ptr->importFilePath.u16string());
+            std::string saveUtf8 = utf8::utf16to8(ptr->storeFilePath.u16string());
+
+            ImGui::TextDisabled(std::format("Load from: {}", utf8Name).c_str());
+            ImGui::TextDisabled(std::format("Save to: {}", saveUtf8).c_str());
+            ImGui::Spacing();
+
+            meta->importConfig.uiDrawAssetImportConfig(ptr);
+        }
+        ImGui::Unindent();
+        ImGui::PopStyleVar();
+        ImGui::PopID();
+        ImGui::NewLine();
+        ImGui::Separator();
     }
 
     bool bAccept = false;

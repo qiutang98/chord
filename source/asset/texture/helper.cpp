@@ -736,70 +736,49 @@ namespace chord
 
 	void uiDrawImportConfig(TextureAssetImportConfigRef config)
 	{
-		ImGui::Spacing();
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-		ImGui::PushID(std::hash<std::filesystem::path>{}(config->storeFilePath));
-		ImGui::Indent();
+		const float sizeLable = ImGui::GetFontSize();
+		if (ImGui::BeginTable("##ConfigTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders))
 		{
-			std::string utf8Name = utf8::utf16to8(config->importFilePath.u16string());
-			std::string saveUtf8 = utf8::utf16to8(config->storeFilePath.u16string());
+			ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
 
-			ImGui::TextDisabled(std::format("Load from: {}", utf8Name).c_str());
-			ImGui::TextDisabled(std::format("Save to: {}", saveUtf8).c_str());
-			ImGui::Spacing();
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("Is sRGB");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Checkbox("##SRGB", &config->bSRGB);
 
-			const float sizeLable = ImGui::GetFontSize();
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("Build Mipmap");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Checkbox("##MipMap", &config->bGenerateMipmap);
 
-			if (ImGui::BeginTable("##ConfigTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders))
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("Alpha Cutoff");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SliderFloat("##AlphaCutoff", &config->alphaMipmapCutoff, 0.0f, 1.0f, "%.2f");
+
+			int formatValue = (int)config->format;
+
+			std::array<std::string, (size_t)ETextureFormat::MAX> formatList { };
+			std::array<const char*, (size_t)ETextureFormat::MAX> formatListChar{ };
+			for (size_t i = 0; i < formatList.size(); i++)
 			{
-				ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
-
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Is sRGB");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::Checkbox("##SRGB", &config->bSRGB);
-
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Build Mipmap");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::Checkbox("##MipMap", &config->bGenerateMipmap);
-
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Alpha Cutoff");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SliderFloat("##AlphaCutoff", &config->alphaMipmapCutoff, 0.0f, 1.0f, "%.2f");
-
-				int formatValue = (int)config->format;
-
-				std::array<std::string, (size_t)ETextureFormat::MAX> formatList { };
-				std::array<const char*, (size_t)ETextureFormat::MAX> formatListChar{ };
-				for (size_t i = 0; i < formatList.size(); i++)
-				{
-					std::string prefix = (formatValue == i) ? "  * " : "    ";
-					formatList[i] = std::format("{0} {1}", prefix, nameof::nameof_enum(ETextureFormat(i)));
-					formatListChar[i] = formatList[i].c_str();
-				}
-
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Format");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::Combo("##Format", &formatValue, formatListChar.data(), formatListChar.size());
-				config->format = ETextureFormat(formatValue);
-
-				ImGui::EndTable();
+				std::string prefix = (formatValue == i) ? "  * " : "    ";
+				formatList[i] = std::format("{0} {1}", prefix, nameof::nameof_enum(ETextureFormat(i)));
+				formatListChar[i] = formatList[i].c_str();
 			}
-		}
-		ImGui::Unindent();
-		ImGui::PopStyleVar();
-		ImGui::PopID();
 
-		ImGui::NewLine();
-		ImGui::Separator();
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("Format");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Combo("##Format", &formatValue, formatListChar.data(), formatListChar.size());
+			config->format = ETextureFormat(formatValue);
+			ImGui::EndTable();
+		}
 	}
 
 	bool importFromConfig(TextureAssetImportConfigRef config)
@@ -810,8 +789,6 @@ namespace chord
 
 		auto& assetManager = Application::get().getAssetManager();
 		const auto& meta = TextureAsset::kAssetTypeMeta;
-
-
 
 		TextureAssetRef texturePtr;
 		{
@@ -824,7 +801,6 @@ namespace chord
 
 			// Create asset texture.
 			AssetSaveInfo saveInfo(name, relativePath);
-
 			texturePtr = assetManager.createAsset<TextureAsset>(saveInfo, true);
 		}
 		texturePtr->markDirty();

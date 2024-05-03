@@ -2,18 +2,18 @@
 #include <project.h>
 #include <asset/texture/texture.h>
 #include <asset/serialize.h>
+#include <asset/gltf/gltf.h>
 
 namespace chord
 {
 	using namespace graphics;
 
-	Events<IAsset, AssetRef> onAssetMarkDirtyEvents;
-	Events<IAsset, AssetRef> onAssetSavedEvents;
-	Events<IAsset, AssetRef> onAssetNewlySaveToDiskEvents;
-	Events<IAsset, AssetRef> onAssetUnloadEvents;
+	Events<IAsset, AssetRef> chord::onAssetMarkDirtyEvents;
+	Events<IAsset, AssetRef> chord::onAssetSavedEvents;
+	Events<IAsset, AssetRef> chord::onAssetNewlySaveToDiskEvents;
 
-	Events<AssetManager, AssetRef> onAssetRemoveEvents;
-	Events<AssetManager, AssetRef> onAssetInsertEvents;
+	Events<AssetManager, AssetRef> chord::onAssetRemoveEvents;
+	Events<AssetManager, AssetRef> chord::onAssetInsertEvents;
 
 	IAsset::IAsset(const AssetSaveInfo& saveInfo)
 		: m_saveInfo(saveInfo)
@@ -51,12 +51,6 @@ namespace chord
 		return bSaveResult;
 	}
 
-	void IAsset::unload()
-	{
-		onUnload();
-		onAssetUnloadEvents.broadcast(shared_from_this());
-	}
-
 	bool IAsset::markDirty()
 	{
 		if (m_bDirty)
@@ -90,6 +84,7 @@ namespace chord
 	{
 		registerAsset(TextureAsset::kAssetTypeMeta);
 		registerAsset(Scene::kAssetTypeMeta);
+		registerAsset(GLTFAsset::kAssetTypeMeta);
 	}
 
 	void AssetManager::setupProject()

@@ -1,11 +1,17 @@
 #pragma once
+#include <asset/asset.h>
 
 namespace chord
 {
-	// GLTF: May exist animation, texture, material, skeleton, camera, lights.
-
-	class GLTFMesh
+	class GLTFAsset : public IAsset
 	{
+		REGISTER_BODY_DECLARE(IAsset);
 
+		friend class AssetManager;
+	public:
+		static const AssetTypeMeta kAssetTypeMeta;
+
+	private:
+		static AssetTypeMeta createTypeMeta();
 	};
 }
