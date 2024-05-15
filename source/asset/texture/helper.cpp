@@ -182,7 +182,7 @@ namespace chord
 				}
 				else
 				{
-					LOG_FATAL("Format {} still no process, need developer fix.", nameof::nameof_enum(meta.getFormat()));
+					LOG_FATAL("Format {} still no process, need developer fix.", std::string(nameof::nameof_enum(meta.getFormat())));
 				}
 			}
 
@@ -792,15 +792,8 @@ namespace chord
 
 		TextureAssetRef texturePtr;
 		{
-			const auto texPath = utf8::utf16to8(srcPath.u16string());
-
-			// Build texture ptr.
-			const auto name = savePath.filename().u16string() + utf8::utf8to16(meta.suffix);
-			const auto relativePath =
-				buildRelativePath(projectPaths.assetPath.u16(), savePath.parent_path());
-
 			// Create asset texture.
-			AssetSaveInfo saveInfo(name, relativePath);
+			AssetSaveInfo saveInfo = config->getSaveInfo(meta.suffix);
 			texturePtr = assetManager.createAsset<TextureAsset>(saveInfo, true);
 		}
 		texturePtr->markDirty();
@@ -1014,7 +1007,7 @@ namespace chord
 			texturePtr->m_dimension.z,
 			texturePtr->m_rawAssetPath.u8(),
 			utf8::utf16to8(texturePtr->m_saveInfo.relativeAssetStorePath().u16string()),
-			nameof::nameof_enum(texturePtr->m_format),
+			std::string(nameof::nameof_enum(texturePtr->m_format)),
 			texturePtr->m_mipmapCount);
 		return texturePtr->save();
 	}

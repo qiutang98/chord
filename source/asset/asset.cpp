@@ -85,6 +85,7 @@ namespace chord
 		registerAsset(TextureAsset::kAssetTypeMeta);
 		registerAsset(Scene::kAssetTypeMeta);
 		registerAsset(GLTFAsset::kAssetTypeMeta);
+		registerAsset(GLTFMaterialAsset::kAssetTypeMeta);
 	}
 
 	void AssetManager::setupProject()

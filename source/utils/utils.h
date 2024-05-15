@@ -497,4 +497,9 @@ namespace chord
 	// From https://github.com/TheCherno/Hazel/blob/master/Hazel/src/Hazel/Math/Math.cpp
 	extern bool decomposeTransform(const math::mat4& transform, math::vec3& translation, math::vec3& rotation, math::vec3& scale);
 
+	static inline bool hasFlag(auto a, auto b)
+	{
+		return (a & b) == b;
+	}
+
 }

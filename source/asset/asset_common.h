@@ -2,6 +2,7 @@
 
 #include <utils/utils.h>
 #include <utils/log.h>
+#include <project.h>
 
 namespace chord
 {
@@ -92,6 +93,22 @@ namespace chord
 	{
 		std::filesystem::path importFilePath;
 		std::filesystem::path storeFilePath;
+
+
+		// Create asset texture.
+		AssetSaveInfo getSaveInfo(const std::string& suffix) const
+		{
+			const std::filesystem::path& srcPath = this->importFilePath;
+			const std::filesystem::path& savePath = this->storeFilePath;
+
+			// Build texture ptr.
+			const auto name = savePath.filename().u16string() + utf8::utf8to16(suffix);
+			const auto relativePath =
+				buildRelativePath(Project::get().getPath().assetPath.u16(), savePath.parent_path());
+
+			// Create asset texture.
+			return AssetSaveInfo(name, relativePath);
+		}
 	};
 	using IAssetImportConfigRef = std::shared_ptr<IAssetImportConfig>;
 

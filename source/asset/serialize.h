@@ -6,6 +6,7 @@
 #include <scene/scene.h>
 #include <scene/component.h>
 #include <scene/scene_node.h>
+#include <asset/gltf/gltf.h>
 
 registerClassMember(IAsset)
 {
@@ -18,6 +19,29 @@ registerClassMemberInherit(TextureAsset, IAsset)
 
 	ARCHIVE_ENUM_CLASS(m_format);
 	ARCHIVE_ENUM_CLASS(m_colorspace);
+}}
+
+registerClassMemberInherit(GLTFMaterialAsset, IAsset)
+{
+	ar(baseColorFactor);
+	ar(baseColorTexture);
+	ar(metallicFactor);
+	ar(roughnessFactor);
+	ar(metallicRoughnessTexture);
+	ar(emissiveTexture);
+	ar(emissiveFactor);
+	ARCHIVE_ENUM_CLASS(alphaMode);
+	ar(alphaCoutoff);
+	ar(bDoubleSided);
+	ar(normalTexture);
+	ar(normalTextureScale);
+	ar(occlusionTexture);
+	ar(occlusionTextureStrength);
+}}
+
+registerClassMemberInherit(GLTFAsset, IAsset)
+{
+
 }}
 
 registerClassMember(Component)

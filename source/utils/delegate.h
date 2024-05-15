@@ -15,13 +15,15 @@ namespace chord
 	{
 		friend Friend;
 	private:
+		std::shared_mutex m_lock;
 		std::vector<std::function<void(Args...)>> m_collections;
 
 		void brocast(Args&&... args)
 		{
+			std::unique_lock<std::shared_mutex> lock(m_lock);
 			for (auto& func : m_collections)
 			{
-				func(std::forward<Args>(args)...);
+				if(func) { func(std::forward<Args>(args)...); }
 			}
 			m_collections.clear();
 		}
@@ -29,6 +31,7 @@ namespace chord
 	public:
 		void add(std::function<void(Args...)>&& func)
 		{
+			std::unique_lock<std::shared_mutex> lock(m_lock);
 			m_collections.push_back(func);
 		}
 	};
