@@ -14,6 +14,69 @@ namespace chord
 	{
 	}
 
+	bool GLTFAsset::isGPUPrimitivesStreamingReady() const
+	{
+		if (auto cache = m_gpuPrimitives.lock())
+		{
+			return cache->isReady();
+		}
+
+		return false;
+	}
+
+	GPUGLTFPrimitiveAssetRef GLTFAsset::getGPUPrimitives()
+	{
+		if (auto cache = m_gpuPrimitives.lock())
+		{
+			return cache;
+		}
+
+		auto assetPtr = shared_from_this();
+		auto newGPUPrimitives = std::make_shared<GPUGLTFPrimitiveAsset>(m_saveInfo.getName().u8());
+		const size_t totalUsedSize = m_gltfBinSize; // Primitive bin size.
+
+		getContext().getAsyncUploader().addTask(m_gltfBinSize,
+			[newGPUPrimitives, assetPtr](uint32 offset, uint32 queueFamily, void* mapped, VkCommandBuffer cmd, VkBuffer buffer)
+			{
+				GLTFBinary gltfBin{};
+				if (!std::filesystem::exists(assetPtr->getBinPath()))
+				{
+					checkEntry();
+				}
+				else
+				{
+					LOG_TRACE("Found bin for asset {} cache in disk so just load.",
+						utf8::utf16to8(assetPtr->getSaveInfo().relativeAssetStorePath().u16string()));
+					loadAsset(gltfBin, assetPtr->getBinPath());
+				}
+
+				size_t sizeAccumulate = 0;
+				auto copyBuffer = [&](const GPUGLTFPrimitiveAsset::ComponentBuffer& comp, const void* data)
+				{
+					VkBufferCopy regionCopy{ };
+
+					regionCopy.size = comp.stripe * comp.elementNum;
+					regionCopy.srcOffset = offset + sizeAccumulate;
+					regionCopy.dstOffset = 0;
+
+					memcpy((void*)((char*)mapped + sizeAccumulate), data, regionCopy.size);
+
+					vkCmdCopyBuffer(cmd, buffer, comp.buffer->getVkBuffer(), 1, &regionCopy);
+
+					sizeAccumulate += regionCopy.size;
+				};
+
+			},
+			[newGPUPrimitives]() // Finish loading.
+			{
+				newGPUPrimitives->setLoadingState(false);
+			});
+
+
+		m_gpuPrimitives = newGPUPrimitives;
+		return newGPUPrimitives;
+	}
+
 	void GLTFAsset::onPostConstruct()
 	{
 

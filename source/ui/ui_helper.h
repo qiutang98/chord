@@ -3,6 +3,11 @@
 #include <fontawsome/IconsFontAwesome6.h>
 #include <fontawsome/IconsFontAwesome6Brands.h>
 
+namespace chord
+{
+	class AssetSaveInfo;
+}
+
 namespace chord::ui
 {
 	extern void disableLambda(std::function<void()>&& lambda, bool bDisable);
@@ -34,6 +39,9 @@ namespace chord::ui
 		bool m_bShouldOpenPopup = false;
 		bool m_bPopupOpenState  = true;
 	};
+
+	
+	extern void inspectAssetSaveInfo(const AssetSaveInfo& info);
 }
 
 

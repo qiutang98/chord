@@ -878,6 +878,16 @@ namespace chord::graphics
 
 			initBuiltinTextures(); 
 
+			{
+				VkBufferCreateInfo ci{ };
+				ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+				ci.size  = 4;
+
+				VmaAllocationCreateInfo vmaCI{};
+				vmaCI.usage = VMA_MEMORY_USAGE_AUTO;
+
+				m_dummySSBO = std::make_shared<GPUBuffer>("DummySSBO", ci, vmaCI);
+			}
 
 
 			// Imgui manager init.
@@ -930,6 +940,7 @@ namespace chord::graphics
 		m_imguiManager.reset();
 
 		// Clear all builtin textures.
+		m_dummySSBO = nullptr;
 		m_builtinTextures = {};
 		m_texturePool.reset();
 		m_bufferPool.reset();
@@ -1069,6 +1080,13 @@ namespace chord::graphics
 	void Context::executeImmediatelyMajorGraphics(std::function<void(VkCommandBuffer cb, uint32 family, VkQueue queue)>&& func) const
 	{
 		executeImmediately(getGraphicsCommandPool().pool(), getGraphicsCommandPool().family(), getMajorGraphicsQueue(), std::move(func));
+	}
+
+	std::string getRuntimeUniqueGPUAssetName(const std::string& in)
+	{
+		static size_t GRuntimeId = 0;
+		GRuntimeId++;
+		return std::format("GPUAssetId: {}. {}.", GRuntimeId, in);
 	}
 
 	Context& graphics::getContext()

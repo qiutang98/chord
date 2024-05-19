@@ -149,10 +149,12 @@ private:
 
 struct DragAndDropAssets
 {
-	void clear()
+	void clear() 
 	{
 		selectAssets.clear();
 	}
+
+	void consume() { clear(); }
 
 	std::set<std::filesystem::path> selectAssets;
 };

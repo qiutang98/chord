@@ -4,13 +4,14 @@
 
 namespace chord
 {
-	UIComponentDrawDetails chord::Transform::createComponentUIDrawDetails()
+	UIComponentDrawDetails Transform::createComponentUIDrawDetails()
 	{
 		UIComponentDrawDetails result {};
 
+		result.name = "Transform";
 		result.bOptionalCreated = false; // Transform not optional create for node.
-		result.icon = ICON_FA_ASTERISK;
-
+		result.decoratedName = ICON_FA_ASTERISK + std::string("  Transform");
+		result.factory = []() { return std::make_shared<Transform>(); };
 		result.onDrawUI = [](ComponentRef component) -> bool
 		{
 			auto transform = std::static_pointer_cast<Transform>(component);

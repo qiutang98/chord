@@ -9,7 +9,7 @@ namespace chord
 	class SceneManager final : public ISubsystem
 	{
 	public:
-		explicit SceneManager() : ISubsystem("SceneManager") { }
+		explicit SceneManager();
 		virtual ~SceneManager() = default;
 
 		virtual bool onInit() override;
@@ -30,7 +30,15 @@ namespace chord
 		Events<SceneManager, SceneRef> onSceneLoad;
 		Events<SceneManager, SceneRef> onSceneUnload;
 
+		const auto& getUIComponentDrawDetailsMap() const
+		{
+			return m_registeredComponentUIDrawDetails;
+		}
+
 	private:
 		SceneWeak m_scene;
+
+		// Static const registered component infos.
+		std::unordered_map<std::string, const UIComponentDrawDetails*> m_registeredComponentUIDrawDetails;
 	};
 }

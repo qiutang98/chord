@@ -235,6 +235,8 @@ namespace chord::graphics
 		IUploadAsset* m_fallback = nullptr;
 	};
 
+
+
 	class GPUTextureAsset : public IUploadAsset
 	{
 	public:

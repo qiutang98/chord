@@ -151,6 +151,9 @@ void WidgetDetail::onVisibleTick(const ApplicationTickData& tickData)
 
 void WidgetDetail::drawComponent(std::shared_ptr<SceneNode> node)
 {
+	const auto& sceneManager = Application::get().getEngine().getSubsystem<SceneManager>();
+	const auto& detailMap = sceneManager.getUIComponentDrawDetailsMap();
+
 	if (ImGui::BeginTable("Add UIC##", 2))
 	{
 		const float sizeLable = ImGui::GetFontSize();
@@ -170,7 +173,29 @@ void WidgetDetail::drawComponent(std::shared_ptr<SceneNode> node)
 			ImGui::Separator();
 
 			bool bExistOneNewComponent = false;
-			
+
+			for (const auto& detail : detailMap)
+			{
+				const auto& meta = detail.second;
+				const auto& compName = detail.first;
+
+				const bool bAlreadyExist = node->hasComponent(compName);
+				if (!bAlreadyExist)
+				{
+					check(meta->bOptionalCreated);
+					bExistOneNewComponent = true;
+
+					ImGui::PushID(compName.c_str());
+					if (ImGui::Selectable(meta->decoratedName.c_str()))
+					{
+						auto comp = meta->factory();
+						node->getScene()->addComponent(compName, comp, node);
+
+						check(comp->isValid());
+					}
+					ImGui::PopID();
+				}
+			}
 
 			if (!bExistOneNewComponent)
 			{
@@ -195,4 +220,55 @@ void WidgetDetail::drawComponent(std::shared_ptr<SceneNode> node)
 		ImGuiTreeNodeFlags_SpanAvailWidth |
 		ImGuiTreeNodeFlags_AllowItemOverlap |
 		ImGuiTreeNodeFlags_FramePadding;
+
+	for (const auto& detail : detailMap)
+	{
+		const auto& meta = detail.second;
+		const auto& compName = detail.first;
+
+		if (meta->bOptionalCreated && node->hasComponent(compName))
+		{
+			ImGui::PushID(meta->decoratedName.c_str());
+
+			ImVec2 contentRegionAvailable = ImGui::GetContentRegionAvail();
+
+			ImGui::Spacing();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{ 4.0f * ImGui::GetWindowDpiScale(), 4.0f * ImGui::GetWindowDpiScale() } );
+			bool open = ImGui::TreeNodeEx("TreeNodeForComp", treeNodeFlags, meta->decoratedName.c_str());
+			ImGui::PopStyleVar();
+
+			const auto botWid = ImGui::GetItemRectSize().y;
+
+			ImGui::SameLine(contentRegionAvailable.x - botWid);
+			if (ImGui::Button(ICON_FA_XMARK, ImVec2{ botWid, botWid }))
+			{
+				node->getScene()->removeComponent(node, compName);
+
+				if (open)
+				{
+					ImGui::TreePop();
+				}
+				ImGui::PopID();
+
+				continue;
+			}
+			ui::hoverTip("Remove component.");
+
+			if (open)
+			{
+				ImGui::PushID("Widget");
+				ImGui::Spacing();
+
+				meta->onDrawUI(node->getComponent(compName));
+
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::PopID();
+
+				ImGui::TreePop();
+			}
+
+			ImGui::PopID();
+		}
+	}
 }

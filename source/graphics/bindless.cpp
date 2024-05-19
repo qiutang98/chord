@@ -194,7 +194,6 @@ namespace chord::graphics
 		write.dstArrayElement = requireIndex(EBindingType::BindlessStorageImage);
 
 		vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
-
 		return write.dstArrayElement;
 	}
 
@@ -220,6 +219,51 @@ namespace chord::graphics
 		}
 
 		freeIndex(EBindingType::BindlessStorageImage, index.get());
+		index = { };
+	}
+
+	CHORD_NODISCARD BindlessIndex BindlessManager::registerBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range)
+	{
+		VkDescriptorBufferInfo bufferInfo{};
+		bufferInfo.buffer = buffer;
+		bufferInfo.offset = offset;
+		bufferInfo.range = range;
+
+		VkWriteDescriptorSet write{};
+		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write.dstSet = m_set;
+		write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessStorageBuffer)].type;
+		write.dstBinding = static_cast<uint32>(EBindingType::BindlessStorageBuffer);
+		write.pBufferInfo = &bufferInfo;
+		write.descriptorCount = 1;
+		write.dstArrayElement = requireIndex(EBindingType::BindlessStorageBuffer);
+
+		vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
+		return write.dstArrayElement;
+	}
+
+	void BindlessManager::freeBuffer(BindlessIndex& index, GPUBufferRef fallback)
+	{
+		if (fallback)
+		{
+			VkDescriptorBufferInfo bufferInfo{};
+			bufferInfo.buffer = *fallback;
+			bufferInfo.offset = 0;
+			bufferInfo.range  = fallback->getSize();
+
+			VkWriteDescriptorSet  write{};
+			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write.dstSet = m_set;
+			write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessStorageBuffer)].type;
+			write.dstBinding = static_cast<uint32>(EBindingType::BindlessStorageBuffer);
+			write.pBufferInfo = &bufferInfo;
+			write.descriptorCount = 1;
+			write.dstArrayElement = index.get();
+
+			vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
+		}
+
+		freeIndex(EBindingType::BindlessStorageBuffer, index.get());
 		index = { };
 	}
 

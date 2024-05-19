@@ -1,6 +1,7 @@
 #include "outliner.h"
 #include <ui/ui_helper.h>
 #include "../flower.h"
+#include "../manager/project_content.h"
 
 using namespace chord;
 using namespace chord::ui;
@@ -359,66 +360,100 @@ void WidgetOutliner::beginDragDrop(std::shared_ptr<SceneNode> node)
 
 void WidgetOutliner::acceptDragdrop(bool bRoot)
 {
+	auto& assetManager = Application::get().getAssetManager();
 	auto activeScene = m_sceneManager->getActiveScene();
-
+	SceneNodeRef targetNode = nullptr;
 	if (bRoot)
 	{
-		if (ImGui::BeginDragDropTarget())
-		{
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(m_drawContext.kOutlinerDragDropName))
-			{
-				if (m_drawContext.dragingNodes.size() > 0)
-				{
-					for (const auto& node : m_drawContext.dragingNodes)
-					{
-						if (auto nodePtr = node.lock())
-						{
-							activeScene->setParent(activeScene->getRootNode(), nodePtr);
-						}
-					}
-
-					// Reset draging node.
-					m_drawContext.dragingNodes.clear();
-
-					sortChildren(activeScene->getRootNode());
-				}
-			}
-			ImGui::EndDragDropTarget();
-		}
+		targetNode = activeScene->getRootNode();
 	}
 	else
 	{
-		// Accept drag drop.
-		if (auto hoverNode = m_drawContext.hoverNode.lock())
+		targetNode = m_drawContext.hoverNode.lock();
+	}
+
+	if (targetNode && ImGui::BeginDragDropTarget())
+	{
+		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(m_drawContext.kOutlinerDragDropName))
 		{
-			if (ImGui::BeginDragDropTarget())
+			if (m_drawContext.dragingNodes.size() > 0)
 			{
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(m_drawContext.kOutlinerDragDropName))
+				for (const auto& node : m_drawContext.dragingNodes)
 				{
-					if (m_drawContext.dragingNodes.size() > 0)
+					if (auto dragingNode = node.lock())
 					{
-						for (auto& node : m_drawContext.dragingNodes)
+						if (activeScene->setParent(targetNode, dragingNode))
 						{
-							if (auto nodePtr = node.lock())
-							{
-								if (activeScene->setParent(hoverNode, nodePtr))
-								{
-									activeScene->markDirty();
+							activeScene->markDirty();
 
-									m_drawContext.expandNodeInTreeView.insert(hoverNode->getId());
-									m_drawContext.expandNodeInTreeView.insert(nodePtr->getId());
-								}
-							}
-							// Reset draging node.
-							m_drawContext.dragingNodes.clear();
+							m_drawContext.expandNodeInTreeView.insert(targetNode->getId());
+							m_drawContext.expandNodeInTreeView.insert(dragingNode->getId());
 						}
-
-						sortChildren(activeScene->getRootNode());
 					}
 				}
-				ImGui::EndDragDropTarget();
+
+				// Reset draging node.
+				m_drawContext.dragingNodes.clear();
+				sortChildren(targetNode);
 			}
 		}
+		else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(ProjectContentManager::getDragDropAssetsName()))
+		{
+			auto& dragDropAssets = Flower::get().getContentManager().getDragDropAssets();
+			if (!dragDropAssets.selectAssets.empty())
+			{
+				for (const auto& asset : dragDropAssets.selectAssets)
+				{
+					if (asset.extension() == ".assetgltf")
+					{
+						if (auto gltfRef = assetManager.getOrLoadAsset<GLTFAsset>(asset, true))
+						{
+							const auto& gltfScene = gltfRef->getScene();
+							const auto& gltfNodes = gltfRef->getNodes();
+							const auto& gltfMeshes = gltfRef->getMeshes();
+
+							auto sceneRootNode = activeScene->createNode(m_sceneManagerUI->addUniqueIdForName(u16str("GLTFScene: " + gltfScene.name)), targetNode);
+
+							std::function<void(SceneNodeRef, const std::vector<int32>&)> buildNodeRecursive = [&](SceneNodeRef parent, const std::vector<int32>& nodes) -> void
+							{
+								for (auto& nodeId : nodes)
+								{
+									const auto& activeGLTFNode = gltfNodes[nodeId];
+
+									auto newSceneNode =
+										activeScene->createNode(m_sceneManagerUI->addUniqueIdForName(u16str(activeGLTFNode.name)), parent);
+
+									// WARN: Precision lose. dmat->mat
+									newSceneNode->getTransform()->setMatrix(activeGLTFNode.localMatrix);
+
+									// 
+									if (activeGLTFNode.mesh > -1)
+									{
+										auto gltfMeshComp = std::dynamic_pointer_cast<GLTFMeshComponent>(GLTFMeshComponent::kComponentUIDrawDetails.factory());
+										activeScene->addComponent<GLTFMeshComponent>(gltfMeshComp, newSceneNode);
+
+										gltfMeshComp->setGLTFMesh(gltfRef->getSaveInfo(), activeGLTFNode.mesh);
+									}
+									
+
+									buildNodeRecursive(newSceneNode, activeGLTFNode.childrenIds);
+								}
+							};
+							buildNodeRecursive(sceneRootNode, gltfScene.nodes);
+						}
+
+					}
+
+				}
+
+				// 
+				dragDropAssets.consume();
+				sortChildren(targetNode);
+			}
+		}
+
+
+		ImGui::EndDragDropTarget();
 	}
 }
 

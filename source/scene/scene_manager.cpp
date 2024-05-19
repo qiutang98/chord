@@ -1,9 +1,25 @@
 #include <scene/scene_manager.h>
 #include <asset/asset.h>
 #include <project.h>
+#include <scene/component/gltf_mesh.h>
+#include <scene/component/transform.h>
 
 namespace chord
 {
+	SceneManager::SceneManager()
+		: ISubsystem("SceneManager") 
+	{ 
+		auto registerAsset = [this](const UIComponentDrawDetails& type, const std::string& name)
+		{
+			check(m_registeredComponentUIDrawDetails[name] == nullptr);
+			m_registeredComponentUIDrawDetails[name] = &type;
+		};
+
+		registerAsset(Transform::kComponentUIDrawDetails, typeid(Transform).name());
+		registerAsset(GLTFMeshComponent::kComponentUIDrawDetails, typeid(GLTFMeshComponent).name());
+
+	}
+
 	bool SceneManager::onInit()
 	{
 		return true;

@@ -212,22 +212,13 @@ namespace chord
 
 			return true;
 		}
+		return false;
 	}
 
 	template<typename T>
 	inline bool Scene::addComponent(std::shared_ptr<T> component, SceneNodeRef node)
 	{
 		static_assert(std::is_base_of_v<Component, T>, "T must derive from Component.");
-
-		if (component && !node->hasComponent<T>())
-		{
-			node->setComponent(component);
-			m_components[typeid(T).name()].push_back(component);
-			markDirty();
-
-			return true;
-		}
-
-		return false;
+		return addComponent(typeid(T).name(), component, node);
 	}
 }

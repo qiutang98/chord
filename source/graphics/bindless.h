@@ -15,8 +15,13 @@ namespace chord::graphics
 		CHORD_NODISCARD BindlessIndex registerSRV(VkImageView view);
 		CHORD_NODISCARD BindlessIndex registerUAV(VkImageView view);
 
+		CHORD_NODISCARD BindlessIndex registerBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range);
+
 		void freeSRV(BindlessIndex& index, ImageView fallback);
 		void freeUAV(BindlessIndex& index, ImageView fallback);
+
+		// Free ssbo bindless.
+		void freeBuffer(BindlessIndex& index, GPUBufferRef fallback);
 
 		const VkDescriptorSetLayout& getSetLayout() const { return m_setLayout; }
 		const VkDescriptorSet& getSet() const { return m_set; }

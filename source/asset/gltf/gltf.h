@@ -1,5 +1,6 @@
 #pragma once
 #include <asset/asset.h>
+#include <asset/gltf/gltf_helper.h>
 
 namespace chord
 {
@@ -68,7 +69,7 @@ namespace chord
 		float occlusionTextureStrength = 1.0f;
 	};
 
-	struct GLTFPrimitiveMesh
+	struct GLTFPrimitive
 	{
 		std::string name;
 
@@ -80,7 +81,13 @@ namespace chord
 		uint32 vertexOffset = 0; // used for required attributes.
 		uint32 vertexCount  = 0;
 
+		bool bColor0Exist = false;
+		bool bSmoothNormalExist = false;
+		bool bTextureCoord1Exist = false;
+
+		// Optional attributes.
 		uint32 colors0Offset = 0;
+		uint32 smoothNormalOffset = 0;
 		uint32 textureCoord1Offset = 0;
 
 		// 
@@ -91,43 +98,89 @@ namespace chord
 		template<class Ar> void serialize(Ar& ar)
 		{
 			ar(name, material, firstIndex, indexCount, vertexCount, vertexOffset);
-			ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset);
+			ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
+			ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
+		}
+	};
+
+	struct GLTFMesh
+	{
+		std::string name;
+		std::vector<GLTFPrimitive> primitives;
+
+		template<class Ar> void serialize(Ar& ar)
+		{
+			ar(name, primitives);
+		}
+	};
+
+	struct GLTFNode
+	{
+		std::string name;
+		std::vector<int32> childrenIds;
+
+		int32 mesh;
+		math::dmat4 localMatrix;
+
+		template<class Ar> void serialize(Ar& ar)
+		{
+			ar(name, childrenIds, localMatrix, mesh);
+		}
+	};
+
+	struct GLTFScene
+	{
+		std::string name;
+
+		std::vector<int32> nodes;
+
+		template<class Ar> void serialize(Ar& ar)
+		{
+			ar(name, nodes);
 		}
 	};
 
 	struct GLTFBinary
 	{
-		std::vector<GLTFPrimitiveMesh> primMeshes;
-
-		struct
+		// Data from primitive accessor.
+		struct PrimitiveDatas
 		{
 			std::vector<uint32> indices;
 
 			// required.
 			std::vector<math::vec3> positions;
 			std::vector<math::vec3> normals;
-			std::vector<math::vec3> smoothNormals;
 			std::vector<math::vec2> texcoords0; 
 			std::vector<math::vec4> tangents;
 
 			// optional.
 			std::vector<math::vec2> texcoords1;    
-			std::vector<math::vec4> colors0;      
+			std::vector<math::vec4> colors0;    
+			std::vector<math::vec3> smoothNormals;
 
+			size_t size() const
+			{
+				auto sizeofV = [](const auto& a) { return a.size() * sizeof(a[0]); };
+				return
+					  sizeofV(indices)
+					+ sizeofV(positions)
+					+ sizeofV(normals)
+					+ sizeofV(texcoords0)
+					+ sizeofV(tangents)
+					+ sizeofV(texcoords1)
+					+ sizeofV(colors0)
+					+ sizeofV(smoothNormals);
+			}
 		} primitiveData;
 
 		template<class Ar> void serialize(Ar& ar)
 		{
-			ar(primMeshes);
-
 			ar(primitiveData.indices);
-
 			ar(primitiveData.positions);
 			ar(primitiveData.normals);
-			ar(primitiveData.smoothNormals);
 			ar(primitiveData.texcoords0);
 			ar(primitiveData.tangents);
-
+			ar(primitiveData.smoothNormals);
 			ar(primitiveData.texcoords1);
 			ar(primitiveData.colors0);
 		}
@@ -138,6 +191,7 @@ namespace chord
 		REGISTER_BODY_DECLARE(IAsset);
 
 		friend class AssetManager;
+		friend bool importFromConfig(GLTFAssetImportConfigRef config);
 	public:
 		static const AssetTypeMeta kAssetTypeMeta;
 
@@ -151,6 +205,17 @@ namespace chord
 		// 
 		explicit GLTFAsset(const AssetSaveInfo& saveInfo);
 
+		const GLTFScene& getScene() const
+		{
+			return m_scenes[m_defaultScene > -1 ? m_defaultScene : 0];
+		}
+
+		const auto& getNodes() const { return m_nodes; }
+		const auto& getMeshes() const { return m_meshes; }
+
+		bool isGPUPrimitivesStreamingReady() const;
+		GPUGLTFPrimitiveAssetRef getGPUPrimitives();
+
 	protected:
 		// ~IAsset virtual function.
 		// Call back when call AssetManager::createAsset
@@ -161,7 +226,18 @@ namespace chord
 		// ~IAsset virtual function.
 
 	private:
-		
+		GPUGLTFPrimitiveAssetWeak m_gpuPrimitives;
+
+
+	private:
+		int32 m_defaultScene;
+		std::vector<GLTFScene> m_scenes;
+
+		std::vector<GLTFMesh> m_meshes;
+		std::vector<GLTFNode> m_nodes;
+
+		size_t m_gltfBinSize;
 	};
 	using GLTFAssetRef = std::shared_ptr<GLTFAsset>;
+	using GLTFAssetWeak = std::weak_ptr<GLTFAsset>;
 }

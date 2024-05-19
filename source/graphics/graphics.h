@@ -153,6 +153,7 @@ namespace chord::graphics
 			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
 		void waitDeviceIdle() const;
+		GPUBufferRef getDummySSBO() const { return m_dummySSBO; }
 
 	public:
 		bool init(const InitConfig& config);
@@ -214,6 +215,7 @@ namespace chord::graphics
 
 		// Engine builtin textures.
 		BuiltinTextures m_builtinTextures;
+		GPUBufferRef m_dummySSBO;
 
 		// Graphics family command pool with RESET bit flag.
 		std::unique_ptr<CommandPoolResetable> m_graphicsCommandPool;
@@ -231,6 +233,8 @@ namespace chord::graphics
 
 	// Helper function save some time.
 	extern Context& getContext();
+
+	extern std::string getRuntimeUniqueGPUAssetName(const std::string& in);
 
 	// Helper function save some time.
 	static inline const auto* getAllocationCallbacks() 

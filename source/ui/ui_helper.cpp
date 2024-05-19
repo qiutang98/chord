@@ -1,5 +1,6 @@
 #include <ui/ui_helper.h>
 #include <ui/imgui/imgui_internal.h>
+#include <asset/asset_common.h>
 
 namespace chord::ui
 {
@@ -164,6 +165,23 @@ namespace chord::ui
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + off);
 
 		return ImGui::Button(label, widgetSize);
+	}
+
+	void inspectAssetSaveInfo(const AssetSaveInfo& info)
+	{
+		if (!info.empty())
+		{
+			ImGui::TextDisabled("Empty asset save info!");
+		}
+		else if (info.isTemp())
+		{
+			ImGui::TextDisabled("Temp: {}", info.getName().u8().c_str());
+		}
+		else
+		{
+			ImGui::TextDisabled(utf8::utf16to8(info.relativeAssetStorePath().u16string()).c_str());
+		}
+
 	}
 
 	void ui::hoverTip(const char* desc)

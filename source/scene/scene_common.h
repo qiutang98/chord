@@ -19,10 +19,13 @@ namespace chord
     class UIComponentDrawDetails
     {
     public:
+        std::string name;
+
         // This component is optional created in menu.
         bool bOptionalCreated;
-        std::string icon;
+        std::string decoratedName;
 
         std::function<bool(ComponentRef)> onDrawUI;
+        std::function<std::shared_ptr<Component>()> factory;
     };
 }
