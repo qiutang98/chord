@@ -32,7 +32,7 @@ namespace chord::graphics
 
 		checkVkResult(vmaCreateBuffer(getVMA(), &m_createInfo, &vmaCreateInfo, &m_buffer, &m_allocation, &m_vmaAllocationInfo));
 
-		GPUResource::setSize(m_vmaAllocationInfo.size);
+		GPUResource::setSize(createInfo.size); // Don't use allocate size.
 		rename(name);
 
 		sTotalGPUBufferDeviceSize += getSize();

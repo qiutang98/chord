@@ -226,6 +226,7 @@ namespace chord
 		// ~IAsset virtual function.
 
 	private:
+		// Reference host by component, asset only host weak pointer.
 		GPUGLTFPrimitiveAssetWeak m_gpuPrimitives;
 
 

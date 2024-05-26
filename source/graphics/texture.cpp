@@ -32,7 +32,11 @@ namespace chord::graphics
 
 		checkVkResult(vmaCreateImage(getVMA(), &createInfo, &vmaCreateInfo, &m_image, &m_allocation, &m_vmaAllocationInfo));
 
-		GPUResource::setSize(m_vmaAllocationInfo.size);
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(getDevice(), m_image, &memRequirements);
+
+		// Use actually memory size.
+		GPUResource::setSize(memRequirements.size);
 		rename(name);
 
 		sTotalGPUTextureDeviceSize += getSize();

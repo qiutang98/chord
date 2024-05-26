@@ -43,7 +43,7 @@ registerClassMemberInherit(GLTFAsset, IAsset)
 {
 	ar(m_meshes);
 	ar(m_nodes);
-	ar(m_defaultScene, m_scenes, m_primitiveDataSize);
+	ar(m_defaultScene, m_scenes, m_gltfBinSize);
 }}
 
 registerClassMember(Component)

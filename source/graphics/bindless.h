@@ -4,6 +4,8 @@
 
 namespace chord::graphics
 {
+	class GPUBuffer;
+
 	using BindlessIndex = OptionalValue<uint32, ~0>;
 	class BindlessManager : NonCopyable
 	{
@@ -21,7 +23,7 @@ namespace chord::graphics
 		void freeUAV(BindlessIndex& index, ImageView fallback);
 
 		// Free ssbo bindless.
-		void freeBuffer(BindlessIndex& index, GPUBufferRef fallback);
+		void freeBuffer(BindlessIndex& index, std::shared_ptr<GPUBuffer> fallback);
 
 		const VkDescriptorSetLayout& getSetLayout() const { return m_setLayout; }
 		const VkDescriptorSet& getSet() const { return m_set; }

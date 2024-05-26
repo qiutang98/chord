@@ -1088,17 +1088,55 @@ namespace chord
 
 	}
 
-
-
-	GPUGLTFPrimitiveAsset::~GPUGLTFPrimitiveAsset()
+	GPUGLTFPrimitiveAsset::ComponentBuffer::ComponentBuffer(
+		const std::string& name, 
+		VkBufferUsageFlags flags, 
+		VmaAllocationCreateFlags vmaFlags,
+		size_t stripe,
+		size_t num)
 	{
+		this->elementNum = num;
+		this->stripe = stripe;
 
+		VkBufferCreateInfo ci{ };
+		ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		ci.size = stripe * num;
+		ci.usage = flags;
+		ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+		VmaAllocationCreateInfo vmaCI{};
+		vmaCI.usage = VMA_MEMORY_USAGE_AUTO;
+		vmaCI.flags = vmaFlags;
+
+		// Buffer handle.
+		this->buffer = std::make_shared<graphics::GPUBuffer>(name, ci, vmaCI);
+		
+		// Register bindless.
+		this->bindless = graphics::getContext().getBindlessManger().registerBuffer(*this->buffer, 0, this->buffer->getSize());
+	}
+
+	GPUGLTFPrimitiveAsset::ComponentBuffer::~ComponentBuffer()
+	{
+		if (bindless.isValid())
+		{
+			const bool bReleasing = (Application::get().getRuntimePeriod() == ERuntimePeriod::Releasing);
+			graphics::GPUBufferRef fallback = bReleasing ? nullptr : graphics::getContext().getDummySSBO();
+
+			// Free buffer bindless index.
+			graphics::getContext().getBindlessManger().freeBuffer(bindless, fallback);
+		}
 	}
 
 	size_t GPUGLTFPrimitiveAsset::getSize() const
 	{
-		auto getValidSize = [](const ComponentBuffer& buffer) -> size_t { if (buffer.buffer) { return buffer.buffer->getSize(); } else { return 0; } };
+		auto getValidSize = [](const std::unique_ptr<ComponentBuffer>& buffer) -> size_t 
+		{ 
+			if (buffer != nullptr) 
+			{ 
+				return buffer->buffer->getSize(); 
+			} 
+			return 0;
+		};
 
 		return 
 			  getValidSize(indices) 
@@ -1109,43 +1147,6 @@ namespace chord
 			+ getValidSize(colors)
 			+ getValidSize(uv1s)
 			+ getValidSize(smoothNormals);
-	}
-
-	void GPUGLTFPrimitiveAsset::makeComponent(
-		const std::string& name,
-		ComponentBuffer& comp, 
-		VkBufferUsageFlags flags, 
-		VmaAllocationCreateFlags vmaFlags, 
-		uint32 stripe, 
-		uint32 num)
-	{
-		comp.elementNum = num;
-		comp.stripe = stripe;
-
-		VkBufferCreateInfo ci { };
-		ci.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		ci.size        = stripe * num;
-		ci.usage       = flags;
-		ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		VmaAllocationCreateInfo vmaCI{};
-		vmaCI.usage = VMA_MEMORY_USAGE_AUTO;
-		vmaCI.flags = vmaFlags;
-
-		comp.buffer = std::make_shared<graphics::GPUBuffer>(name, ci, vmaCI);
-		comp.bindless = graphics::getContext().getBindlessManger().registerBuffer(*comp.buffer, 0, comp.buffer->getSize());
-	}
-
-	void GPUGLTFPrimitiveAsset::freeComponent(
-		ComponentBuffer& comp, 
-		graphics::GPUBufferRef fallback)
-	{
-		if (comp.bindless.isValid())
-		{
-			graphics::getContext().getBindlessManger().freeBuffer(comp.bindless, fallback);
-		}
-
-		comp = { };
 	}
 
 }

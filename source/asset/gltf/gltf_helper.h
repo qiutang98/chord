@@ -15,35 +15,39 @@ namespace chord
 	class GPUGLTFPrimitiveAsset : public graphics::IUploadAsset
 	{
 	public:
-
 		struct ComponentBuffer
 		{
+			explicit ComponentBuffer(
+				const std::string& name, 
+				VkBufferUsageFlags flags, 
+				VmaAllocationCreateFlags vmaFlags, 
+				size_t stripe,
+				size_t num);
+
+			~ComponentBuffer();
+
 			graphics::GPUBufferRef buffer = nullptr;
 			graphics::BindlessIndex bindless;
+
 			VkDeviceSize stripe = ~0U;
 			uint32 elementNum   = ~0U;
 		};
 
-		ComponentBuffer indices;
-		ComponentBuffer positions;
-		ComponentBuffer normals;
-		ComponentBuffer uv0s;
-		ComponentBuffer tangents;
+		std::unique_ptr<ComponentBuffer> indices = nullptr;
+		std::unique_ptr<ComponentBuffer> positions = nullptr;
+		std::unique_ptr<ComponentBuffer> normals = nullptr;
+		std::unique_ptr<ComponentBuffer> uv0s = nullptr;
+		std::unique_ptr<ComponentBuffer> tangents = nullptr;
 
 		// Optional
-		ComponentBuffer colors;
-		ComponentBuffer uv1s;
-		ComponentBuffer smoothNormals;
+		std::unique_ptr<ComponentBuffer> colors = nullptr;
+		std::unique_ptr<ComponentBuffer> uv1s = nullptr;
+		std::unique_ptr<ComponentBuffer> smoothNormals = nullptr;
 
 		explicit GPUGLTFPrimitiveAsset(const std::string& name);
-		virtual ~GPUGLTFPrimitiveAsset();
 
 		// Current gpu buffer sizes.
 		size_t getSize() const;
-
-	private:
-		void makeComponent(const std::string& name, ComponentBuffer& comp, VkBufferUsageFlags flags, VmaAllocationCreateFlags vmaFlags, uint32 stripe, uint32 num);
-		void freeComponent(ComponentBuffer& comp, graphics::GPUBufferRef fallback);
 
 	private:		
 		std::string m_name;

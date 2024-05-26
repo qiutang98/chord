@@ -882,6 +882,12 @@ namespace chord::graphics
 				VkBufferCreateInfo ci{ };
 				ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 				ci.size  = 4;
+				ci.usage = 
+					VK_BUFFER_USAGE_TRANSFER_SRC_BIT | 
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+					VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+					VK_BUFFER_USAGE_INDEX_BUFFER_BIT   |
+					VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
 				VmaAllocationCreateInfo vmaCI{};
 				vmaCI.usage = VMA_MEMORY_USAGE_AUTO;

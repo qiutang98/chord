@@ -23,7 +23,8 @@ namespace chord
 		static UIComponentDrawDetails createComponentUIDrawDetails();
 
 	private:
-		GLTFAssetRef m_gltfAsset; // Using gltf asset, host by component.
+		GPUGLTFPrimitiveAssetRef m_gltfGPU = nullptr;
+		GLTFAssetRef m_gltfAsset = nullptr; // Using gltf asset, host by component.
 
 	private:
 		// Using gltf mesh id.

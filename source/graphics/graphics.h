@@ -95,6 +95,7 @@ namespace chord::graphics
 
 		// Current graphics support HDR.
 		bool isRequiredHDR() const { return m_initConfig.bHDR; }
+		bool isRaytraceSupport() const { return m_initConfig.bRaytracing; }
 
 		// Current application own bindless manager.
 		auto& getBindlessManger() { return *m_bindlessManager; }

@@ -31,7 +31,10 @@ namespace chord
 		static AssetSaveInfo buildRelativeAsset(const std::filesystem::path& savePath);
 
 		// Default compare.
-		bool operator==(const AssetSaveInfo&) const = default;
+		bool operator==(const AssetSaveInfo& o) const
+		{
+			return m_name == o.m_name && m_storeFolder == o.m_storeFolder;
+		}
 
 	public:
 		const uint64 hash() const;

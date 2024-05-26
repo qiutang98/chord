@@ -36,7 +36,7 @@ namespace chord
 		const size_t totalUsedSize = m_gltfBinSize; // Primitive bin size.
 
 		getContext().getAsyncUploader().addTask(m_gltfBinSize,
-			[newGPUPrimitives, assetPtr](uint32 offset, uint32 queueFamily, void* mapped, VkCommandBuffer cmd, VkBuffer buffer)
+			[newGPUPrimitives, assetPtr, totalUsedSize](uint32 offset, uint32 queueFamily, void* mapped, VkCommandBuffer cmd, VkBuffer buffer)
 			{
 				GLTFBinary gltfBin{};
 				if (!std::filesystem::exists(assetPtr->getBinPath()))
@@ -60,18 +60,107 @@ namespace chord
 					regionCopy.dstOffset = 0;
 
 					memcpy((void*)((char*)mapped + sizeAccumulate), data, regionCopy.size);
-
-					vkCmdCopyBuffer(cmd, buffer, comp.buffer->getVkBuffer(), 1, &regionCopy);
+					vkCmdCopyBuffer(cmd, buffer, *comp.buffer, 1, &regionCopy);
 
 					sizeAccumulate += regionCopy.size;
 				};
 
+				{
+					auto bufferFlagBasic = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+					VmaAllocationCreateFlags bufferFlagVMA = {};
+					if (getContext().isRaytraceSupport())
+					{
+						// Raytracing accelerate struct, random shader fetch by address.
+						bufferFlagBasic |=
+							VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+							VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+						bufferFlagVMA = {};
+					}
+					static_assert(sizeof(math::vec3) == sizeof(float) * 3);
+
+					newGPUPrimitives->indices = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
+						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_indices"),
+						bufferFlagBasic | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+						bufferFlagVMA,
+						sizeof(gltfBin.primitiveData.indices[0]),
+						gltfBin.primitiveData.indices.size());
+					copyBuffer(*newGPUPrimitives->indices, gltfBin.primitiveData.indices.data());
+
+					newGPUPrimitives->positions = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
+						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_positions"),
+						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+						bufferFlagVMA,
+						sizeof(gltfBin.primitiveData.positions[0]),
+						gltfBin.primitiveData.positions.size());
+					copyBuffer(*newGPUPrimitives->positions, gltfBin.primitiveData.positions.data());
+
+					newGPUPrimitives->normals = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
+						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_normals"),
+						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+						bufferFlagVMA,
+						sizeof(gltfBin.primitiveData.normals[0]),
+						gltfBin.primitiveData.normals.size());
+					copyBuffer(*newGPUPrimitives->normals, gltfBin.primitiveData.normals.data());
+
+					newGPUPrimitives->uv0s = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
+						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_uv0s"),
+						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+						bufferFlagVMA,
+						sizeof(gltfBin.primitiveData.texcoords0[0]),
+						gltfBin.primitiveData.texcoords0.size());
+					copyBuffer(*newGPUPrimitives->uv0s, gltfBin.primitiveData.texcoords0.data());
+
+					newGPUPrimitives->tangents = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
+						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_tangents"),
+						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+						bufferFlagVMA,
+						sizeof(gltfBin.primitiveData.tangents[0]),
+						gltfBin.primitiveData.tangents.size());
+					copyBuffer(*newGPUPrimitives->tangents, gltfBin.primitiveData.tangents.data());
+
+					if (!gltfBin.primitiveData.smoothNormals.empty())
+					{
+						newGPUPrimitives->smoothNormals = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
+							getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_smoothNormals"),
+							bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+							bufferFlagVMA,
+							sizeof(gltfBin.primitiveData.smoothNormals[0]),
+							gltfBin.primitiveData.smoothNormals.size());
+
+						copyBuffer(*newGPUPrimitives->smoothNormals, gltfBin.primitiveData.smoothNormals.data());
+					}
+
+					if (!gltfBin.primitiveData.colors0.empty())
+					{
+						newGPUPrimitives->colors = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
+							getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_colors0"),
+							bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+							bufferFlagVMA,
+							sizeof(gltfBin.primitiveData.colors0[0]),
+							gltfBin.primitiveData.colors0.size());
+
+						copyBuffer(*newGPUPrimitives->colors, gltfBin.primitiveData.colors0.data());
+					}
+
+					if (!gltfBin.primitiveData.texcoords1.empty())
+					{
+						newGPUPrimitives->uv1s = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
+							getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_texcoords1"),
+							bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+							bufferFlagVMA,
+							sizeof(gltfBin.primitiveData.texcoords1[0]),
+							gltfBin.primitiveData.texcoords1.size());
+
+						copyBuffer(*newGPUPrimitives->uv1s, gltfBin.primitiveData.texcoords1.data());
+					}
+				}
+
+				checkMsgf(totalUsedSize == sizeAccumulate, "Mesh primitive data size un-match!");
 			},
 			[newGPUPrimitives]() // Finish loading.
 			{
 				newGPUPrimitives->setLoadingState(false);
 			});
-
 
 		m_gpuPrimitives = newGPUPrimitives;
 		return newGPUPrimitives;

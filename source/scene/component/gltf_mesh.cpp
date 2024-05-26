@@ -36,14 +36,18 @@ namespace chord
 
 	bool GLTFMeshComponent::setGLTFMesh(const AssetSaveInfo& asset, int32 meshId)
 	{
-		if (asset != m_gltfAssetInfo && meshId != m_gltfMeshId)
+		if (asset != m_gltfAssetInfo || meshId != m_gltfMeshId)
 		{
-			// Reset cache pointer.
-			m_gltfAsset = {};
-
-			// 
-			m_gltfAssetInfo = asset;
 			m_gltfMeshId = meshId;
+
+			if (asset != m_gltfAssetInfo)
+			{
+				m_gltfAssetInfo = asset;
+
+				// Reload asset.
+				m_gltfAsset = Application::get().getAssetManager().getOrLoadAsset<GLTFAsset>(asset.path(), true);
+				m_gltfGPU = m_gltfAsset->getGPUPrimitives();
+			}
 
 			markDirty();
 
