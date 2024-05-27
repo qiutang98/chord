@@ -138,11 +138,12 @@ void ViewportCamera::processMouseMovement(float xoffset, float yoffset, bool con
 
 	if (constrainPitch)
 	{
+		// Do some clamp avoid overlap with world up.
+		// Also avoid view flip.
 		if (m_pitch > 89.0f)
 		{
 			m_pitch = 89.0f;
 		}
-
 		if (m_pitch < -89.0f)
 		{
 			m_pitch = -89.0f;
@@ -166,6 +167,7 @@ ViewportCamera::ViewportCamera(WidgetViewport* inViewport)
 
 void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* window)
 {
+	// Skip non window viewport.
 	if (window == nullptr)
 	{
 		return;
@@ -199,24 +201,16 @@ void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* windo
 	m_bActiveViewport = false;
 	if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT))
 	{
-		if (m_viewport->isMouseInViewport() || m_bHideMouseCursor)
+		if (m_viewport->isMouseInViewport())
 		{
 			m_bActiveViewport = true;
 		}
 	}
 
 	// active viewport. disable cursor.
-	if (m_bActiveViewport && !m_bHideMouseCursor)
+	if (m_bActiveViewport)
 	{
-		m_bHideMouseCursor = true;
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	}
-
-	// un-active viewport. enable cursor.
-	if (!m_bActiveViewport && m_bHideMouseCursor)
-	{
-		m_bHideMouseCursor = false;
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 	}
 
 	// first time un-active viewport.
@@ -266,6 +260,23 @@ void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* windo
 	updateMatrixMisc();
 }
 
+
+// Scene depth to linear viewspace z is: lz = near / z;
+math::mat4 infiniteInvertZPerspectiveRH_ZO(float aspect, float fovy, float zNear)
+{
+	check(abs(aspect - std::numeric_limits<float>::epsilon()) > 0.0f);
+
+	math::mat4 result = math::zero<math::mat4>();
+
+	const float tanHalfFovy = tan(fovy * 0.5f);
+	result[0][0] =  1.0f / (aspect * tanHalfFovy);
+	result[1][1] =  1.0f / (tanHalfFovy);
+	result[2][3] = -1.0f;
+	result[3][2] =  zNear;
+
+	return result;
+}
+
 // Update camera view matrix and project matrix.
 // We use reverse z projection.
 void ViewportCamera::updateMatrixMisc()
@@ -273,6 +284,7 @@ void ViewportCamera::updateMatrixMisc()
 	// update view matrix.
 	m_viewMatrix = math::lookAt(m_position, m_position + m_front, m_up);
 
-	// reverse z.
-	m_projectMatrix = math::perspective(m_fovy, getAspect(), m_zFar, m_zNear);
+	// Reset z far to zero ensure we use infinite invert z.
+	m_zFar = 0.0f;
+	m_projectMatrix = infiniteInvertZPerspectiveRH_ZO(getAspect(), m_fovy, m_zNear);
 }

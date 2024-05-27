@@ -48,7 +48,6 @@ public:
 private:
 	bool m_bActiveViewport = false;
 	bool m_bActiveViewportLastframe = false;
-	bool m_bHideMouseCursor = false;
 
 private:
 	void updateCameraVectors();
