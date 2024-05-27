@@ -14,7 +14,7 @@
 #include <graphics/helper.h>
 #include <utils/lru.h>
 #include <graphics/resource.h>
-
+#include <utils/camera.h>
 #include <scene/scene.h>
 #include <scene/scene_manager.h>
 #include <scene/scene_node.h>
