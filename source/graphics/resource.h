@@ -154,7 +154,7 @@ namespace chord::graphics
 
 		// Generic pipeline state, so don't call this in render pipe, just for queue family transfer purpose.
 		void transition(VkCommandBuffer cb, const GPUTextureSyncBarrierMasks& newState, const VkImageSubresourceRange& range);
-
+		void transitionImmediately(VkImageLayout newImageLayout, const VkImageSubresourceRange& range);
 	protected:
 		// Get subresource index.
 		uint32 getSubresourceIndex(uint32 layerIndex, uint32 mipLevel) const;

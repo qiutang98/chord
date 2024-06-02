@@ -590,9 +590,8 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 		ImVec2 uv0{ 0.0f, 0.0f };
 		ImVec2 uv1{ 1.0f, 1.0f };
 
-		auto set = entry->getSet(uv0, uv1);
-		ImGui::Image(set, { drawDimSize , drawDimSize }, uv0, uv1);
-
+		auto set = entry->computeSnapshotUV(uv0, uv1);
+		ui::drawImage(set, kDefaultImageSubresourceRange, { drawDimSize , drawDimSize }, uv0, uv1);
 
 		const float indentSize = ImGui::GetFontSize() * 0.25f;
 		ImGui::Indent(indentSize);

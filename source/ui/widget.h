@@ -61,9 +61,6 @@ namespace chord
 		// Tick current widget.
 		void tick(const ApplicationTickData& tickData);
 
-		// Tick with render command.
-		void tickWithCmd(const ApplicationTickData& tickData, VkCommandBuffer cmd);
-
 		// Release widget.
 		void release() 
 		{ 
@@ -93,10 +90,10 @@ namespace chord
 		virtual void onAfterTick(const ApplicationTickData& tickData) { }
 
 		// Tick with graphics command, always run.
-		virtual void onTickCmd(const ApplicationTickData& tickData, VkCommandBuffer cmd) {  }
+		virtual void onTickCmd(const ApplicationTickData& tickData, graphics::CommandList& commandList) {  }
 
 		// Tick with graphics command, only run when widget is visible.
-		virtual void onVisibleTickCmd(const ApplicationTickData& tickData, VkCommandBuffer cmd) {  }
+		virtual void onVisibleTickCmd(const ApplicationTickData& tickData, graphics::CommandList& commandList) {  }
 
 		// Event release.
 		virtual void onRelease() {  }
@@ -191,14 +188,6 @@ namespace chord
 			for (auto& widget : m_widgets)
 			{
 				widget->tick(tickData);
-			}
-		}
-
-		void tickWithCmd(const ApplicationTickData& tickData, VkCommandBuffer cmd)
-		{
-			for (auto& widget : m_widgets)
-			{
-				widget->tickWithCmd(tickData, cmd);
 			}
 		}
 

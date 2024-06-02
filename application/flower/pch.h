@@ -25,5 +25,6 @@
 #include <asset/gltf/gltf.h>
 #include <asset/gltf/gltf_helper.h>
 #include <asset/texture/texture.h>
+#include <renderer/renderer.h>
 
 constexpr chord::uint32 kMultiWidgetMaxNum = 4;

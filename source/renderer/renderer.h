@@ -2,27 +2,82 @@
 
 #include <utils/utils.h>
 #include <utils/noncopyable.h>
+#include <graphics/graphics.h>
+#include <graphics/rendertargetpool.h>
 
 namespace chord
 {
-	namespace graphics
+	struct DeferredRendererHistory
 	{
-		class Context;
-		class Swapchain;
-	}
 
-	class Renderer : public ISubsystem
+	};
+
+	class DeferredRenderer : NonCopyable
 	{
 	public:
-		explicit Renderer(const graphics::Context& context);
+		explicit DeferredRenderer(const std::string& name);
+		virtual ~DeferredRenderer();
+
+		graphics::PoolTextureRef getOutput();
+
+		void render(const ApplicationTickData& tickData, graphics::CommandList& cmd);
+
+	public:
+		static constexpr auto kMinRenderDim = 64U;
+		static constexpr auto kMaxRenderDim = 4096U;
+
+		class DimensionConfig
+		{
+		public:
+			DimensionConfig();
+
+			uint32 getRenderWidth() const { return m_renderDim.x; }
+			uint32 getRenderHeight() const { return m_renderDim.y; }
+
+			uint32 getPostWidth()  const { return m_postDim.x; }
+			uint32 getPostHeight() const { return m_postDim.y; }
+
+			uint32 getOutputWidth()  const { return m_outputDim.x; }
+			uint32 getOutputHeight() const { return m_outputDim.y; }
+
+			bool updateDimension(
+				uint32 outputWidth,
+				uint32 outputHeight,
+				float renderScaleToPost,
+				float postScaleToOutput);
+
+			auto operator<=>(const DimensionConfig&) const = default;
+
+		private:
+			// Dimension which render depth, gbuffer, lighting and pre-post effect.
+			math::uvec2 m_renderDim;
+
+			// Dimension which render Upscale, post-effect.
+			math::uvec2 m_postDim;
+
+			// Dimension which do final upscale to the viewport.
+			math::uvec2 m_outputDim;
+
+
+			float m_renderScaleToPost;
+		};
+
+		bool updateDimension(uint32 outputWidth, uint32 outputHeight, float renderScaleToPost, float postScaleToOutput);
+	
+	protected:
+		void clearHistory(bool bClearOutput);
+
 
 	protected:
-		virtual void beforeRelease() override;
-		virtual bool onInit() override;
-		virtual bool onTick(const SubsystemTickData& tickData) override;
-		virtual void onRelease() override;
+		std::string m_name;
 
-	private:
-		const graphics::Context& m_context;
+		// Render image dimension config.
+		DimensionConfig m_dimensionConfig = {};
+
+		// Renderer output image.
+		graphics::PoolTextureRef m_outputTexture = nullptr;
+
+		// Renderer history.
+		DeferredRendererHistory m_rendererHistory;
 	};
 }

@@ -210,6 +210,19 @@ namespace chord::graphics
 		vkCmdPipelineBarrier(cb, srcStageMask, dstStageMask, dependencyFlags, 0, nullptr, 0, nullptr, (uint32_t)barriers.size(), barriers.data());
 	}
 
+	void GPUTexture::transitionImmediately(VkImageLayout newImageLayout, const VkImageSubresourceRange& range)
+	{
+		getContext().executeImmediatelyMajorGraphics([&](VkCommandBuffer cmd, uint32 family, VkQueue queue)
+		{
+			GPUTextureSyncBarrierMasks newState;
+			newState.imageLayout = newImageLayout;
+			newState.barrierMasks.queueFamilyIndex = family;
+			newState.barrierMasks.accesMask = VK_ACCESS_NONE;
+
+			transition(cmd, newState, range);
+		});
+	}
+
 	uint32 GPUTexture::getSubresourceIndex(uint32 layerIndex, uint32 mipLevel) const
 	{
 		checkGraphics((layerIndex < m_createInfo.arrayLayers) && (mipLevel < m_createInfo.mipLevels));

@@ -31,8 +31,6 @@ void Flower::init()
 	m_assetConfigWidgetManager = new AssetConfigWidgetManager();
 	m_builtinTextures.init();
 
-	m_resourceUsedHostRef.activeFrame = 0;
-	m_resourceUsedHostRef.cacheRef.resize(kCacheAssetSafeFramePeriod);
 
 	m_onShouldClosedHandle = Application::get().onShouldClosed.add([this]() -> bool
 	{
@@ -42,13 +40,6 @@ void Flower::init()
 
 void Flower::onTick(const chord::ApplicationTickData& tickData)
 {
-	m_resourceUsedHostRef.activeFrame++;
-	if (m_resourceUsedHostRef.activeFrame == kCacheAssetSafeFramePeriod)
-	{
-		m_resourceUsedHostRef.activeFrame = 0;
-	}
-	m_resourceUsedHostRef.cacheRef[m_resourceUsedHostRef.activeFrame].clear();
-
 	// Generic widget tick.
 	m_widgetManager.tick(tickData);
 
@@ -64,10 +55,9 @@ void Flower::onTick(const chord::ApplicationTickData& tickData)
 
 void Flower::release()
 {
-
+	m_widgetManager.release();
 
 	m_builtinTextures = {};
-	m_resourceUsedHostRef.cacheRef.clear();
 
 	if (m_contentManager)
 	{
@@ -80,7 +70,6 @@ void Flower::release()
 		delete m_sceneContentManager;
 		m_sceneContentManager = nullptr;
 	}
-
 
 	check(getContext().onTick.remove(m_onTickHandle));
 	check(Application::get().onShouldClosed.remove(m_onShouldClosedHandle));

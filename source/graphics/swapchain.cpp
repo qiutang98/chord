@@ -67,6 +67,8 @@ namespace chord::graphics
 			window,
 			getContext().getAllocationCallbacks(), &m_surface));
 
+		m_commandList = std::make_unique<CommandList>();
+
 		// Create swapchain relative context.
 		createContext();
 	}
@@ -82,6 +84,9 @@ namespace chord::graphics
 	{
 		// Flush fence.
 		vkWaitForFences(getContext().getDevice(), 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+
+		// When fence finish, can free pending resource.
+		m_pendingResources[m_currentFrame].clear();
 
 		// Now acquire next image.
 		VkResult result = vkAcquireNextImageKHR(
@@ -111,6 +116,9 @@ namespace chord::graphics
 
 		// Update in flight fence.
 		m_imagesInFlight[m_imageIndex] = m_inFlightFences[m_currentFrame];
+
+		// Signal command list when new frame required.
+		m_commandList->sync();
 
 		// Return current valid backbuffer index.
 		return m_imageIndex;
@@ -256,6 +264,7 @@ namespace chord::graphics
 
 		// Backbuffer count clamp by hardware.
 		m_backbufferCount = std::clamp(cVarDesiredSwapchainBackBufferCount.get(), caps.minImageCount, caps.maxImageCount);
+		m_pendingResources.resize(m_backbufferCount);
 
 		// Now create swapchain.
 		m_swapchain = helper::createSwapchain(m_surface, m_backbufferCount, m_surfaceFormat, m_extent, caps.currentTransform, m_presentMode);
@@ -327,6 +336,9 @@ namespace chord::graphics
 				vkWaitForFences(getContext().getDevice(), 1, &fence, VK_TRUE, UINT64_MAX);
 			}
 		}
+
+		// Release all pending resources.
+		m_pendingResources.clear();
 
 		// Destroy present relative data.
 		for (auto i = 0; i < m_backbufferCount; i++)

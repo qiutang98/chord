@@ -1,5 +1,6 @@
 #pragma once
 #include <graphics/common.h>
+#include <graphics/command.h>
 
 namespace chord::graphics
 {
@@ -88,6 +89,13 @@ namespace chord::graphics
 		// Call this event when window swapchain recreated.
 		Events<Swapchain> onAfterSwapchainRecreate;
 
+		void insertPendingResource(ResourceRef resource)
+		{
+			m_pendingResources.at(m_imageIndex).insert(resource);
+		}
+
+		auto& getCommandList() { return *m_commandList; }
+
 	private:
 		void createContext();
 		void releaseContext();
@@ -140,6 +148,10 @@ namespace chord::graphics
 		// Fences.
 		std::vector<VkFence> m_inFlightFences;
 		std::vector<VkFence> m_imagesInFlight;
+
+		// Pending resources.
+		std::vector<std::unordered_set<ResourceRef>> m_pendingResources;
+		std::unique_ptr<CommandList> m_commandList;
 
 		// Swapchain dirty need rebuild context.
 		bool m_bSwapchainChange = false;

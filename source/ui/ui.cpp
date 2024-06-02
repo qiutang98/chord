@@ -76,71 +76,6 @@ namespace chord
 	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawVS, "resource/shader/imgui.hlsl", "mainVS", EShaderStage::Vertex);
 	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawPS, "resource/shader/imgui.hlsl", "mainPS", EShaderStage::Pixel);
 
-	// Viewport host data.
-	class ImGuiViewportData : NonCopyable
-	{
-	public:
-		explicit ImGuiViewportData(ImGuiViewport* viewport)
-		{
-			// Create swapchain.
-			m_swapchain = std::make_unique<Swapchain>((GLFWwindow*)viewport->PlatformHandle);
-		}
-
-		~ImGuiViewportData()
-		{
-			// Reset swapchain which sync command buffer can ensure all resource are safe to release.
-			m_swapchain.reset();
-
-			// Free allocated command buffers.
-			vkFreeCommandBuffers(
-				graphics::getDevice(),
-				graphics::getContext().getGraphicsCommandPool().pool(),
-				uint32(m_commandBuffers.size()),
-				m_commandBuffers.data());
-			m_commandBuffers.clear();
-		}
-
-		// Each viewport keep frame buffers.
-		struct RenderBuffers
-		{
-			graphics::HostVisibleGPUBufferRef verticesBuffer = nullptr;
-			graphics::HostVisibleGPUBufferRef indicesBuffer = nullptr;
-		};
-
-		RenderBuffers& getRenderBuffers(uint32 index)
-		{
-			while (m_frameRenderBuffers.size() <= index)
-			{
-				m_frameRenderBuffers.push_back({});
-			}
-			return m_frameRenderBuffers.at(index);
-		}
-
-		VkCommandBuffer getCommandBuffer(uint32 index)
-		{
-			while (m_commandBuffers.size() < (index + 1))
-			{
-				auto cmd = graphics::helper::allocateCommandBuffer(graphics::getContext().getGraphicsCommandPool().pool());
-				m_commandBuffers.push_back(cmd);
-			}
-			return m_commandBuffers.at(index);
-		}
-
-		Swapchain& swapchain() 
-		{
-			return *m_swapchain;
-		}
-
-	private:
-		// Common buffers ring for current window.
-		std::vector<VkCommandBuffer> m_commandBuffers;
-
-		// Render buffers.
-		std::vector<RenderBuffers> m_frameRenderBuffers;
-
-		// Window swapchain.
-		std::unique_ptr<Swapchain> m_swapchain = nullptr;
-	};
 
 	static void imguiSetWindowSize(ImGuiViewport* viewport, ImVec2 size)
 	{
@@ -362,13 +297,17 @@ namespace chord
 		helper::setScissor(commandBuffer, { 0, 0 }, { (uint32)fbWidth, (uint32)fbHeight });
 	}
 
-	static void imguiRenderWindow(ImGuiViewport* viewport, void*)
+	static void imguiRenderWindow(ImGuiViewport* viewport, void* args)
 	{
 		auto* vd = (ImGuiViewportData*)viewport->RendererUserData;
 		auto& swapchain = vd->swapchain();
 		const auto& extent = swapchain.getExtent();
 
 		uint32 backBufferIndex = swapchain.acquireNextPresentImage();
+
+		const ApplicationTickData& tickData = *((const ApplicationTickData*)args);
+		vd->tickWithCmds(tickData);
+
 		VkCommandBuffer imguiCmdBuffer = vd->getCommandBuffer(backBufferIndex);
 		{
 			// SDR mode.
@@ -805,7 +744,7 @@ namespace chord
 		ImGui::DestroyContext();
 	}
 
-	void ImGuiManager::render()
+	void ImGuiManager::render(const ApplicationTickData& tickData)
 	{
 		m_bWidgetDrawing = false;
 
@@ -813,14 +752,14 @@ namespace chord
 
 		if (!isMainMinimized())
 		{
-			imguiRenderWindow(ImGui::GetMainViewport(), nullptr);
+			imguiRenderWindow(ImGui::GetMainViewport(), (void*)&tickData);
 			imguiSwapBuffers(ImGui::GetMainViewport(), nullptr);
 		}
 
 		if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 		{
 			ImGui::UpdatePlatformWindows();
-			ImGui::RenderPlatformWindowsDefault();
+			ImGui::RenderPlatformWindowsDefault(nullptr, (void*)&tickData);
 		}
 	}
 
@@ -890,5 +829,35 @@ namespace chord
 		}
 
 		m_cacheStyle = style;
+	}
+
+	ImGuiViewportData::ImGuiViewportData(ImGuiViewport* viewport)
+	{
+		// Create swapchain.
+		m_swapchain = std::make_unique<Swapchain>((GLFWwindow*)viewport->PlatformHandle);
+	}
+
+	ImGuiViewportData::~ImGuiViewportData()
+	{
+		// Reset swapchain which sync command buffer can ensure all resource are safe to release.
+		m_swapchain.reset();
+
+		// Free allocated command buffers.
+		vkFreeCommandBuffers(
+			graphics::getDevice(),
+			graphics::getContext().getGraphicsCommandPool().pool(),
+			uint32(m_commandBuffers.size()),
+			m_commandBuffers.data());
+		m_commandBuffers.clear();
+	}
+
+	VkCommandBuffer ImGuiViewportData::getCommandBuffer(uint32 index)
+	{
+		while (m_commandBuffers.size() < (index + 1))
+		{
+			auto cmd = graphics::helper::allocateCommandBuffer(graphics::getContext().getGraphicsCommandPool().pool());
+			m_commandBuffers.push_back(cmd);
+		}
+		return m_commandBuffers.at(index);
 	}
 }

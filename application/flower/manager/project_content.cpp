@@ -37,9 +37,9 @@ ProjectContentEntry::~ProjectContentEntry()
 	m_tree.m_entryMap.erase(m_path.u16());
 }
 
-ImTextureID ProjectContentEntry::getSet(ImVec2& outUv0, ImVec2& outUv1)
+GPUTextureAssetRef ProjectContentEntry::computeSnapshotUV(ImVec2& outUv0, ImVec2& outUv1)
 {
-	ImTextureID result;
+	GPUTextureAssetRef result;
 	ImVec2 uv0, uv1;
 	{
 		uv0 = { 0.0f, 0.0f };
@@ -49,7 +49,7 @@ ImTextureID ProjectContentEntry::getSet(ImVec2& outUv0, ImVec2& outUv1)
 		const auto& builtinResources = Flower::get().getBuiltinTextures();
 		if (m_bFolder)
 		{
-			result = builtinResources.folderImage->getSRV(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D);
+			result = builtinResources.folderImage;
 
 			uv0 = -kUvScale;
 			uv1 = 1.0f + kUvScale;
@@ -64,17 +64,13 @@ ImTextureID ProjectContentEntry::getSet(ImVec2& outUv0, ImVec2& outUv1)
 			{
 				if (auto asset = manager.getOrLoadAsset<IAsset>(path, true))
 				{
-					auto snapshot = asset->getSnapshotImage();
+					result = asset->getSnapshotImage();
 
 					// Add in lru cache.
-					Flower::get().getContentManager().getSnapshotCache().insert(asset->getSnapshotPath(), snapshot);
-					Flower::get().markAssetUsed(snapshot);
+					Flower::get().getContentManager().getSnapshotCache().insert(asset->getSnapshotPath(), result);
 
-					// Found SRV.
-					result = snapshot->getSRV(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D);
-
-					const auto w = snapshot->getReadyImage()->getExtent().width;
-					const auto h = snapshot->getReadyImage()->getExtent().height;
+					const auto w = result->getReadyImage()->getExtent().width;
+					const auto h = result->getReadyImage()->getExtent().height;
 
 					if (w < h)
 					{
@@ -102,7 +98,7 @@ ImTextureID ProjectContentEntry::getSet(ImVec2& outUv0, ImVec2& outUv1)
 			{
 				kUvScale.x = 0.2f;
 				kUvScale.y = 0.15f;
-				result = builtinResources.fileImage->getSRV(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D);
+				result = builtinResources.fileImage;
 
 				uv0 = -kUvScale;
 				uv1 = 1.0f + kUvScale;

@@ -1,6 +1,9 @@
 #include <ui/ui_helper.h>
 #include <ui/imgui/imgui_internal.h>
 #include <asset/asset_common.h>
+#include <asset/texture/helper.h>
+#include <asset/texture/texture.h>
+#include <graphics/graphics.h>
 
 namespace chord::ui
 {
@@ -182,6 +185,40 @@ namespace chord::ui
 			ImGui::TextDisabled(utf8::utf16to8(info.relativeAssetStorePath().u16string()).c_str());
 		}
 
+	}
+
+
+
+	void ui::drawImage(
+		graphics::GPUTextureRef image, 
+		const VkImageSubresourceRange& subRange, 
+		const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
+	{
+		if (ImGui::GetCurrentWindow()->Viewport == nullptr)
+		{
+			return;
+		}
+
+		// Insert pending resource avoid release.
+		auto* vrd = (ImGuiViewportData*)ImGui::GetCurrentWindow()->Viewport->RendererUserData;
+		if (vrd == nullptr)
+		{
+			return;
+		}
+
+		graphics::Swapchain& swapchain = vrd->swapchain();
+		swapchain.insertPendingResource(image);
+
+		// Require image view.
+		ImGui::Image(image->requireView(subRange, VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get(), size, uv0, uv1, tint_col, border_col);
+	}
+
+	void ui::drawImage(
+		graphics::GPUTextureAssetRef image,
+		const VkImageSubresourceRange& subRange,
+		const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
+	{
+		ui::drawImage(image->getReadyImage(), subRange, size, uv0, uv1, tint_col, border_col);
 	}
 
 	void ui::hoverTip(const char* desc)

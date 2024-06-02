@@ -494,7 +494,7 @@ namespace chord
 				materialPtr->emissiveFactor.y = material.emissiveFactor[1];
 				materialPtr->emissiveFactor.z = material.emissiveFactor[2];
 
-				if(material.alphaMode == "OPAQUE") { materialPtr->alphaMode = EAlphaMode::Opaque; }
+				if (material.alphaMode == "OPAQUE") { materialPtr->alphaMode = EAlphaMode::Opaque; }
 				else if (material.alphaMode == "MASK") { materialPtr->alphaMode = EAlphaMode::Mask; }
 				else { materialPtr->alphaMode = EAlphaMode::Blend; check(material.alphaMode == "BLEND"); }
 

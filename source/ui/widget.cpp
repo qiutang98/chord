@@ -62,16 +62,22 @@ namespace chord
 		}
 
 		onAfterTick(tickData);
-	}
 
-	void IWidget::tickWithCmd(const ApplicationTickData& tickData, VkCommandBuffer cmd)
-	{
-		onTickCmd(tickData, cmd);
-
-		if (m_bShow)
+		// Add on tick command.
+		if (auto viewport = ImGui::GetCurrentWindow()->Viewport)
 		{
-			onVisibleTickCmd(tickData, cmd);
+			if (auto* vrd = (ImGuiViewportData*)viewport->RendererUserData)
+			{
+				vrd->onTickWithCmds.add([this](const ApplicationTickData& tickData, graphics::CommandList& commandList)
+				{
+					onTickCmd(tickData, commandList);
+
+					if (m_bShow)
+					{
+						onVisibleTickCmd(tickData, commandList);
+					}
+				});
+			}
 		}
 	}
-
 }

@@ -11,6 +11,13 @@ const static std::string kIconViewport = ICON_FA_EARTH_ASIA;
 
 constexpr size_t kViewportMinRenderDim = 64;
 
+static float sViewportScreenPercentage = 1.0f;
+static AutoCVarRef<float> cVarScreenPercentage(
+	"r.viewport.screenpercentage",
+	sViewportScreenPercentage,
+	"set all deferred renderer screen percentage.",
+	EConsoleVarFlags::Scalability);
+
 WidgetViewport::WidgetViewport(size_t index)
 	: IWidget(
 		combineIcon("Viewport", kIconViewport).c_str(),
@@ -25,7 +32,10 @@ void WidgetViewport::onInit()
 	// Camera prepare.
 	m_camera = std::make_unique<ViewportCamera>(this);
 
+	// Viewport renderer.
+	m_deferredRenderer = std::make_unique<DeferredRenderer>(std::format("Viewport#{} DeferredRenderer", m_index));
 
+	
 }
 
 void WidgetViewport::onBeforeTick(const ApplicationTickData& tickData)
@@ -48,13 +58,12 @@ void WidgetViewport::onVisibleTick(const ApplicationTickData& tickData)
 
 		{
 			const auto& builtinResources = Flower::get().getBuiltinTextures();
-			auto viewImageSet = builtinResources.folderImage->getSRV(kDefaultImageSubresourceRange, VK_IMAGE_VIEW_TYPE_2D);
-			ImGui::Image(viewImageSet, ImVec2(width, height));
+			ui::drawImage(m_deferredRenderer->getOutput()->get(), kDefaultImageSubresourceRange, ImVec2(width, height));
 		}
 
 		bool bClickViewport = ImGui::IsItemClicked();
-		const auto minPos = ImGui::GetItemRectMin();
-		const auto maxPos = ImGui::GetItemRectMax();
+		const auto minPos   = ImGui::GetItemRectMin();
+		const auto maxPos   = ImGui::GetItemRectMax();
 		const auto mousePos = ImGui::GetMousePos();
 
 		m_bMouseInViewport = ImGui::IsItemHovered();
@@ -73,8 +82,30 @@ void WidgetViewport::onVisibleTick(const ApplicationTickData& tickData)
 		ImGui::NewLine();
 
 	
+		// Change viewport size, need notify renderer change render size.
+		if (m_cacheWidth != width ||
+		    m_cacheHeight != height || 
+			sViewportScreenPercentage != m_cacheScreenpercentage)
+		{
+			if (!ImGui::IsMouseDragging(0)) // Dragging meaning may still resizing.
+			{
+				m_cacheWidth = width;
+				m_cacheHeight = height;
+
+				// Scale size from 100% - 25%.
+				m_cacheScreenpercentage   = math::clamp(sViewportScreenPercentage, 1.0f, 4.0f);
+				sViewportScreenPercentage = m_cacheScreenpercentage;
+
+				m_deferredRenderer->updateDimension(uint32(width), uint32(height), m_cacheScreenpercentage, 1.0f);
+			}
+		}
 	}
 	ImGui::EndChild();
+}
+
+void WidgetViewport::onVisibleTickCmd(const ApplicationTickData& tickData, chord::graphics::CommandList& cmd)
+{
+	m_deferredRenderer->render(tickData, cmd);
 }
 
 void WidgetViewport::onAfterTick(const ApplicationTickData& tickData)
@@ -84,7 +115,7 @@ void WidgetViewport::onAfterTick(const ApplicationTickData& tickData)
 
 void WidgetViewport::onRelease()
 {
-
+	m_deferredRenderer.reset();
 }
 
 void ViewportCamera::updateCameraVectors()

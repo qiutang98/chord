@@ -916,7 +916,7 @@ namespace chord::graphics
 		onTick.broadcast(tickData);
 
 		// ImGui prepare render data.
-		m_imguiManager->render();
+		m_imguiManager->render(tickData);
 
 		return true;
 	}

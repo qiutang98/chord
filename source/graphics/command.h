@@ -1,71 +1,87 @@
 #pragma once
 #include <graphics/common.h>
+#include <list>
 
 namespace chord::graphics
 {
-	class CommandBuffer : NonCopyable
+	struct CommandBuffer : NonCopyable
 	{
-	public:
 		explicit CommandBuffer() = default;
 		virtual ~CommandBuffer();
 
-		VkCommandBuffer cmd = VK_NULL_HANDLE;
-		VkCommandPool  pool = VK_NULL_HANDLE;
-
-		// Pending resource for encoded.
+		// All pending resources.
 		std::vector<ResourceRef> pendingResources;
 
-		uint64 recordingID = 0;
-		uint64 submissionID = 0;
+		VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+		VkCommandPool   commandPool   = VK_NULL_HANDLE;
+
+		uint64 signalValue = 0;
 	};
 	using CommandBufferRef = std::shared_ptr<CommandBuffer>;
 
-	class Queue
+	struct TimelineWait
+	{
+		VkSemaphore timeline;
+		uint64 waitValue;
+	};
+
+	class Queue : NonCopyable
 	{
 	public:
-		VkSemaphore trackingSemaphore;
-
 		explicit Queue(EQueueType type, VkQueue queue, uint32 family);
 		virtual ~Queue();
 
-		// Create command buffer.
-		CommandBufferRef createCommandBuffer();
-		CommandBufferRef getOrCreateCommandBuffer();
+		void beginCommand(const std::vector<TimelineWait>& waitValue);
+		TimelineWait endCommand();
 
-		void addWaitSemaphore(VkSemaphore semaphore, uint64 value);
-		void addSignalSemaphore(VkSemaphore semaphore, uint64 value);
+		// Sync when a global fence finish.
+		void sync();
 
 	private:
-		mutable std::mutex m_mutex;
+		CommandBufferRef getOrCreateCommandBuffer();
 
+
+
+	private:
 		VkQueue    m_queue;
 		EQueueType m_queueType;
 		uint32     m_queueFamily;
 
-		std::vector<VkSemaphore> m_waitSemaphores;
-		std::vector<uint64> m_waitSemaphoreValues;
+		std::list<CommandBufferRef> m_usingCommands;
+		std::list<CommandBufferRef> m_commandsPool;
 
-		std::vector<VkSemaphore> m_signalSemaphores;
-		std::vector<uint64> m_signalSemaphoreValues;
+		uint64 m_timelineValue = 0;
+		VkSemaphore m_timelineSemaphore = VK_NULL_HANDLE;
 
-		uint64 m_lastRecordingID = 0;
-		uint64 m_lastSubmittedID = 0;
-		uint64 m_lastFinishedID  = 0;
-
-		std::list<CommandBufferRef> m_commandBuffersInFlight;
-		std::list<CommandBufferRef> m_commandBuffersPool;
+		struct ActiveCmd
+		{
+			CommandBufferRef command = nullptr;
+			std::vector<TimelineWait> waitValue;
+		} m_activeCmdCtx;
 	};
 
 	// Command list control command open and closed.
 	class CommandList : NonCopyable
 	{
 	public:
-		
+		explicit CommandList();
+		virtual ~CommandList();
+
+		// Sync when a global fence finish.
+		void sync();
+
+		void beginGraphicsCommand(const std::vector<TimelineWait>& waitValue);
+		TimelineWait endGraphicsCommand();
+
+		void beginAsyncComputeCommand(const std::vector<TimelineWait>& waitValue);
+		TimelineWait endAsyncComputeCommand();
+
+		void beginAsyncCopyCommand(const std::vector<TimelineWait>& waitValue);
+		TimelineWait endAsyncCopyCommand();
 
 	private:
-		// Current command buffer.
-		CommandBufferRef m_commandBuffer;
-
-
+		std::unique_ptr<Queue> m_graphicsQueue;
+		std::unique_ptr<Queue> m_asyncComputeQueue;
+		std::unique_ptr<Queue> m_asyncCopyQueue;
 	};
 }

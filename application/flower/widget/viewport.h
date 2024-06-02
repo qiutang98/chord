@@ -94,6 +94,9 @@ protected:
 	// event when widget visible tick.
 	virtual void onVisibleTick(const chord::ApplicationTickData& tickData) override;
 
+	// Tick with graphics command, only run when widget is visible.
+	virtual void onVisibleTickCmd(const chord::ApplicationTickData& tickData, chord::graphics::CommandList& cmd) override;
+
 	// Event after tick.
 	virtual void onAfterTick(const chord::ApplicationTickData& tickData) override;
 
@@ -126,9 +129,11 @@ private:
 	// Cache viewport size.
 	float m_cacheWidth = 0.0f;
 	float m_cacheHeight = 0.0f;
+	float m_cacheScreenpercentage = 1.0f;
 
 	// State to know mouse in viewport. Warning: On glfw3.3 may cause some error state when set cursor to disabled.
 	bool m_bMouseInViewport = false;
 
+	std::unique_ptr<chord::DeferredRenderer> m_deferredRenderer;
 	std::unique_ptr<ViewportCamera> m_camera;
 };

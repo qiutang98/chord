@@ -26,7 +26,7 @@ public:
 
 	~ProjectContentEntry();
 
-	ImTextureID getSet(ImVec2& uv0, ImVec2& uv1);
+	chord::graphics::GPUTextureAssetRef computeSnapshotUV(ImVec2& uv0, ImVec2& uv1);
 
 	bool isFoleder() const 
 	{ 

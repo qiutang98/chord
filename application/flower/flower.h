@@ -77,11 +77,6 @@ public:
 		return *m_sceneContentManager;
 	}
 
-	void markAssetUsed(chord::ResourceRef res)
-	{
-		m_resourceUsedHostRef.cacheRef[m_resourceUsedHostRef.activeFrame].insert(res);
-	}
-
 private:
 	explicit Flower() = default;
 
@@ -109,14 +104,6 @@ private:
 
 	// UI manager.
 	ProjectContentManager* m_contentManager = nullptr;
-
-	// Resource cache host ref.
-	struct
-	{
-		size_t activeFrame;
-		std::vector<std::unordered_set<chord::ResourceRef>> cacheRef;
-	} m_resourceUsedHostRef;
-
 
 	// Widget handles.
 	HubWidget* m_hubHandle = nullptr;

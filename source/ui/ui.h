@@ -7,6 +7,7 @@
 #include <graphics/pipeline.h>
 #include <ui/imgui/imgui.h>
 #include <ui/imgui/imgui_internal.h>
+#include <graphics/graphics.h>
 
 namespace chord
 {
@@ -33,7 +34,7 @@ namespace chord
 
 		// Call ImGui::Render() inner function, call this when all imgui logic finish.
 		// It produce render resource.
-		void render();
+		void render(const ApplicationTickData& tickData);
 
 		const bool isWidgetDrawing() const
 		{
@@ -77,4 +78,54 @@ namespace chord
 		// Is widget drawing or not.
 		bool m_bWidgetDrawing = false;
 	};
+
+	// Viewport host data.
+	class ImGuiViewportData : NonCopyable
+	{
+	public:
+		explicit ImGuiViewportData(ImGuiViewport* viewport);
+
+		~ImGuiViewportData();
+
+		// Each viewport keep frame buffers.
+		struct RenderBuffers
+		{
+			graphics::HostVisibleGPUBufferRef verticesBuffer = nullptr;
+			graphics::HostVisibleGPUBufferRef indicesBuffer = nullptr;
+		};
+
+		RenderBuffers& getRenderBuffers(uint32 index)
+		{
+			while (m_frameRenderBuffers.size() <= index)
+			{
+				m_frameRenderBuffers.push_back({});
+			}
+			return m_frameRenderBuffers.at(index);
+		}
+
+		VkCommandBuffer getCommandBuffer(uint32 index);
+
+		graphics::Swapchain& swapchain()
+		{
+			return *m_swapchain;
+		}
+
+		CallOnceEvents<ImGuiViewportData, const ApplicationTickData&, graphics::CommandList&> onTickWithCmds;
+
+		void tickWithCmds(const ApplicationTickData& data)
+		{
+			onTickWithCmds.brocast(data, m_swapchain->getCommandList());
+		}
+
+	private:
+		// Common buffers ring for current window.
+		std::vector<VkCommandBuffer> m_commandBuffers;
+
+		// Render buffers.
+		std::vector<RenderBuffers> m_frameRenderBuffers;
+
+		// Window swapchain.
+		std::unique_ptr<graphics::Swapchain> m_swapchain = nullptr;
+	};
+
 }
