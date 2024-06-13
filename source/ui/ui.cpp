@@ -61,21 +61,8 @@ namespace chord
 		"UI font base size.",
 		EConsoleVarFlags::ReadOnly);
 
-	class ImGuiDrawVS : public GlobalShader
-	{
-	public:
-		DECLARE_SUPER_TYPE(GlobalShader);
-	};
-
-	class ImGuiDrawPS : public GlobalShader
-	{
-	public:
-		DECLARE_SUPER_TYPE(GlobalShader);
-	};
-
-	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawVS, "resource/shader/imgui.hlsl", "mainVS", EShaderStage::Vertex);
-	IMPLEMENT_GLOBAL_SHADER(ImGuiDrawPS, "resource/shader/imgui.hlsl", "mainPS", EShaderStage::Pixel);
-
+	PRIVATE_GLOBAL_SHADER(ImGuiDrawVS, "resource/shader/imgui.hlsl", "mainVS", EShaderStage::Vertex);
+	PRIVATE_GLOBAL_SHADER(ImGuiDrawPS, "resource/shader/imgui.hlsl", "mainPS", EShaderStage::Pixel);
 
 	static void imguiSetWindowSize(ImGuiViewport* viewport, ImVec2 size)
 	{
@@ -194,9 +181,6 @@ namespace chord
 		ImGuiDrawPushConsts pushConst{ };
 		{
 			pipeline->bind(commandBuffer);
-
-			// Set general dynamic states.
-			helper::dynamicStateGeneralSet(commandBuffer);
 
 			if (drawData->TotalVtxCount > 0)
 			{
@@ -364,6 +348,9 @@ namespace chord
 
 				vkCmdBeginRendering(imguiCmdBuffer, &renderInfo);
 				{
+					// Set general dynamic states.
+					helper::dynamicStateGeneralSet(imguiCmdBuffer);
+
 					imguiRenderDrawData(backBufferIndex, imguiCmdBuffer, (void*)viewport->DrawData, graphicsPipeline);
 				}
 				vkCmdEndRendering(imguiCmdBuffer);
@@ -376,27 +363,63 @@ namespace chord
 
 		// UI cmd submit.
 		auto frameStartSemaphore = swapchain.getCurrentFrameWaitSemaphore();
+
 		{
+			// Need to wait graphics command list finish before render ui.
+			auto graphicsTimeline = swapchain.getCommandList().getGraphicsQueue().getCurrentTimeline();
+	
 			std::vector<VkSemaphore> imguiWaitSemaphores =
 			{
 				frameStartSemaphore,
+				graphicsTimeline.timeline,
 			};
+
+			std::vector<uint64> waitSemaphoreValues =
+			{
+				0, // Binary semaphore for frame start.
+				graphicsTimeline.waitValue,
+			};
+
+			auto graphicsEndTimeline = swapchain.getCommandList().getGraphicsQueue().stepTimeline();
 
 			std::vector<VkSemaphore> imguiSignalSemaphores =
 			{
-				swapchain.getCurrentFrameFinishSemaphore()
+				swapchain.getCurrentFrameFinishSemaphore(),
+				graphicsEndTimeline.timeline,
 			};
 
-			VkPipelineStageFlags kUiWaitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+			std::vector<uint64> signalSemaphoreValues =
+			{
+				0, // Binary semaphore for frame start.
+				graphicsEndTimeline.waitValue
+			};
 
-			helper::SubmitInfo imGuiCmdSubmitInfo{ };
+			std::vector<VkPipelineStageFlags> kUiWaitFlags = 
+			{
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+			};
 
-			imGuiCmdSubmitInfo.setWaitStage(&kUiWaitFlags)
-				.setWaitSemaphore(imguiWaitSemaphores.data(), imguiWaitSemaphores.size())
-				.setSignalSemaphore(imguiSignalSemaphores.data(), imguiSignalSemaphores.size())
-				.setCommandBuffer(&imguiCmdBuffer, 1);
+			VkTimelineSemaphoreSubmitInfo timelineInfo;
+			timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+			timelineInfo.pNext = NULL;
+			timelineInfo.waitSemaphoreValueCount = waitSemaphoreValues.size();
+			timelineInfo.pWaitSemaphoreValues = waitSemaphoreValues.data();
+			timelineInfo.signalSemaphoreValueCount = signalSemaphoreValues.size();
+			timelineInfo.pSignalSemaphoreValues = signalSemaphoreValues.data();
 
-			std::vector<VkSubmitInfo> infosRawSubmit{ imGuiCmdSubmitInfo };
+			VkSubmitInfo submitInfo;
+			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			submitInfo.pNext = &timelineInfo;
+			submitInfo.waitSemaphoreCount = imguiWaitSemaphores.size();
+			submitInfo.pWaitSemaphores = imguiWaitSemaphores.data();
+			submitInfo.signalSemaphoreCount = imguiSignalSemaphores.size();
+			submitInfo.pSignalSemaphores = imguiSignalSemaphores.data();
+			submitInfo.commandBufferCount = 1;
+			submitInfo.pCommandBuffers = &imguiCmdBuffer;
+			submitInfo.pWaitDstStageMask = kUiWaitFlags.data();
+
+			std::vector<VkSubmitInfo> infosRawSubmit{ submitInfo };
 			swapchain.submit((uint32)infosRawSubmit.size(), infosRawSubmit.data());
 		}
 	}

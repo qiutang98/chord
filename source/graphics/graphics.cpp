@@ -52,7 +52,7 @@ namespace chord::graphics
 		EConsoleVarFlags::ReadOnly
 	);
 
-	static uint32 sPoolTextureFreeFrameCount = 3;
+	static uint32 sPoolTextureFreeFrameCount = 5;
 	static AutoCVarRef<uint32> cVarPoolTextureFreeFrameCount(
 		"r.graphics.texturepool.freeframecount",
 		sPoolTextureFreeFrameCount,
@@ -60,7 +60,7 @@ namespace chord::graphics
 		EConsoleVarFlags::ProjectIni
 	);
 
-	static uint32 sPoolBufferFreeFrameCount = 3;
+	static uint32 sPoolBufferFreeFrameCount = 5;
 	static AutoCVarRef<uint32> cVarPoolBufferFreeFrameCount(
 		"r.graphics.bufferpool.freeframecount",
 		sPoolBufferFreeFrameCount,
@@ -100,7 +100,7 @@ namespace chord::graphics
 		static inline bool IsErrorEnable()   { return sGraphicsDebugUtilsLevel >= 1; }
 
 	#if CHORD_DEBUG
-		static bool sGraphicsDebugUtilsExitWhenError = true;
+		static bool sGraphicsDebugUtilsExitWhenError = false;
 		static AutoCVarRef<bool> cVarGraphicsDebugUtilsExitWhenError(
 			"r.graphics.debugUtils.exitWhenError",
 			sGraphicsDebugUtilsExitWhenError,

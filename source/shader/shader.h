@@ -398,4 +398,10 @@ namespace chord::graphics
 
 		return getPipelineContainer().graphics(name, graphicsCi);
 	}
+
+
+	#define DECLARE_GLOBAL_SHADER(ShaderName) class ShaderName : public graphics::GlobalShader { public: DECLARE_SUPER_TYPE(graphics::GlobalShader); }
+	#define PRIVATE_GLOBAL_SHADER(ShaderName, Path, Entry, Stage) \
+		DECLARE_GLOBAL_SHADER(ShaderName);    \
+		IMPLEMENT_GLOBAL_SHADER(ShaderName, Path, Entry, Stage)
 }

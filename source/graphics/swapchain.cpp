@@ -19,6 +19,14 @@ namespace chord::graphics
 		EConsoleVarFlags::None
 	);
 
+	static uint32 sQueueSyncFreeCount = 39U;
+	static AutoCVarRef cVarQueueSyncFreeCount(
+		"r.graphics.swapchain.queue.syncFreeCount",
+		sQueueSyncFreeCount,
+		"Sync free count of swapchain queue.",
+		EConsoleVarFlags::None
+	);
+
 	static inline VkPresentModeKHR getPresentMode(const std::vector<VkPresentModeKHR>& presentModes)
 	{
 		const auto type = cVarDesiredSwapchainPresentMode.get();
@@ -67,7 +75,7 @@ namespace chord::graphics
 			window,
 			getContext().getAllocationCallbacks(), &m_surface));
 
-		m_commandList = std::make_unique<CommandList>();
+		m_commandList = std::make_unique<CommandList>(*this);
 
 		// Create swapchain relative context.
 		createContext();
@@ -118,7 +126,7 @@ namespace chord::graphics
 		m_imagesInFlight[m_imageIndex] = m_inFlightFences[m_currentFrame];
 
 		// Signal command list when new frame required.
-		m_commandList->sync();
+		m_commandList->sync(sQueueSyncFreeCount);
 
 		// Return current valid backbuffer index.
 		return m_imageIndex;

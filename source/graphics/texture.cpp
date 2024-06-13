@@ -100,7 +100,7 @@ namespace chord::graphics
 	{
 		if (setName(name))
 		{
-			setResourceName(VK_OBJECT_TYPE_IMAGE, (uint64)m_image, name.c_str());
+			setResourceName(VK_OBJECT_TYPE_IMAGE, (uint64)m_image, getName().c_str());
 		}
 	}
 
@@ -261,5 +261,4 @@ namespace chord::graphics
 
 		return view;
 	}
-
 }

@@ -64,7 +64,7 @@ namespace chord::graphics
 	{
 		if (setName(name))
 		{
-			setResourceName(VK_OBJECT_TYPE_BUFFER, (uint64)m_buffer, name.c_str());
+			setResourceName(VK_OBJECT_TYPE_BUFFER, (uint64)m_buffer, getName().c_str());
 		}
 	}
 

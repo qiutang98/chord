@@ -45,7 +45,7 @@ namespace chord::graphics
 		virtual ~GPUResource();
 
 		const auto& getSize() const { return m_size; }
-		const auto& getName() const { return m_name; }
+		const std::string& getName() const { return m_flattenName; }
 
 		virtual void rename(const std::string& name) = 0;
 
@@ -56,23 +56,15 @@ namespace chord::graphics
 			m_size = size;
 		}
 
-		bool setName(const std::string& name)
-		{
-			if (m_name != name)
-			{
-				m_name = name;
-				return true;
-			}
-
-			return false;
-		}
+		bool setName(const std::string& name);
 
 	private:
 		// Device size.
 		VkDeviceSize m_size = 0;
 
 		// Name of resource.
-		std::string m_name;
+		std::string m_flattenName = {};
+		std::set<std::string> m_names;
 	};
 	using GPUResourceRef = std::shared_ptr<GPUResource>;
 

@@ -16,7 +16,7 @@ namespace chord
 		return std::format("{} #{}", name, index);
 	}
 
-	class IWidget : NonCopyable
+	class IWidget : NonCopyable, public std::enable_shared_from_this<IWidget>
 	{
 	public:
 		explicit IWidget(const char* widgetName, const char* name);
@@ -88,9 +88,6 @@ namespace chord
 
 		// Event after tick.
 		virtual void onAfterTick(const ApplicationTickData& tickData) { }
-
-		// Tick with graphics command, always run.
-		virtual void onTickCmd(const ApplicationTickData& tickData, graphics::CommandList& commandList) {  }
 
 		// Tick with graphics command, only run when widget is visible.
 		virtual void onVisibleTickCmd(const ApplicationTickData& tickData, graphics::CommandList& commandList) {  }

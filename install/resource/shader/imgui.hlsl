@@ -36,7 +36,7 @@ VS2PS mainVS(VSIn input)
 {
     VS2PS output;
 
-    output.pos = float4(input.pos.xy * pushConsts.scale + pushConsts.translate, 0.f, 1.f);
+    output.pos = float4(input.pos.xy * pushConsts.scale + pushConsts.translate, 0, 1);
     output.col = input.col;
     output.uv  = input.uv;
 

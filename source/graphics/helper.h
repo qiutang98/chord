@@ -4,10 +4,12 @@
 
 namespace chord::graphics::helper
 {
-	static inline VkImageSubresourceRange buildBasicImageSubresource()
+	
+
+	static inline VkImageSubresourceRange buildBasicImageSubresource(VkImageAspectFlags flags = VK_IMAGE_ASPECT_COLOR_BIT)
 	{
 		VkImageSubresourceRange range { };
-		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		range.aspectMask = flags;
 		range.baseMipLevel = 0;
 		range.levelCount = VK_REMAINING_MIP_LEVELS;
 		range.baseArrayLayer = 0;

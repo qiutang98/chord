@@ -88,10 +88,12 @@ namespace chord::graphics
 
 		// Add push const if exist.
 		VkPushConstantRange pushConstantRange{};
+		uint32 pushConstCount = 0;
 		if (ci.pushConstantSize > 0)
 		{
 			pushConstantRange.stageFlags = ci.shaderStageFlags;
 			pushConstantRange.size       = ci.pushConstantSize;
+			pushConstCount = 1;
 		}
 
 		VkPipelineInputAssemblyStateCreateInfo assemblyState{ };
@@ -131,7 +133,7 @@ namespace chord::graphics
 		createInfo.pDynamicState = &dynamicState;
 
 		// Pipeline layout create from cache.
-		m_pipelineLayout = getContext().getPipelineLayoutManager().getLayout(1, &getContext().getBindlessManger().getSetLayout(), 1, &pushConstantRange);
+		m_pipelineLayout = getContext().getPipelineLayoutManager().getLayout(1, &getContext().getBindlessManger().getSetLayout(), pushConstCount, &pushConstantRange);
 		createInfo.layout = m_pipelineLayout;
 
 		VkPipeline pipeline;

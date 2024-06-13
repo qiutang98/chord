@@ -501,5 +501,4 @@ namespace chord
 	{
 		return (a & b) == b;
 	}
-
 }

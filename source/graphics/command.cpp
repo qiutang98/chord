@@ -12,8 +12,9 @@ namespace chord::graphics
 		helper::destroyCommandPool(commandPool);
 	}
 
-	Queue::Queue(EQueueType type, VkQueue queue, uint32 family)
-		: m_queue(queue)
+	Queue::Queue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
+		: m_swapchain(swapchain)
+		, m_queue(queue)
 		, m_queueType(type)
 		, m_queueFamily(family)
 	{
@@ -25,6 +26,11 @@ namespace chord::graphics
 	Queue::~Queue()
 	{
 		helper::destroySemaphore(m_timelineSemaphore);
+	}
+
+	void Queue::checkRecording() const
+	{
+		check(m_activeCmdCtx.command != nullptr);
 	}
 
 	CommandBufferRef Queue::getOrCreateCommandBuffer()
@@ -53,12 +59,17 @@ namespace chord::graphics
 		check(m_activeCmdCtx.command == nullptr);
 
 		m_activeCmdCtx.command = getOrCreateCommandBuffer();
+		check(m_activeCmdCtx.command->pendingResources.empty());
 		m_activeCmdCtx.waitValue = waitValue;
+
+		helper::beginCommandBuffer(m_activeCmdCtx.command->commandBuffer);
 	}
 
 	TimelineWait Queue::endCommand()
 	{
 		check(m_activeCmdCtx.command != nullptr);
+
+		helper::endCommandBuffer(m_activeCmdCtx.command->commandBuffer);
 
 		// Signal value increment.
 		m_timelineValue++;
@@ -80,6 +91,8 @@ namespace chord::graphics
 		timelineInfo.signalSemaphoreValueCount = 1;
 		timelineInfo.pSignalSemaphoreValues = &m_activeCmdCtx.command->signalValue;
 
+		VkPipelineStageFlags kUiWaitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
 		VkSubmitInfo submitInfo;
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.pNext = &timelineInfo;
@@ -89,6 +102,7 @@ namespace chord::graphics
 		submitInfo.pSignalSemaphores = &m_timelineSemaphore;
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &m_activeCmdCtx.command->commandBuffer;
+		submitInfo.pWaitDstStageMask = &kUiWaitFlags;
 
 		vkQueueSubmit(m_queue, 1, &submitInfo, VK_NULL_HANDLE);
 
@@ -98,34 +112,33 @@ namespace chord::graphics
 		return TimelineWait{ .timeline = m_timelineSemaphore, .waitValue = m_timelineValue };
 	}
 
-	void Queue::sync()
+	void Queue::sync(uint32 freeFrameCount)
 	{
-		const uint64 waitValue = m_timelineValue;
-
 		// Free command when finish.
 		if (!m_usingCommands.empty())
 		{
 			uint64 currentValue;
 			vkGetSemaphoreCounterValue(getDevice(), m_timelineSemaphore, &currentValue);
 
-			check(waitValue <= currentValue);
-
 			auto usingCmd = m_usingCommands.begin();
 			uint64 usingTimelineValue = (*usingCmd)->signalValue;
-			while (usingCmd != m_usingCommands.end() && usingTimelineValue <= currentValue)
+			while (usingCmd != m_usingCommands.end() && (usingTimelineValue + freeFrameCount) < currentValue)
 			{
+				(*usingCmd)->pendingResources.clear();
+
 				m_commandsPool.push_back(*usingCmd);
 				usingCmd = m_usingCommands.erase(usingCmd);
 			}
 		}
 	}
 
-	CommandList::CommandList()
+	CommandList::CommandList(const Swapchain& swapchain)
+		: m_swapchain(swapchain)
 	{
 		const auto& queueInfos = getContext().getQueuesInfo();
-		m_graphicsQueue = std::make_unique<Queue>(EQueueType::Graphics, queueInfos.graphcisQueues[0].queue, queueInfos.graphicsFamily.get());
-		m_asyncComputeQueue = std::make_unique<Queue>(EQueueType::Compute, queueInfos.computeQueues[0].queue, queueInfos.computeFamily.get());
-		m_asyncCopyQueue = std::make_unique<Queue>(EQueueType::Copy, queueInfos.copyQueues[0].queue, queueInfos.copyFamily.get());
+		m_graphicsQueue = std::make_unique<GraphicsQueue>(m_swapchain, EQueueType::Graphics, queueInfos.graphcisQueues[0].queue, queueInfos.graphicsFamily.get());
+		m_asyncComputeQueue = std::make_unique<Queue>(m_swapchain, EQueueType::Compute, queueInfos.computeQueues[0].queue, queueInfos.computeFamily.get());
+		m_asyncCopyQueue = std::make_unique<Queue>(m_swapchain, EQueueType::Copy, queueInfos.copyQueues[0].queue, queueInfos.copyFamily.get());
 	}
 
 	CommandList::~CommandList()
@@ -133,41 +146,112 @@ namespace chord::graphics
 
 	}
 
-	void CommandList::sync()
+	void CommandList::sync(uint32 freeFrameCount)
 	{
-		m_graphicsQueue->sync();
-		m_asyncComputeQueue->sync();
-		m_asyncCopyQueue->sync();
+		m_graphicsQueue->sync(freeFrameCount);
+		m_asyncComputeQueue->sync(freeFrameCount);
+		m_asyncCopyQueue->sync(freeFrameCount);
 	}
 
-	void CommandList::beginGraphicsCommand(const std::vector<TimelineWait>& waitValue)
+	GraphicsQueue::GraphicsQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
+		: GraphicsOrComputeQueue(swapchain, type, queue, family)
 	{
-		m_graphicsQueue->beginCommand(waitValue);
 	}
 
-	void CommandList::beginAsyncComputeCommand(const std::vector<TimelineWait>& waitValue)
+	void GraphicsOrComputeQueue::clearImage(GPUTextureRef image, const VkClearColorValue* clear, uint32 rangeCount, const VkImageSubresourceRange* ranges)
 	{
-		m_asyncComputeQueue->beginCommand(waitValue);
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(image);
+
+		// Target state.
+		GPUTextureSyncBarrierMasks mask;
+		mask.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		mask.barrierMasks.accesMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		mask.barrierMasks.queueFamilyIndex = getFamily();
+
+		// Transition before clear.
+		for (uint32 rangeIndex = 0; rangeIndex < rangeCount; rangeIndex++)
+		{
+			image->transition(cmd->commandBuffer, mask, ranges[rangeIndex]);
+		}
+
+		// Clear image, only work for compute or graphics queue.
+		vkCmdClearColorImage(cmd->commandBuffer, *image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, clear, rangeCount, ranges);
 	}
 
-	void CommandList::beginAsyncCopyCommand(const std::vector<TimelineWait>& waitValue)
+	void GraphicsQueue::clearDepthStencil(GPUTextureRef image, const VkClearDepthStencilValue* clear, VkImageAspectFlags flags)
 	{
-		m_asyncCopyQueue->beginCommand(waitValue);
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(image);
+
+		const auto rangeClearDepth = helper::buildBasicImageSubresource(flags);
+
+		// Target state.
+		GPUTextureSyncBarrierMasks mask;
+		mask.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		mask.barrierMasks.accesMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		mask.barrierMasks.queueFamilyIndex = getFamily();
+
+		image->transition(cmd->commandBuffer, mask, rangeClearDepth);
+
+		vkCmdClearDepthStencilImage(cmd->commandBuffer, *image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, clear, 1, &rangeClearDepth);
 	}
 
-	TimelineWait CommandList::endGraphicsCommand()
+	void GraphicsQueue::transitionPresent(GPUTextureRef image)
 	{
-		return m_graphicsQueue->endCommand();
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(image);
+
+		GPUTextureSyncBarrierMasks mask;
+		mask.imageLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		mask.barrierMasks.accesMask = VK_ACCESS_MEMORY_READ_BIT;
+		mask.barrierMasks.queueFamilyIndex = getFamily();
+
+		image->transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource());
 	}
 
-	TimelineWait CommandList::endAsyncComputeCommand()
+	void GraphicsQueue::transitionColorAttachment(GPUTextureRef image)
 	{
-		return m_graphicsQueue->endCommand();
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(image);
+
+		GPUTextureSyncBarrierMasks mask;
+		mask.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		mask.barrierMasks.accesMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		mask.barrierMasks.queueFamilyIndex = getFamily();
+
+		image->transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource());
 	}
 
-	TimelineWait CommandList::endAsyncCopyCommand()
+	void GraphicsQueue::transitionDepthStencilAttachment(GPUTextureRef image, EDepthStencilOp op)
 	{
-		return m_graphicsQueue->endCommand();
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(image);
+
+		GPUTextureSyncBarrierMasks mask;
+		mask.imageLayout = getLayoutFromDepthStencilOp(op);
+		mask.barrierMasks.accesMask = getAccessFlagBits(op);
+		mask.barrierMasks.queueFamilyIndex = getFamily();
+
+		image->transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource(getImageAspectFlags(op)));
+	}
+
+	GraphicsOrComputeQueue::GraphicsOrComputeQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
+		: Queue(swapchain, type, queue, family)
+	{
+	}
+
+	void GraphicsOrComputeQueue::transitionSRV(GPUTextureRef image, VkImageSubresourceRange range)
+	{
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(image);
+
+		GPUTextureSyncBarrierMasks mask;
+		mask.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		mask.barrierMasks.accesMask = VK_ACCESS_SHADER_READ_BIT;
+		mask.barrierMasks.queueFamilyIndex = getFamily();
+
+		image->transition(cmd->commandBuffer, mask, range);
 	}
 }
 

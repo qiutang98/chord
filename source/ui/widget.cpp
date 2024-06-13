@@ -56,28 +56,26 @@ namespace chord
 			{
 				ImGui::PushID(m_uniqueId);
 				onVisibleTick(tickData);
+
+				if (auto viewport = ImGui::GetCurrentWindow()->Viewport)
+				{
+					if (auto* vrd = (ImGuiViewportData*)viewport->RendererUserData)
+					{
+						std::weak_ptr<IWidget> widget = shared_from_this();
+						vrd->onTickWithCmds.add([widget](const ApplicationTickData& tickData, graphics::CommandList& commandList)
+						{
+							if (auto ptr = widget.lock())
+							{
+								ptr->onVisibleTickCmd(tickData, commandList);
+							}
+						});
+					}
+				}
 				ImGui::PopID();
 			}
 			ImGui::End(true);
 		}
 
 		onAfterTick(tickData);
-
-		// Add on tick command.
-		if (auto viewport = ImGui::GetCurrentWindow()->Viewport)
-		{
-			if (auto* vrd = (ImGuiViewportData*)viewport->RendererUserData)
-			{
-				vrd->onTickWithCmds.add([this](const ApplicationTickData& tickData, graphics::CommandList& commandList)
-				{
-					onTickCmd(tickData, commandList);
-
-					if (m_bShow)
-					{
-						onVisibleTickCmd(tickData, commandList);
-					}
-				});
-			}
-		}
 	}
 }

@@ -23,8 +23,13 @@ namespace chord::graphics
 		template<typename T>
 		void pushConst(VkCommandBuffer cmd, const T& data) const
 		{
-			check(sizeof(data) <= m_pushConstSize);
-			vkCmdPushConstants(cmd, m_pipelineLayout, m_shaderStageFlags, 0, sizeof(data), &data);
+			static_assert(std::is_object_v<T> && !std::is_pointer_v<T>, "Type must be an object and not a pointer.");
+
+			if (m_pushConstSize > 0)
+			{
+				check(sizeof(data) <= m_pushConstSize);
+				vkCmdPushConstants(cmd, m_pipelineLayout, m_shaderStageFlags, 0, sizeof(data), &data);
+			}
 		}
 
 	protected:
@@ -54,6 +59,7 @@ namespace chord::graphics
 
 		virtual void bind(VkCommandBuffer cmd) const override;
 	};
+	using GraphicsPipelineRef = std::shared_ptr<GraphicsPipeline>;
 
 	// Container collect pipeline when require.
 	class PipelineContainer : NonCopyable

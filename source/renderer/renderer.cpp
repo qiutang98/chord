@@ -2,6 +2,10 @@
 #include <renderer/renderer.h>
 #include <graphics/helper.h>
 
+#include <renderer/render_textures.h>
+#include <renderer/fullscreen.h>
+#include <renderer/postprocessing/postprocessing.h>
+
 namespace chord
 {
 	using namespace graphics;
@@ -23,11 +27,14 @@ namespace chord
 		{
 			const std::string name = std::format("{}-Output", m_name);
 
+			// NOTE: R11G11B10 break quantity of blue channel, exist some banding after present.
+			//       R10G10B10A2 Image is best choice, but we need draw some translucent ui on it.
+			//       Just use R8G8B8A8 srgb, fine for most case.
 			m_outputTexture = getContext().getTexturePool().create(name,
 				m_dimensionConfig.getOutputWidth(),
 				m_dimensionConfig.getOutputHeight(),
-				VK_FORMAT_A2B10G10R10_UNORM_PACK32, // Default Render to R10G10B10A2 Image.
-				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+				VK_FORMAT_R8G8B8A8_SRGB,
+				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
 			m_outputTexture->get()->transitionImmediately(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, helper::buildBasicImageSubresource());
 		}
@@ -97,6 +104,31 @@ namespace chord
 
 	void DeferredRenderer::render(const ApplicationTickData& tickData, graphics::CommandList& cmd)
 	{
-		LOG_INFO("Hellp");
+		const uint32 currentRenderWidth = m_dimensionConfig.getRenderWidth();
+		const uint32 currentRenderHeight = m_dimensionConfig.getRenderHeight();
+
+		auto finalOutput = getOutput();
+
+		// Graphics start timeline.
+		auto& graphics = cmd.getGraphicsQueue();
+		TimelineWait graphicsStartTimeline = graphics.getCurrentTimeline();
+
+		auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
+
+		graphics.beginCommand({ graphicsStartTimeline });
+		{
+			// Clear all gbuffer textures.
+			addClearGbufferPass(graphics, gbuffers);
+		}
+		auto gbufferPassTimeline = graphics.endCommand();
+
+
+		graphics.beginCommand({ gbufferPassTimeline} );
+		{
+			tonemapping(graphics, gbuffers.color, finalOutput);
+
+			graphics.transitionPresent(finalOutput->get());
+		}
+		graphics.endCommand();
 	}
 }
