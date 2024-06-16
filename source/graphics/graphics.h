@@ -32,6 +32,7 @@ namespace chord::graphics
 		VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extendedDynamicState3Features{ };
 		VkPhysicalDeviceExtendedDynamicState2FeaturesEXT extendedDynamicState2Features{ };
 
+		VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures { };
 		VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT vertexInputDynamicStateFeatures { };
 	};
 

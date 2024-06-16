@@ -192,6 +192,8 @@ namespace chord::graphics
 		// EXT.
 		extendedDynamicState3Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
 		extendedDynamicState2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
+
+		meshShaderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
 		vertexInputDynamicStateFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT;
 	}
 
@@ -205,6 +207,7 @@ namespace chord::graphics
 		graphics::stepNextPtr(ppNext, this->accelerationStructureFeatures);
 		graphics::stepNextPtr(ppNext, this->extendedDynamicState2Features);
 		graphics::stepNextPtr(ppNext, this->extendedDynamicState3Features);
+		graphics::stepNextPtr(ppNext, this->meshShaderFeatures);
 		graphics::stepNextPtr(ppNext, this->vertexInputDynamicStateFeatures);
 
 		return ppNext;
@@ -681,6 +684,8 @@ namespace chord::graphics
 					FORCE_ENABLE(extendedDynamicState2Features.extendedDynamicState2LogicOp);
 					FORCE_ENABLE(extendedDynamicState2Features.extendedDynamicState2);
 
+
+
 					// EXT dynamic state3
 					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3DepthClampEnable);
 					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3PolygonMode);
@@ -689,6 +694,9 @@ namespace chord::graphics
 					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3ColorBlendEquation);
 					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3ColorWriteMask);
 					FORCE_ENABLE(extendedDynamicState3Features.extendedDynamicState3LogicOpEnable);
+
+					FORCE_ENABLE(meshShaderFeatures.taskShader);
+					FORCE_ENABLE(meshShaderFeatures.meshShader);
 					FORCE_ENABLE(vertexInputDynamicStateFeatures.vertexInputDynamicState);
 				}
 				#undef FORCE_ENABLE
@@ -770,26 +778,6 @@ namespace chord::graphics
 				buildQueueCreateInfo(m_gpuQueuesInfo.videoEncodeQueues, m_gpuQueuesInfo.videoEncodeFamily, videoEncodeQueuePriority);
 			}
 
-			// Mesh shader features query.
-			VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures { };
-			{
-				meshShaderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
-				meshShaderFeatures.pNext = VK_NULL_HANDLE;
-
-				auto checkFeatures = meshShaderFeatures;
-
-				VkPhysicalDeviceFeatures2 features2;
-				features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-				features2.pNext = &checkFeatures;
-				vkGetPhysicalDeviceFeatures2(m_physicalDevice, &features2);
-
-				check(checkFeatures.taskShader&& checkFeatures.meshShader);
-				check(checkFeatures.meshShaderQueries);
-			}
-			meshShaderFeatures.meshShader = VK_TRUE;
-			meshShaderFeatures.taskShader = VK_TRUE;
-			 
-
 			// Device create feature.
 			VkPhysicalDeviceFeatures2 physicalDeviceFeatures2
 			{
@@ -806,10 +794,6 @@ namespace chord::graphics
 			{
 				void** pNextDeviceCreateInfo = getNextPtr(physicalDeviceFeatures2);
 				pNextDeviceCreateInfo = m_physicalDeviceFeaturesEnabled.stepNextPtr(pNextDeviceCreateInfo);
-				graphics::stepNextPtr(pNextDeviceCreateInfo, meshShaderFeatures);
-
-				// NOTE: If exist other chain, continue use this pNext.
-				//       ...
 			}
 
 
