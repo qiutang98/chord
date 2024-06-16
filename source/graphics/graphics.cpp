@@ -341,6 +341,7 @@ namespace chord::graphics
 				checkVkResult(vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, availableInstanceExtensions.data()));
 
 				enableIfExist(&m_initConfig.bDebugUtils, VK_EXT_DEBUG_UTILS_EXTENSION_NAME, "DebugUtils", &VkExtensionProperties::extensionName, availableInstanceExtensions, extensions);
+				enableIfExist(nullptr, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, "GetPhysicalDeviceProperties2", &VkExtensionProperties::extensionName, availableInstanceExtensions, extensions);
 
 				// GLFW special extension.
 				if (m_initConfig.bGLFW)
@@ -365,9 +366,6 @@ namespace chord::graphics
 			{
 				LOG_GRAPHICS_INFO("Instance extension enabled #{0}: '{1}'.", i, extensions[i]);
 			}
-
-
-
 
 			// Instance info.
 			VkInstanceCreateInfo instanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
@@ -601,6 +599,9 @@ namespace chord::graphics
 				enableIfExist(nullptr, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, "ExtendDynamicState3", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME, "VertexInputDynamicState", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME, "ShaderNonSemanticInfo", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_KHR_SPIRV_1_4_EXTENSION_NAME, "Spirv1_4", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_EXT_MESH_SHADER_EXTENSION_NAME, "MeshShader", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME, "ShaderFloatControls", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 
 				// GLFW
 				enableIfExist(&m_initConfig.bGLFW, VK_KHR_SWAPCHAIN_EXTENSION_NAME, "GLFW", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
@@ -769,6 +770,26 @@ namespace chord::graphics
 				buildQueueCreateInfo(m_gpuQueuesInfo.videoEncodeQueues, m_gpuQueuesInfo.videoEncodeFamily, videoEncodeQueuePriority);
 			}
 
+			// Mesh shader features query.
+			VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures { };
+			{
+				meshShaderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+				meshShaderFeatures.pNext = VK_NULL_HANDLE;
+
+				auto checkFeatures = meshShaderFeatures;
+
+				VkPhysicalDeviceFeatures2 features2;
+				features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+				features2.pNext = &checkFeatures;
+				vkGetPhysicalDeviceFeatures2(m_physicalDevice, &features2);
+
+				check(checkFeatures.taskShader&& checkFeatures.meshShader);
+				check(checkFeatures.meshShaderQueries);
+			}
+			meshShaderFeatures.meshShader = VK_TRUE;
+			meshShaderFeatures.taskShader = VK_TRUE;
+			 
+
 			// Device create feature.
 			VkPhysicalDeviceFeatures2 physicalDeviceFeatures2
 			{
@@ -782,9 +803,15 @@ namespace chord::graphics
 				.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 				.pNext = &physicalDeviceFeatures2,
 			};
-			// NOTE: If exist other chain, continue use this pNext.
-			void** pNextDeviceCreateInfo = getNextPtr(physicalDeviceFeatures2);
-			pNextDeviceCreateInfo = m_physicalDeviceFeaturesEnabled.stepNextPtr(pNextDeviceCreateInfo);
+			{
+				void** pNextDeviceCreateInfo = getNextPtr(physicalDeviceFeatures2);
+				pNextDeviceCreateInfo = m_physicalDeviceFeaturesEnabled.stepNextPtr(pNextDeviceCreateInfo);
+				graphics::stepNextPtr(pNextDeviceCreateInfo, meshShaderFeatures);
+
+				// NOTE: If exist other chain, continue use this pNext.
+				//       ...
+			}
+
 
 			// Queues info.
 			createInfo.pQueueCreateInfos = queueCreateInfos.data();
