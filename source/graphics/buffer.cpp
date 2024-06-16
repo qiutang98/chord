@@ -7,7 +7,7 @@
 
 namespace chord::graphics
 {
-	static bool bGraphicsBufferLifeLogTraceEnable = false;
+	static bool bGraphicsBufferLifeLogTraceEnable = true;
 	static AutoCVarRef<bool> cVarBufferLifeLogTraceEnable(
 		"r.graphics.resource.buffer.lifeLogTrace",
 		bGraphicsBufferLifeLogTraceEnable,
@@ -84,6 +84,28 @@ namespace chord::graphics
 		return m_deviceAddress.get();
 	}
 
+	BufferView GPUBuffer::requireView(bool bStorage, bool bUniform, VkDeviceSize offset, VkDeviceSize range)
+	{
+		struct Desc
+		{
+			VkDeviceSize offset;
+			VkDeviceSize range;
+		};
+		Desc desc { .offset = offset, .range = range };
+
+		auto& view = m_views[crc::crc32(desc)];
+		if (bUniform && (!view.uniform.isValid()))
+		{
+			view.uniform = getBindless().registerUniformBuffer(m_buffer, offset, range);
+		}
+		if (bStorage && (!view.storage.isValid()))
+		{
+			view.storage = getBindless().registerStorageBuffer(m_buffer, offset, range);
+		}
+
+		return view;
+	}
+
 
 
 	GPUOnlyBuffer::GPUOnlyBuffer(
@@ -96,7 +118,24 @@ namespace chord::graphics
 
 	GPUOnlyBuffer::~GPUOnlyBuffer()
 	{
+		// Application releasing state guide us use a update or not in blindess free.
+		const bool bAppReleasing = (Application::get().getRuntimePeriod() == ERuntimePeriod::Releasing);
+		GPUBufferRef fallbackSSBO = bAppReleasing ? nullptr : getContext().getDummySSBO();
 
+		// Destroy cached image views.
+		for (auto& pair : m_views)
+		{
+			auto& view = pair.second;
+			if (view.storage.isValid())
+			{
+				getBindless().freeStorageBuffer(view.storage, fallbackSSBO);
+			}
+
+			if (view.uniform.isValid())
+			{
+				getBindless().freeUniformBuffer(view.uniform, fallbackSSBO);
+			}
+		}
 	}
 
 	//

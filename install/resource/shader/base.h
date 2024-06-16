@@ -68,7 +68,6 @@
         static_assert(sizeof(X) % (4 * sizeof(float)) == 0)
 
 
-
 #else  ///////////////////////////////////////////////////////
 
     // HLSL is declaration pushconst.
@@ -77,3 +76,20 @@
     #define CHORD_CHECK_SIZE_GPU_SAFE(X)
 
 #endif ///////////////////////////////////////////////////////
+
+struct GPUScene
+{
+
+};
+
+struct PerframeCameraView
+{
+    float4x4 translatedWorldToView;
+    float4x4 viewToTranslatedWorld;
+
+    float4x4 viewToClip;
+    float4x4 clipToView;
+
+    float4x4 translatedWorldToClip;
+    float4x4 clipToTranslatedWorld;
+};

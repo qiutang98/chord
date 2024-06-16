@@ -122,7 +122,7 @@ namespace chord::graphics
 
 			auto usingCmd = m_usingCommands.begin();
 			uint64 usingTimelineValue = (*usingCmd)->signalValue;
-			while (usingCmd != m_usingCommands.end() && (usingTimelineValue + freeFrameCount) < currentValue)
+			while (usingCmd != m_usingCommands.end() && (usingTimelineValue + freeFrameCount) <= currentValue)
 			{
 				(*usingCmd)->pendingResources.clear();
 
@@ -132,7 +132,7 @@ namespace chord::graphics
 		}
 	}
 
-	CommandList::CommandList(const Swapchain& swapchain)
+	CommandList::CommandList(Swapchain& swapchain)
 		: m_swapchain(swapchain)
 	{
 		const auto& queueInfos = getContext().getQueuesInfo();
@@ -144,6 +144,11 @@ namespace chord::graphics
 	CommandList::~CommandList()
 	{
 
+	}
+
+	void CommandList::insertPendingResource(ResourceRef resource)
+	{
+		m_swapchain.insertPendingResource(resource);
 	}
 
 	void CommandList::sync(uint32 freeFrameCount)

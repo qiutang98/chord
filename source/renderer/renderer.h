@@ -4,6 +4,9 @@
 #include <utils/noncopyable.h>
 #include <graphics/graphics.h>
 #include <graphics/rendertargetpool.h>
+#include <shader/base.h>
+#include <utils/camera.h>
+#include <graphics/bufferpool.h>
 
 namespace chord
 {
@@ -20,7 +23,10 @@ namespace chord
 
 		graphics::PoolTextureRef getOutput();
 
-		void render(const ApplicationTickData& tickData, graphics::CommandList& cmd);
+		void render(
+			const ApplicationTickData& tickData, 
+			graphics::CommandList& cmd,
+			ICamera* camera);
 
 	public:
 		static constexpr auto kMinRenderDim = 64U;
@@ -67,6 +73,11 @@ namespace chord
 	protected:
 		void clearHistory(bool bClearOutput);
 
+		// Prepare current frame camera view relative uniform buffer.
+		graphics::PoolBufferHostVisible getCameraViewUniformBuffer(
+			const ApplicationTickData& tickData, 
+			graphics::CommandList& cmd,
+			ICamera* camera);
 
 	protected:
 		std::string m_name;
@@ -79,5 +90,8 @@ namespace chord
 
 		// Renderer history.
 		DeferredRendererHistory m_rendererHistory;
+
+		// Current frame camera relative view uniform buffer.
+		PerframeCameraView m_perframeCameraView;
 	};
 }

@@ -17,17 +17,17 @@ public:
 	class WidgetViewport* m_viewport = nullptr;
 
 	// worldspace up.
-	mutable chord::math::vec3 m_worldUp = { 0.0f, 1.0f, 0.0f };
+	mutable chord::math::dvec3 m_worldUp = { 0.0, 1.0, 0.0 };
 
 	// yaw and pitch. in degree.
-	float m_yaw = -90.0f;
-	float m_pitch = 0.0f;
+	double m_yaw = -90.0;
+	double m_pitch = 0.0;
 
 	// mouse speed.
-	float m_moveSpeed = 10.0f;
-	float m_mouseSensitivity = 0.1f;
-	float m_maxMouseMoveSpeed = 400.0f;
-	float m_minMouseMoveSpeed = 1.0f;
+	double m_moveSpeed = 10.0f;
+	double m_mouseSensitivity = 0.1f;
+	double m_maxMouseMoveSpeed = 400.0f;
+	double m_minMouseMoveSpeed = 1.0f;
 
 	// first time 
 	bool  m_bFirstMouse = true;
@@ -37,7 +37,7 @@ public:
 	double m_lastY = 0.0f;
 
 	// Cache matrix.
-	chord::math::mat4 m_viewMatrix { 1.0f };
+	chord::math::dmat4 m_viewMatrix { 1.0 };
 	chord::math::mat4 m_projectMatrix { 1.0f };
 
 	bool isControlingCamera() const 
@@ -52,20 +52,20 @@ private:
 private:
 	void updateCameraVectors();
 	void updateMatrixMisc();
-	void processKeyboard(EMoveType direction, float deltaTime);
-	void processMouseMovement(float xoffset, float yoffset, bool constrainPitch = true);
-	void processMouseScroll(float yoffset);
+	void processKeyboard(EMoveType direction, double deltaTime);
+	void processMouseMovement(double xoffset, double yoffset, bool constrainPitch = true);
+	void processMouseScroll(double yoffset);
 
 
 public:
 	// return camera view matrix.
-	virtual chord::math::mat4 getViewMatrix() const override
+	virtual const chord::math::dmat4& getViewMatrix() const override
 	{
 		return m_viewMatrix;
 	}
 
 	// return camera project matrix.
-	virtual chord::math::mat4 getProjectMatrix() const override
+	virtual const chord::math::mat4& getProjectMatrix() const override
 	{
 		return m_projectMatrix;
 	}

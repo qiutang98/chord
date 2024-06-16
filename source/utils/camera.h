@@ -1,16 +1,19 @@
 #pragma once
 #include <utils/utils.h>
+#include <shader/base.h>
 
 namespace chord
 {
+	// UNIT: Meter.
+	// 
 	class ICamera
 	{
 	public:
 		// return camera view matrix.
-		virtual math::mat4 getViewMatrix() const = 0;
+		virtual const math::dmat4& getViewMatrix() const = 0;
 
 		// return camera project matrix.
-		virtual math::mat4 getProjectMatrix() const = 0;
+		virtual const math::mat4& getProjectMatrix() const = 0;
 
 	public:
 		// return camera aspect.
@@ -38,36 +41,38 @@ namespace chord
 		}
 
 		// return camera z near plane.
-		inline float getZNear() const 
+		inline double getZNear() const
 		{ 
 			return m_zNear; 
 		}
 
 		// return camera z far plane.
-		inline float getZFar() const 
+		inline double getZFar() const 
 		{ 
 			// Z far, <= 0.0f meaning infinite z.
 			return m_zFar; 
 		}
 
 		// return camera worldspcae position.
-		inline const math::vec3& getPosition() const 
+		inline const math::dvec3& getPosition() const 
 		{ 
 			return m_position; 
 		}
 
+		void fillViewUniformParameter(PerframeCameraView& view) const;
+
 	protected:
 		// world space position.
-		math::vec3 m_position = { 25.0f, 25.0f, 25.0f };
+		math::dvec3 m_position = { 25.0f, 25.0f, 25.0f };
 
 		// fov y.
 		float m_fovy = math::radians(45.0f);
 
 		// z near.
-		float m_zNear = 0.01f;
+		double m_zNear = 0.01; // 1 CM.
 
-		// z far, 0.0f meaning infinite z far.
-		float m_zFar = 0.0f;
+		// z far, 0.0 meaning infinite z far.
+		double m_zFar = 0.0;
 
 		// render width.
 		size_t m_width;
@@ -76,12 +81,12 @@ namespace chord
 		size_t m_height;
 
 		// camera front direction.
-		math::vec3 m_front = { -0.5f, -0.6f, 0.6f };
+		math::dvec3 m_front = { -0.5f, -0.6f, 0.6f };
 
 		// camera up direction.
-		math::vec3 m_up;
+		math::dvec3 m_up;
 
 		// camera right direction;
-		math::vec3 m_right;
+		math::dvec3 m_right;
 	};
 }

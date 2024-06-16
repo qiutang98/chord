@@ -5,6 +5,7 @@
 #include <renderer/render_textures.h>
 #include <renderer/fullscreen.h>
 #include <renderer/postprocessing/postprocessing.h>
+#include <shader/base.h>
 
 namespace chord
 {
@@ -67,6 +68,22 @@ namespace chord
 		}
 	}
 
+	PoolBufferHostVisible DeferredRenderer::getCameraViewUniformBuffer(
+		const ApplicationTickData& tickData, 
+		CommandList& cmd,
+		ICamera* camera)
+	{
+		camera->fillViewUniformParameter(m_perframeCameraView);
+
+		auto perframeGPU = getContext().getBufferPool().createHostVisible(
+			"PerframeCameraView - " + m_name,
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			SizedBuffer(sizeof(m_perframeCameraView), (void*)&m_perframeCameraView));
+		cmd.insertPendingResource(perframeGPU);
+
+		return perframeGPU;
+	}
+
 	bool DeferredRenderer::DimensionConfig::updateDimension(uint32 outputWidth, uint32 outputHeight, float renderScaleToPost, float postScaleToOutput)
 	{
 		check(renderScaleToPost > 0.0 && postScaleToOutput > 0.0);
@@ -102,7 +119,10 @@ namespace chord
 
 	}
 
-	void DeferredRenderer::render(const ApplicationTickData& tickData, graphics::CommandList& cmd)
+	void DeferredRenderer::render(
+		const ApplicationTickData& tickData, 
+		graphics::CommandList& cmd,
+		ICamera* camera)
 	{
 		const uint32 currentRenderWidth = m_dimensionConfig.getRenderWidth();
 		const uint32 currentRenderHeight = m_dimensionConfig.getRenderHeight();
@@ -112,6 +132,10 @@ namespace chord
 		// Graphics start timeline.
 		auto& graphics = cmd.getGraphicsQueue();
 		TimelineWait graphicsStartTimeline = graphics.getCurrentTimeline();
+
+		// Allocate view gpu uniform buffer.
+		auto viewGPU = getCameraViewUniformBuffer(tickData, cmd, camera);
+		uint32 viewGPUId = viewGPU->get().requireView(false, true).uniform.get();
 
 		auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
 

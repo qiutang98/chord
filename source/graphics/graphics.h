@@ -145,6 +145,9 @@ namespace chord::graphics
 		const auto& getTexturePool() const { return *m_texturePool; }
 		auto& getTexturePool() { return *m_texturePool; }
 
+		const auto& getBufferPool() const { return *m_bufferPool; }
+		auto& getBufferPool() { return *m_bufferPool; }
+
 		template<class VertexShader, class PixelShader>
 		IPipelineRef graphicsPipe(
 			const std::string& name,
@@ -155,6 +158,7 @@ namespace chord::graphics
 
 		void waitDeviceIdle() const;
 		GPUBufferRef getDummySSBO() const { return m_dummySSBO; }
+		GPUBufferRef getDummyUniform() const { return m_dummyUniform; }
 
 	public:
 		bool init(const InitConfig& config);
@@ -217,6 +221,7 @@ namespace chord::graphics
 		// Engine builtin textures.
 		BuiltinTextures m_builtinTextures;
 		GPUBufferRef m_dummySSBO;
+		GPUBufferRef m_dummyUniform;
 
 		// Graphics family command pool with RESET bit flag.
 		std::unique_ptr<CommandPoolResetable> m_graphicsCommandPool;

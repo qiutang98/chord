@@ -22,28 +22,25 @@ struct VSIn
     [[vk::location(0)]] float2 pos : POSITION;
     [[vk::location(1)]] float2 uv  : TEXCOORD0;
     [[vk::location(2)]] float4 col : COLOR0; 
-
 };
 
 struct VS2PS
 {
-                        float4 pos : SV_POSITION;
-    [[vk::location(0)]] float2 uv  : TEXCOORD0;
-    [[vk::location(1)]] float4 col : COLOR0;
+    float4 pos : SV_POSITION;
+    float2 uv  : TEXCOORD0;
+    float4 col : COLOR0;
 };
 
-VS2PS mainVS(VSIn input)
+void mainVS(in VSIn input, out VS2PS output)
 {
-    VS2PS output;
-
     output.pos = float4(input.pos.xy * pushConsts.scale + pushConsts.translate, 0, 1);
     output.col = input.col;
     output.uv  = input.uv;
-
-    return output;
 };
 
-float4 mainPS(VS2PS input) : SV_Target
+void mainPS(
+    in VS2PS input, 
+    out float4 outColor : SV_Target0)
 {
     Texture2D<float4> inputTexture = TBindless(Texture2D, float4, pushConsts.textureId);
     SamplerState inputSampler = Bindless(SamplerState, pushConsts.samplerId);
@@ -65,7 +62,7 @@ float4 mainPS(VS2PS input) : SV_Target
     lerpColor.xyz = chord::rec709GammaDecode(lerpColor.xyz);
     
     // Default in linearRec709, UI always draw in SRGB color buffer, so just output use hardware convert is fine.
-    return lerpColor * sampleColor;
+    outColor = lerpColor * sampleColor;
 } 
    
 #endif // HLSL only area end.

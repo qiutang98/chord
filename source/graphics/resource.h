@@ -172,6 +172,12 @@ namespace chord::graphics
 	};
 	using GPUTextureRef = std::shared_ptr<GPUTexture>;
 
+	class BufferView
+	{
+	public:
+		OptionalUint32 storage;
+		OptionalUint32 uniform;
+	};
 	class GPUBuffer : public GPUResource
 	{
 	public:
@@ -200,6 +206,7 @@ namespace chord::graphics
 		}
 
 		uint64 getDeviceAddress();
+		BufferView requireView(bool bStorage, bool bUniform, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
 
 	protected:
 		// Buffer create info.
@@ -216,6 +223,8 @@ namespace chord::graphics
 
 		// Memory allocation.
 		VmaAllocation m_allocation = VK_NULL_HANDLE;
+
+		std::unordered_map<uint64, BufferView> m_views;
 	};
 	using GPUBufferRef = std::shared_ptr<GPUBuffer>;
 

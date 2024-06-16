@@ -19,11 +19,11 @@ namespace chord
 			const float sizeLable = ImGui::GetFontSize() * 1.5f;
 
 			bool bChangeTransform = false;
-			math::vec3 anglesRotate = math::degrees(transform->getRotation());
+			math::dvec3 anglesRotate = math::degrees(transform->getRotation());
 
-			bChangeTransform |= ui::drawVector3("  P  ", transform->getTranslation(), math::vec3(0.0f), sizeLable);
-			bChangeTransform |= ui::drawVector3("  R  ", anglesRotate, math::vec3(0.0f), sizeLable);
-			bChangeTransform |= ui::drawVector3("  S  ", transform->getScale(), math::vec3(1.0f), sizeLable);
+			bChangeTransform |= ui::drawDVector3("  P  ", transform->getTranslation(), math::dvec3(0.0), sizeLable);
+			bChangeTransform |= ui::drawDVector3("  R  ", anglesRotate, math::dvec3(0.0), sizeLable);
+			bChangeTransform |= ui::drawDVector3("  S  ", transform->getScale(), math::dvec3(1.0), sizeLable);
 
 			if (bChangeTransform)
 			{
@@ -57,7 +57,7 @@ namespace chord
 		}
 	}
 
-	void Transform::setTranslation(const glm::vec3& translation)
+	void Transform::setTranslation(const glm::dvec3& translation)
 	{
 		m_translation = translation;
 		invalidateWorldMatrix();
@@ -65,7 +65,7 @@ namespace chord
 		markDirty();
 	}
 
-	void Transform::setRotation(const glm::vec3& rotation)
+	void Transform::setRotation(const glm::dvec3& rotation)
 	{
 		m_rotation = rotation;
 		invalidateWorldMatrix();
@@ -73,7 +73,7 @@ namespace chord
 		markDirty();
 	}
 
-	void Transform::setScale(const glm::vec3& scale)
+	void Transform::setScale(const glm::dvec3& scale)
 	{
 		m_scale = scale;
 		invalidateWorldMatrix();
@@ -81,7 +81,7 @@ namespace chord
 		markDirty();
 	}
 
-	void Transform::setMatrix(const glm::mat4& matrix)
+	void Transform::setMatrix(const glm::dmat4& matrix)
 	{
 		if (getNode()->getParent()->isRoot())
 		{
@@ -90,8 +90,8 @@ namespace chord
 		}
 		else
 		{
-			const math::mat4 parentInverse = math::inverse(getNode()->getParent()->getTransform()->getWorldMatrix());
-			const math::mat4 localNew = parentInverse * matrix;
+			const math::dmat4 parentInverse = math::inverse(getNode()->getParent()->getTransform()->getWorldMatrix());
+			const math::dmat4 localNew = parentInverse * matrix;
 
 			decomposeTransform(localNew, m_translation, m_rotation, m_scale);
 			invalidateWorldMatrix();
@@ -100,13 +100,13 @@ namespace chord
 		markDirty();
 	}
 
-	glm::mat4 Transform::computeLocalMatrix() const
+	glm::dmat4 Transform::computeLocalMatrix() const
 	{
 		// TRS - style.
 		return
-			math::translate(glm::mat4(1.0f), m_translation) *
-			math::toMat4(glm::quat(m_rotation)) *
-			math::scale(glm::mat4(1.0f), m_scale);
+			math::translate(glm::dmat4(1.0f), m_translation) *
+			math::toMat4(glm::dquat(m_rotation)) *
+			math::scale(glm::dmat4(1.0f), m_scale);
 	}
 
 

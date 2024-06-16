@@ -68,9 +68,9 @@ namespace chord::graphics
 
 		std::shared_ptr<GPUOnlyPoolBuffer> createGPUOnly(
 			const std::string& name,
-			VkBufferCreateFlags flags,
 			VkDeviceSize size,
-			VkBufferUsageFlags usage);
+			VkBufferUsageFlags usage,
+			VkBufferCreateFlags flags = 0);
 
 		class HostVisiblePoolBuffer : public PoolBuffer
 		{
@@ -81,15 +81,15 @@ namespace chord::graphics
 			{
 			}
 
-			operator const HostVisibleGPUBuffer& () const { return *((HostVisibleGPUBuffer*)m_buffer.get()); }
-			operator HostVisibleGPUBuffer& () { return *((HostVisibleGPUBuffer*)m_buffer.get()); }
+			const HostVisibleGPUBuffer& get() const { return *((HostVisibleGPUBuffer*)m_buffer.get()); }
+			HostVisibleGPUBuffer& get() { return *((HostVisibleGPUBuffer*)m_buffer.get()); }
 		};
 
 		std::shared_ptr<HostVisiblePoolBuffer> createHostVisible(
 			const std::string& name,
-			VkBufferCreateFlags flags,
 			VkBufferUsageFlags usage,
-			SizedBuffer data);
+			SizedBuffer data,
+			VkBufferCreateFlags flags = 0);
 
 	private:
 		friend PoolBuffer;

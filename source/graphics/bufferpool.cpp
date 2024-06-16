@@ -73,9 +73,9 @@ namespace chord::graphics
 
 	PoolBufferGPUOnlyRef GPUBufferPool::createGPUOnly(
 		const std::string& name,
-		VkBufferCreateFlags flags,
 		VkDeviceSize size,
-		VkBufferUsageFlags usage)
+		VkBufferUsageFlags usage,
+		VkBufferCreateFlags flags)
 	{
 		PoolBufferCreateInfo poolInfo{};
 		poolInfo.flags = flags;
@@ -110,9 +110,9 @@ namespace chord::graphics
 
 	PoolBufferHostVisible GPUBufferPool::createHostVisible(
 		const std::string& name,
-		VkBufferCreateFlags flags, 
 		VkBufferUsageFlags usage,
-		SizedBuffer data)
+		SizedBuffer data,
+		VkBufferCreateFlags flags)
 	{
 		PoolBufferCreateInfo poolInfo{};
 		poolInfo.flags = flags;

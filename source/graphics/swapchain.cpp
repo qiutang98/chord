@@ -19,7 +19,7 @@ namespace chord::graphics
 		EConsoleVarFlags::None
 	);
 
-	static uint32 sQueueSyncFreeCount = 39U;
+	static uint32 sQueueSyncFreeCount = 0U;
 	static AutoCVarRef cVarQueueSyncFreeCount(
 		"r.graphics.swapchain.queue.syncFreeCount",
 		sQueueSyncFreeCount,
@@ -93,9 +93,6 @@ namespace chord::graphics
 		// Flush fence.
 		vkWaitForFences(getContext().getDevice(), 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
 
-		// When fence finish, can free pending resource.
-		m_pendingResources[m_currentFrame].clear();
-
 		// Now acquire next image.
 		VkResult result = vkAcquireNextImageKHR(
 			getContext().getDevice(),
@@ -124,6 +121,9 @@ namespace chord::graphics
 
 		// Update in flight fence.
 		m_imagesInFlight[m_imageIndex] = m_inFlightFences[m_currentFrame];
+
+		// When fence finish, can free pending resource.
+		m_pendingResources[m_currentFrame].clear();
 
 		// Signal command list when new frame required.
 		m_commandList->sync(sQueueSyncFreeCount);

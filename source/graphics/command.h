@@ -59,6 +59,8 @@ namespace chord::graphics
 
 		uint32 getFamily() const { return m_queueFamily; }
 
+
+
 	private:
 		CommandBufferRef getOrCreateCommandBuffer();
 
@@ -117,7 +119,7 @@ namespace chord::graphics
 	class CommandList : NonCopyable
 	{
 	public:
-		explicit CommandList(const Swapchain& swapchain);
+		explicit CommandList(Swapchain& swapchain);
 		virtual ~CommandList();
 
 		// Sync when a global fence finish.
@@ -138,8 +140,10 @@ namespace chord::graphics
 			return *m_graphicsQueue;
 		}
 
+		void insertPendingResource(ResourceRef resource);
+
 	private:
-		const Swapchain& m_swapchain;
+		Swapchain& m_swapchain;
 
 		std::unique_ptr<GraphicsQueue> m_graphicsQueue;
 		std::unique_ptr<Queue> m_asyncComputeQueue;

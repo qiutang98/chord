@@ -105,7 +105,7 @@ void WidgetViewport::onVisibleTick(const ApplicationTickData& tickData)
 
 void WidgetViewport::onVisibleTickCmd(const ApplicationTickData& tickData, chord::graphics::CommandList& cmd)
 {
-	m_deferredRenderer->render(tickData, cmd);
+	m_deferredRenderer->render(tickData, cmd, m_camera.get());
 }
 
 void WidgetViewport::onAfterTick(const ApplicationTickData& tickData)
@@ -121,7 +121,8 @@ void WidgetViewport::onRelease()
 void ViewportCamera::updateCameraVectors()
 {
 	// Get front vector from yaw and pitch angel.
-	math::vec3 front;
+	math::dvec3 front;
+
 	front.x = cos(math::radians(m_yaw)) * cos(math::radians(m_pitch));
 	front.y = sin(math::radians(m_pitch));
 	front.z = sin(math::radians(m_yaw)) * cos(math::radians(m_pitch));
@@ -133,9 +134,9 @@ void ViewportCamera::updateCameraVectors()
 	m_up = math::normalize(math::cross(m_right, m_front));
 }
 
-void ViewportCamera::processKeyboard(EMoveType direction, float deltaTime)
+void ViewportCamera::processKeyboard(EMoveType direction, double deltaTime)
 {
-	float velocity = m_moveSpeed * deltaTime;
+	double velocity = m_moveSpeed * deltaTime;
 
 	if (direction == EMoveType::Forward)
 	{
@@ -159,7 +160,7 @@ void ViewportCamera::processKeyboard(EMoveType direction, float deltaTime)
 	}
 }
 
-void ViewportCamera::processMouseMovement(float xoffset, float yoffset, bool constrainPitch)
+void ViewportCamera::processMouseMovement(double xoffset, double yoffset, bool constrainPitch)
 {
 	xoffset *= m_mouseSensitivity;
 	yoffset *= m_mouseSensitivity;
@@ -171,22 +172,22 @@ void ViewportCamera::processMouseMovement(float xoffset, float yoffset, bool con
 	{
 		// Do some clamp avoid overlap with world up.
 		// Also avoid view flip.
-		if (m_pitch > 89.0f)
+		if (m_pitch > 89.0)
 		{
-			m_pitch = 89.0f;
+			m_pitch = 89.0;
 		}
-		if (m_pitch < -89.0f)
+		if (m_pitch < -89.0)
 		{
-			m_pitch = -89.0f;
+			m_pitch = -89.0;
 		}
 	}
 
 	updateCameraVectors();
 }
 
-void ViewportCamera::processMouseScroll(float yoffset)
+void ViewportCamera::processMouseScroll(double yoffset)
 {
-	m_moveSpeed += (float)yoffset;
+	m_moveSpeed += yoffset;
 	m_moveSpeed = math::clamp(m_moveSpeed, m_minMouseMoveSpeed, m_maxMouseMoveSpeed);
 }
 
@@ -206,7 +207,7 @@ void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* windo
 
 	size_t renderWidth  = size_t(m_viewport->getRenderWidth());
 	size_t renderHeight = size_t(m_viewport->getRenderHeight());
-	float dt = tickData.dt;
+	const double dt = tickData.dt;
 
 	// prepare view size.
 	if (m_width != renderWidth)
@@ -218,8 +219,6 @@ void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* windo
 	{
 		m_height = std::max(kViewportMinRenderDim, renderHeight);
 	}
-
-
 
 	// handle first input.
 	if (m_bFirstMouse)

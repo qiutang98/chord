@@ -1,6 +1,7 @@
 #pragma once
 
 #include "binding.h"
+#include "base.h"
 
 // Blog: https://www.lei.chat/posts/hlsl-for-vulkan-resources/
 // Type alias table between HLSL and GLSL.
@@ -132,3 +133,6 @@ BINDLESS_DECLARE(SamplerComparisonState, (int)chord::EBindingType::BindlessSampl
 // TBindless(ConstantBuffer, ...)
 // TBindless(StructuredBuffer, ...)
 // TBindless(RWStructuredBuffer, ...)
+
+T_BINDLESS_CONSTATNT_BUFFER_DECLARE(PerframeCameraView)
+#define LoadCameraView(Index) TBindless(ConstantBuffer, PerframeCameraView, Index)

@@ -7,19 +7,15 @@
 
 struct FullScreenVS2PS
 {
-                        float4 pos : SV_POSITION;
-    [[vk::location(0)]] float2 uv  : TEXCOORD0;
+    float4 pos : SV_POSITION;
+    float2 uv  : TEXCOORD0;
 };
 
-FullScreenVS2PS fullScreenVS(uint vertexId : SV_VertexID)
+void fullScreenVS(uint vertexId : SV_VertexID, out FullScreenVS2PS output)
 {
-    FullScreenVS2PS output;
-
     // vertex uv #0: (0.0, 0.0)
     //           #1: (2.0, 0.0)
     //           #2: (0.0, 2.0)
 	output.uv  = float2((vertexId << 1) & 2, vertexId & 2);
     output.pos = float4(output.uv * float2(2, -2) + float2(-1, 1), 0, 1);
-
-    return output;
 }

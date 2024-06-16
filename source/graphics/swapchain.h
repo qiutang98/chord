@@ -91,7 +91,7 @@ namespace chord::graphics
 
 		void insertPendingResource(ResourceRef resource)
 		{
-			m_pendingResources.at(m_imageIndex).insert(resource);
+			m_pendingResources.at(m_currentFrame).insert(resource);
 		}
 
 		auto& getCommandList() { return *m_commandList; }

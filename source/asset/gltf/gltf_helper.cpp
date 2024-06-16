@@ -1112,7 +1112,7 @@ namespace chord
 		this->buffer = std::make_shared<graphics::GPUBuffer>(name, ci, vmaCI);
 		
 		// Register bindless.
-		this->bindless = graphics::getContext().getBindlessManger().registerBuffer(*this->buffer, 0, this->buffer->getSize());
+		this->bindless = graphics::getContext().getBindlessManger().registerStorageBuffer(*this->buffer, 0, this->buffer->getSize());
 	}
 
 	GPUGLTFPrimitiveAsset::ComponentBuffer::~ComponentBuffer()
@@ -1123,7 +1123,7 @@ namespace chord
 			graphics::GPUBufferRef fallback = bReleasing ? nullptr : graphics::getContext().getDummySSBO();
 
 			// Free buffer bindless index.
-			graphics::getContext().getBindlessManger().freeBuffer(bindless, fallback);
+			graphics::getContext().getBindlessManger().freeStorageBuffer(bindless, fallback);
 		}
 	}
 

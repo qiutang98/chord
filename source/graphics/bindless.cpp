@@ -222,7 +222,7 @@ namespace chord::graphics
 		index = { };
 	}
 
-	CHORD_NODISCARD BindlessIndex BindlessManager::registerBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range)
+	CHORD_NODISCARD BindlessIndex BindlessManager::registerStorageBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range)
 	{
 		VkDescriptorBufferInfo bufferInfo{};
 		bufferInfo.buffer = buffer;
@@ -242,7 +242,7 @@ namespace chord::graphics
 		return write.dstArrayElement;
 	}
 
-	void BindlessManager::freeBuffer(BindlessIndex& index, GPUBufferRef fallback)
+	void BindlessManager::freeStorageBuffer(BindlessIndex& index, GPUBufferRef fallback)
 	{
 		if (fallback)
 		{
@@ -264,6 +264,51 @@ namespace chord::graphics
 		}
 
 		freeIndex(EBindingType::BindlessStorageBuffer, index.get());
+		index = { };
+	}
+
+	CHORD_NODISCARD BindlessIndex BindlessManager::registerUniformBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range)
+	{
+		VkDescriptorBufferInfo bufferInfo{};
+		bufferInfo.buffer = buffer;
+		bufferInfo.offset = offset;
+		bufferInfo.range = range;
+
+		VkWriteDescriptorSet write{};
+		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write.dstSet = m_set;
+		write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessUniformBuffer)].type;
+		write.dstBinding = static_cast<uint32>(EBindingType::BindlessUniformBuffer);
+		write.pBufferInfo = &bufferInfo;
+		write.descriptorCount = 1;
+		write.dstArrayElement = requireIndex(EBindingType::BindlessUniformBuffer);
+
+		vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
+		return write.dstArrayElement;
+	}
+
+	void BindlessManager::freeUniformBuffer(BindlessIndex& index, GPUBufferRef fallback)
+	{
+		if (fallback)
+		{
+			VkDescriptorBufferInfo bufferInfo{};
+			bufferInfo.buffer = *fallback;
+			bufferInfo.offset = 0;
+			bufferInfo.range = fallback->getSize();
+
+			VkWriteDescriptorSet  write{};
+			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write.dstSet = m_set;
+			write.descriptorType = m_bindingConfigs[static_cast<uint32>(EBindingType::BindlessUniformBuffer)].type;
+			write.dstBinding = static_cast<uint32>(EBindingType::BindlessUniformBuffer);
+			write.pBufferInfo = &bufferInfo;
+			write.descriptorCount = 1;
+			write.dstArrayElement = index.get();
+
+			vkUpdateDescriptorSets(getDevice(), 1, &write, 0, nullptr);
+		}
+
+		freeIndex(EBindingType::BindlessUniformBuffer, index.get());
 		index = { };
 	}
 

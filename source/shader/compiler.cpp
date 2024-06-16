@@ -63,6 +63,21 @@ namespace chord::graphics
 			}
 		}
 
+
+		// Push back shader stage definition.
+		{
+			out.push_back("-D");
+			switch (m_metaInfo.stage)
+			{
+			case EShaderStage::Vertex:  out.push_back(std::format("{0}={1}", "VERTEX_SHADER", "1")); break;
+			case EShaderStage::Pixel:   out.push_back(std::format("{0}={1}", "PIXEL_SHADER", "1")); break;
+			case EShaderStage::Compute: out.push_back(std::format("{0}={1}", "COMPUTE_SHADER", "1")); break;
+			case EShaderStage::Mesh:    out.push_back(std::format("{0}={1}", "MESH_SHADER", "1")); break;
+			case EShaderStage::Amplify: out.push_back(std::format("{0}={1}", "AMPLIFY_SHADER", "1")); break;
+			default: checkEntry(); break;
+			}
+		}
+
 		// Shader instruction define.
 		for (const auto& instruction : m_instructions.getInstructions())
 		{

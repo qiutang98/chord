@@ -142,15 +142,15 @@ void chord::DeleteQueue::clear()
 	m_pendingQueue.clear();
 }
 
-bool chord::decomposeTransform(const math::mat4& transform, math::vec3& translation, math::vec3& rotation, math::vec3& scale)
+bool chord::decomposeTransform(const math::dmat4& transform, math::dvec3& translation, math::dvec3& rotation, math::dvec3& scale)
 {
 	using namespace math;
-	using T = float;
+	using T = double;
 
-	mat4 LocalMatrix(transform);
+	dmat4 LocalMatrix(transform);
 
 	// Normalize the matrix.
-	if (epsilonEqual(LocalMatrix[3][3], static_cast<float>(0), epsilon<T>()))
+	if (epsilonEqual(LocalMatrix[3][3], 0.0, epsilon<T>()))
 	{
 		return false;
 	}
@@ -167,10 +167,10 @@ bool chord::decomposeTransform(const math::mat4& transform, math::vec3& translat
 	}
 
 	// Next take care of translation (easy).
-	translation = vec3(LocalMatrix[3]);
-	LocalMatrix[3] = vec4(0, 0, 0, LocalMatrix[3].w);
+	translation = dvec3(LocalMatrix[3]);
+	LocalMatrix[3] = dvec4(0, 0, 0, LocalMatrix[3].w);
 
-	vec3 Row[3]{};//, Pdum3;
+	dvec3 Row[3]{};//, Pdum3;
 
 	// Now get scale and shear.
 	for (length_t i = 0; i < 3; ++i)

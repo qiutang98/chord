@@ -33,7 +33,7 @@ namespace chord::ui
 		return ImGui::TreeNodeBehavior(window->GetID(idLabel), flags, showlabel, NULL);
 	}
 
-	bool drawVector3(const std::string& label, math::vec3& values, const math::vec3& resetValue, float labelWidth)
+	bool ui::drawDVector3(const std::string& label, math::dvec3& values, const math::dvec3& resetValue, float labelWidth)
 	{
 		constexpr const char* kResetIcon = ICON_FA_REPLY;
 		const auto srcData = values;
@@ -78,7 +78,9 @@ namespace chord::ui
 
 				ImGui::SameLine();
 				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
-				ImGui::DragFloat("##X", &values.x, 0.1f, 0.0f, 0.0f, "%.2f");
+
+		
+				ImGui::DragScalar("##X", ImGuiDataType_Double, &values.x, 0.1f, nullptr, nullptr, "%.2f");
 				ImGui::PopItemWidth();
 
 			}
@@ -99,7 +101,7 @@ namespace chord::ui
 
 				ImGui::SameLine();
 				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
-				ImGui::DragFloat("##Y", &values.y, 0.1f, 0.0f, 0.0f, "%.2f");
+				ImGui::DragScalar("##Y", ImGuiDataType_Double, &values.y, 0.1f, nullptr, nullptr, "%.2f");
 				ImGui::PopItemWidth();
 				ImGui::SameLine();
 			}
@@ -118,7 +120,7 @@ namespace chord::ui
 
 				ImGui::SameLine();
 				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
-				ImGui::DragFloat("##Z", &values.z, 0.1f, 0.0f, 0.0f, "%.2f");
+				ImGui::DragScalar("##Z", ImGuiDataType_Double, &values.z, 0.1f, nullptr, nullptr, "%.2f");
 				ImGui::PopItemWidth();
 				ImGui::SameLine();
 			}

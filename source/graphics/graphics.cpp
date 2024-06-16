@@ -887,12 +887,27 @@ namespace chord::graphics
 					VK_BUFFER_USAGE_TRANSFER_DST_BIT |
 					VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
 					VK_BUFFER_USAGE_INDEX_BUFFER_BIT   |
+					VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
 					VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
 				VmaAllocationCreateInfo vmaCI{};
 				vmaCI.usage = VMA_MEMORY_USAGE_AUTO;
 
 				m_dummySSBO = std::make_shared<GPUBuffer>("DummySSBO", ci, vmaCI);
+			}
+			{
+				VkBufferCreateInfo ci{ };
+				ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+				ci.size  = 4;
+				ci.usage =
+					VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+					VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+
+				VmaAllocationCreateInfo vmaCI{};
+				vmaCI.usage = VMA_MEMORY_USAGE_AUTO;
+
+				m_dummyUniform = std::make_shared<GPUBuffer>("DummyUniform", ci, vmaCI);
 			}
 
 
@@ -947,6 +962,7 @@ namespace chord::graphics
 
 		// Clear all builtin textures.
 		m_dummySSBO = nullptr;
+		m_dummyUniform = nullptr;
 		m_builtinTextures = {};
 		m_texturePool.reset();
 		m_bufferPool.reset();
