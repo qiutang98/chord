@@ -338,6 +338,7 @@ namespace chord::graphics::helper
 			VK_COLOR_COMPONENT_B_BIT |
 			VK_COLOR_COMPONENT_A_BIT;
 		vkCmdSetColorWriteMaskEXT(commandBuffer, 0, 1, &colorWriteMask);
+		vkCmdSetVertexInputEXT(commandBuffer, 0, nullptr, 0, nullptr);
 	}
 
 	static inline void destroySemaphore(VkSemaphore& s)

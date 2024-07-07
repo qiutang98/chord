@@ -10,6 +10,7 @@
 
 namespace chord
 {
+
 	struct DeferredRendererHistory
 	{
 
@@ -75,6 +76,7 @@ namespace chord
 
 		// Prepare current frame camera view relative uniform buffer.
 		graphics::PoolBufferHostVisible getCameraViewUniformBuffer(
+			uint32& outId,
 			const ApplicationTickData& tickData, 
 			graphics::CommandList& cmd,
 			ICamera* camera);

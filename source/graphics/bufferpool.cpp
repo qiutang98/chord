@@ -6,6 +6,8 @@
 
 namespace chord::graphics
 {
+	constexpr uint64 kBufferSizeAllocRound = 256;
+
 	GPUBufferPool::~GPUBufferPool()
 	{
 		m_buffers.clear();
@@ -40,8 +42,11 @@ namespace chord::graphics
 		}
 	}
 
-	PoolBufferRef GPUBufferPool::create(const std::string& name, const PoolBufferCreateInfo& info)
+	PoolBufferRef GPUBufferPool::create(const std::string& name, const PoolBufferCreateInfo& inputInfo)
 	{
+		auto info = inputInfo;
+		info.size = divideRoundingUp(info.size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
+
 		const uint64 hashId = cityhash::cityhash64((const char*)&info, sizeof(info));
 		auto& list = m_buffers[hashId];
 
@@ -79,7 +84,7 @@ namespace chord::graphics
 	{
 		PoolBufferCreateInfo poolInfo{};
 		poolInfo.flags = flags;
-		poolInfo.size  = size;
+		poolInfo.size  = divideRoundingUp(size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
 		poolInfo.usage = usage;
 		poolInfo.vmaCreateFlag = getGPUOnlyBufferVMACI().flags;
 
@@ -108,6 +113,8 @@ namespace chord::graphics
 		return std::make_shared<GPUBufferPool::GPUOnlyPoolBuffer>(buffer, hashId, *this);
 	}
 
+
+
 	PoolBufferHostVisible GPUBufferPool::createHostVisible(
 		const std::string& name,
 		VkBufferUsageFlags usage,
@@ -116,7 +123,7 @@ namespace chord::graphics
 	{
 		PoolBufferCreateInfo poolInfo{};
 		poolInfo.flags = flags;
-		poolInfo.size  = data.size;
+		poolInfo.size  = divideRoundingUp(data.size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
 		poolInfo.usage = usage;
 		poolInfo.vmaCreateFlag = getHostVisibleGPUBufferVMACI().flags;
 
@@ -139,6 +146,12 @@ namespace chord::graphics
 		{
 			buffer = std::dynamic_pointer_cast<HostVisibleGPUBuffer>(list.back().buffer);
 			buffer->rename(name);
+
+			if (data.isValid())
+			{
+				buffer->copyTo(data.ptr, data.size);
+			}
+
 			list.pop_back();
 		}
 

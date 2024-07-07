@@ -491,6 +491,11 @@ namespace chord
 		return (x + y - (T)1) / y;
 	}
 
+	template<typename T> inline T alignRoundingUp(T x, T y)
+	{
+		return ((x + y - (T)1) / y) * y;
+	}
+
 	extern std::filesystem::path buildStillNonExistPath(const std::filesystem::path& p);
 
 
@@ -501,4 +506,6 @@ namespace chord
 	{
 		return (a & b) == b;
 	}
+
+	extern math::mat4 infiniteInvertZPerspectiveRH_ZO(float aspect, float fovy, float zNear);
 }

@@ -240,7 +240,7 @@ void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* windo
 	// active viewport. disable cursor.
 	if (m_bActiveViewport)
 	{
-		ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+		ImGui::SetMouseCursor(ImGuiMouseCursor_Disabled);
 	}
 
 	// first time un-active viewport.
@@ -290,23 +290,6 @@ void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* windo
 	updateMatrixMisc();
 }
 
-
-// Scene depth to linear viewspace z is: lz = near / z;
-math::mat4 infiniteInvertZPerspectiveRH_ZO(float aspect, float fovy, float zNear)
-{
-	check(abs(aspect - std::numeric_limits<float>::epsilon()) > 0.0f);
-
-	math::mat4 result = math::zero<math::mat4>();
-
-	const float tanHalfFovy = tan(fovy * 0.5f);
-	result[0][0] =  1.0f / (aspect * tanHalfFovy);
-	result[1][1] =  1.0f / (tanHalfFovy);
-	result[2][3] = -1.0f;
-	result[3][2] =  zNear;
-
-	return result;
-}
-
 // Update camera view matrix and project matrix.
 // We use reverse z projection.
 void ViewportCamera::updateMatrixMisc()
@@ -316,5 +299,5 @@ void ViewportCamera::updateMatrixMisc()
 
 	// Reset z far to zero ensure we use infinite invert z.
 	m_zFar = 0.0f;
-	m_projectMatrix = infiniteInvertZPerspectiveRH_ZO(getAspect(), m_fovy, m_zNear);
+	m_projectMatrix = chord::infiniteInvertZPerspectiveRH_ZO(getAspect(), m_fovy, m_zNear);
 }

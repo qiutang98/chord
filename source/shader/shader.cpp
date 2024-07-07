@@ -13,6 +13,14 @@ namespace chord::graphics
 		"Save folder path of temp shader file.",
 		EConsoleVarFlags::ReadOnly);
 
+	static u16str sRecompileShaderFile = u16str("");
+	static AutoCVarRef<u16str> cVarRecompileShaderFile(
+		"r.shader.recompile",
+		sRecompileShaderFile,
+		"Recompile shader file in the fly, if param equal 'all', will recompile all shaders."
+		"If you want to recompile single shader file, just fill it path like 'resource/shader/gltf.hlsl'."
+	);
+
 	// Generate shader module hash by permutation id and meta info id.
 	uint64 graphics::getShaderModuleHash(int32 permutationId, const GlobalShaderRegisteredInfo& info)
 	{
@@ -220,9 +228,73 @@ namespace chord::graphics
 		return compilerFutures;
 	}
 
+	void ShaderLibrary::tick(const ApplicationTickData& tickData)
+	{
+		handleRecompile();
+	}
+
 	void ShaderLibrary::release()
 	{
 		m_shaderFiles.clear();
+	}
+
+	void ShaderLibrary::handleRecompile()
+	{
+		if (!sRecompileShaderFile.empty())
+		{
+			const bool bAllRecompile = (sRecompileShaderFile.u8() == "all");
+			std::shared_ptr<ShaderFile> targetShaderFile = nullptr;
+
+			if (bAllRecompile)
+			{
+				LOG_TRACE("Recompiling all shaders used in the application...");
+			}
+			else
+			{
+				targetShaderFile = getShaderFile(sRecompileShaderFile.u8());
+				if (!targetShaderFile)
+				{
+					return;
+				}
+			}
+
+			getContext().waitDeviceIdle();
+
+			const auto& table = GlobalShaderRegisterTable::get().getTable();
+			for (const auto& registerInfo : table)
+			{
+				const auto& info = registerInfo.second;
+				if (bAllRecompile || info->shaderFilePath == sRecompileShaderFile.u8())
+				{
+					info->updateShaderFileHash();
+				}
+			}
+
+			auto& batches = GlobalShaderRegisterTable::get().getBatchCompile();
+			for (auto& batch : batches)
+			{
+				if (bAllRecompile || batch.getMetaInfo().shaderFilePath == sRecompileShaderFile.u8())
+				{
+					batch.updateBatchesHash();
+				}
+			}
+
+			const auto& batchCompile = GlobalShaderRegisterTable::get().getBatchCompile();
+			FutureCollection<void> futures{};
+
+			for (const auto& batch : batchCompile)
+			{
+				const auto& registerInfo = batch.getRegisteredInfo();
+				if (bAllRecompile || targetShaderFile == getShaderFile(registerInfo.shaderFilePath))
+				{
+					futures.combine(std::move(targetShaderFile->prepareBatchCompile(batch)));
+				}
+			}
+			futures.wait();
+
+			// Reset shader file.
+			sRecompileShaderFile = u16str("");
+		}
 	}
 
 	void ShaderLibrary::init()

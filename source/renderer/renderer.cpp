@@ -6,6 +6,7 @@
 #include <renderer/fullscreen.h>
 #include <renderer/postprocessing/postprocessing.h>
 #include <shader/base.h>
+#include <renderer/mesh/gltf_rendering.h>
 
 namespace chord
 {
@@ -69,17 +70,22 @@ namespace chord
 	}
 
 	PoolBufferHostVisible DeferredRenderer::getCameraViewUniformBuffer(
+		uint32& outId,
 		const ApplicationTickData& tickData, 
 		CommandList& cmd,
 		ICamera* camera)
 	{
 		camera->fillViewUniformParameter(m_perframeCameraView);
-
 		auto perframeGPU = getContext().getBufferPool().createHostVisible(
 			"PerframeCameraView - " + m_name,
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			SizedBuffer(sizeof(m_perframeCameraView), (void*)&m_perframeCameraView));
+
+		// Insert perframe lazy destroy.
 		cmd.insertPendingResource(perframeGPU);
+
+		// Require buffer.
+		outId = perframeGPU->get().requireView(false, true).uniform.get();
 
 		return perframeGPU;
 	}
@@ -134,15 +140,20 @@ namespace chord
 		TimelineWait graphicsStartTimeline = graphics.getCurrentTimeline();
 
 		// Allocate view gpu uniform buffer.
-		auto viewGPU = getCameraViewUniformBuffer(tickData, cmd, camera);
-		uint32 viewGPUId = viewGPU->get().requireView(false, true).uniform.get();
-
+		uint32 viewGPUId;
+		auto viewGPU = getCameraViewUniformBuffer(viewGPUId, tickData, cmd, camera);
+		
+		// 
 		auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
 
 		graphics.beginCommand({ graphicsStartTimeline });
 		{
 			// Clear all gbuffer textures.
 			addClearGbufferPass(graphics, gbuffers);
+
+			// Render GLTF
+			gltfBasePassRendering(graphics, gbuffers, viewGPUId);
+
 		}
 		auto gbufferPassTimeline = graphics.endCommand();
 

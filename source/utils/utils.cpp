@@ -218,3 +218,17 @@ bool chord::decomposeTransform(const math::dmat4& transform, math::dvec3& transl
 
 	return true;
 }
+
+chord::math::mat4 chord::infiniteInvertZPerspectiveRH_ZO(float aspect, float fovy, float zNear)
+{
+	check(abs(aspect - std::numeric_limits<float>::epsilon()) > 0.0f);
+	math::mat4 result = math::zero<math::mat4>();
+
+	const float tanHalfFovy = tan(fovy * 0.5f);
+	result[0][0] =  1.0f / (aspect * tanHalfFovy);
+	result[1][1] =  1.0f / (tanHalfFovy);
+	result[2][3] = -1.0f;
+	result[3][2] = zNear;
+
+	return result;
+}

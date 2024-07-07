@@ -1,4 +1,5 @@
 #pragma once
+
 #include <graphics/resource.h>
 #include <graphics/graphics.h>
 #include <graphics/helper.h>

@@ -8,6 +8,59 @@
 #include <scene/scene_node.h>
 #include <asset/gltf/gltf.h>
 
+registerPODClassMember(GLTFPrimitiveLOD)
+{
+	ar(firstIndex, indexCount);
+	ar(firstMeshlet, meshletCount);
+}
+
+registerPODClassMember(GLTFMeshlet)
+{
+	ar(posMin);
+	ar(vertexCount);
+	ar(posMax);
+	ar(triangleCount);
+	ar(posAverage);
+	ar(dataOffset);
+}
+
+registerPODClassMember(GLTFPrimitive)
+{
+	ar(name, material, vertexCount, vertexOffset);
+	ar(lods);
+	ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
+	ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
+}
+
+registerPODClassMember(GLTFMesh)
+{
+	ar(name, primitives);
+}
+
+registerPODClassMember(GLTFNode)
+{
+	ar(name, childrenIds, localMatrix, mesh);
+}
+
+registerPODClassMember(GLTFScene)
+{
+	ar(name, nodes);
+}
+
+registerPODClassMember(GLTFBinary)
+{
+	ar(primitiveData.indices);
+	ar(primitiveData.positions);
+	ar(primitiveData.normals);
+	ar(primitiveData.texcoords0);
+	ar(primitiveData.tangents);
+	ar(primitiveData.smoothNormals);
+	ar(primitiveData.texcoords1);
+	ar(primitiveData.colors0);
+	ar(primitiveData.meshlets);
+	ar(primitiveData.meshletData);
+}
+
 registerClassMember(IAsset)
 {
 	ar(m_saveInfo, m_rawAssetPath, m_snapshotDimension);

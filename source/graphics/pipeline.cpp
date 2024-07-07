@@ -4,44 +4,43 @@
 #include <utils/cityhash.h>
 #include <shader/shader.h>
 
+#define COMMON_GRAPHICS_PIPELINE_DYNAMIC_STATES \
+	VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT, \
+	VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT,    \
+	VK_DYNAMIC_STATE_POLYGON_MODE_EXT,          \
+	VK_DYNAMIC_STATE_CULL_MODE,                 \
+	VK_DYNAMIC_STATE_FRONT_FACE,                \
+	VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,         \
+	VK_DYNAMIC_STATE_DEPTH_BIAS,                \
+	VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,       \
+	VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,        \
+	VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,         \
+	VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,        \
+	VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,          \
+	VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE,  \
+	VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,       \
+	VK_DYNAMIC_STATE_STENCIL_OP,                \
+	VK_DYNAMIC_STATE_DEPTH_BOUNDS,              \
+	VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT,       \
+	VK_DYNAMIC_STATE_LOGIC_OP_EXT,              \
+	VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,    \
+	VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,  \
+	VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT,      \
+	VK_DYNAMIC_STATE_BLEND_CONSTANTS
+
 namespace chord::graphics
 {
+
+
 	static const std::vector<VkDynamicState> kGraphicsPipelineDynamicStates =
 	{
-		// pMultisampleState
-		VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT,
-
-		// pRasterizationState
-		VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT,
-		VK_DYNAMIC_STATE_POLYGON_MODE_EXT,
-		VK_DYNAMIC_STATE_CULL_MODE,
-		VK_DYNAMIC_STATE_FRONT_FACE,
-		VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
-		VK_DYNAMIC_STATE_DEPTH_BIAS,
-
-		// pVertexInputState
+		COMMON_GRAPHICS_PIPELINE_DYNAMIC_STATES,
 		VK_DYNAMIC_STATE_VERTEX_INPUT_EXT,
+	};
 
-		// pViewportState
-		VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
-		VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
-
-		// pDepthStencilState
-		VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
-		VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
-		VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
-		VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE,
-		VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
-		VK_DYNAMIC_STATE_STENCIL_OP,
-		VK_DYNAMIC_STATE_DEPTH_BOUNDS,
-
-		// pColorBlendState
-		VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT,
-		VK_DYNAMIC_STATE_LOGIC_OP_EXT,
-		VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT,
-		VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
-		VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT,
-		VK_DYNAMIC_STATE_BLEND_CONSTANTS
+	static const std::vector<VkDynamicState> kGraphicsPipelineDynamicStatesMeshPipe =
+	{
+		COMMON_GRAPHICS_PIPELINE_DYNAMIC_STATES
 	};
 
 	IPipeline::IPipeline(const std::string& name, uint32 pushConstSize, VkShaderStageFlags shaderStageFlags)
@@ -83,8 +82,12 @@ namespace chord::graphics
 		// Dynamic state.
 		VkPipelineDynamicStateCreateInfo dynamicState{};
 		dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-		dynamicState.dynamicStateCount = static_cast<uint32>(kGraphicsPipelineDynamicStates.size());
-		dynamicState.pDynamicStates    = kGraphicsPipelineDynamicStates.data();
+
+		const auto& dynamicStates = hasFlag(ci.shaderStageFlags, VK_SHADER_STAGE_MESH_BIT_EXT) ?
+			kGraphicsPipelineDynamicStatesMeshPipe : kGraphicsPipelineDynamicStates;
+
+		dynamicState.dynamicStateCount = static_cast<uint32>(dynamicStates.size());
+		dynamicState.pDynamicStates    = dynamicStates.data();
 
 		// Add push const if exist.
 		VkPushConstantRange pushConstantRange{};

@@ -2,6 +2,8 @@
 #include <asset/asset.h>
 #include <asset/gltf/gltf_helper.h>
 
+#include <shader/gltf.h>
+
 namespace chord
 {
 	struct GLTFTextureInfo
@@ -71,15 +73,17 @@ namespace chord
 
 	struct GLTFPrimitive
 	{
+		ARCHIVE_DECLARE;
+
 		std::string name;
 
 		// Current primitive use which material.
 		AssetSaveInfo material;
 
-		uint32 firstIndex   = 0;
-		uint32 indexCount   = 0;
 		uint32 vertexOffset = 0; // used for required attributes.
 		uint32 vertexCount  = 0;
+
+		std::vector<GLTFPrimitiveLOD> lods;
 
 		bool bColor0Exist = false;
 		bool bSmoothNormalExist = false;
@@ -94,58 +98,46 @@ namespace chord
 		math::vec3 posMin;
 		math::vec3 posMax;
 		math::vec3 posAverage;
-
-		template<class Ar> void serialize(Ar& ar)
-		{
-			ar(name, material, firstIndex, indexCount, vertexCount, vertexOffset);
-			ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
-			ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
-		}
 	};
 
 	struct GLTFMesh
 	{
+		ARCHIVE_DECLARE;
+
 		std::string name;
 		std::vector<GLTFPrimitive> primitives;
-
-		template<class Ar> void serialize(Ar& ar)
-		{
-			ar(name, primitives);
-		}
 	};
 
 	struct GLTFNode
 	{
-		std::string name;
-		std::vector<int32> childrenIds;
+		ARCHIVE_DECLARE;
 
 		int32 mesh;
+		std::string name;
 		math::dmat4 localMatrix;
-
-		template<class Ar> void serialize(Ar& ar)
-		{
-			ar(name, childrenIds, localMatrix, mesh);
-		}
+		std::vector<int32> childrenIds;
 	};
 
 	struct GLTFScene
 	{
+		ARCHIVE_DECLARE;
+
 		std::string name;
-
 		std::vector<int32> nodes;
-
-		template<class Ar> void serialize(Ar& ar)
-		{
-			ar(name, nodes);
-		}
 	};
 
 	struct GLTFBinary
 	{
+		ARCHIVE_DECLARE;
+
 		// Data from primitive accessor.
 		struct PrimitiveDatas
 		{
 			std::vector<uint32> indices;
+			std::vector<uint32> meshletData;
+
+			// Meshlet need to push to gpu buffer directly, take care of size pad.
+			std::vector<GLTFMeshlet> meshlets;
 
 			// required.
 			std::vector<math::vec3> positions;
@@ -169,21 +161,11 @@ namespace chord
 					+ sizeofV(tangents)
 					+ sizeofV(texcoords1)
 					+ sizeofV(colors0)
-					+ sizeofV(smoothNormals);
+					+ sizeofV(smoothNormals) 
+					+ sizeofV(meshlets)
+					+ sizeofV(meshletData);
 			}
 		} primitiveData;
-
-		template<class Ar> void serialize(Ar& ar)
-		{
-			ar(primitiveData.indices);
-			ar(primitiveData.positions);
-			ar(primitiveData.normals);
-			ar(primitiveData.texcoords0);
-			ar(primitiveData.tangents);
-			ar(primitiveData.smoothNormals);
-			ar(primitiveData.texcoords1);
-			ar(primitiveData.colors0);
-		}
 	};
 
 	class GLTFAsset : public IAsset

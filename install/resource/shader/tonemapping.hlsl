@@ -36,7 +36,7 @@ void mainPS(
 
 
 
-    outColor = float4(0.7, 0.1, 0.0, 1.0);
+    outColor = sampleColor;
 }
 
 #endif

@@ -157,6 +157,34 @@ namespace chord::graphics
 			VkFormat inStencilFormat = VK_FORMAT_UNDEFINED,
 			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
+		template<class AmplifyShader, class MeshShader, class PixelShader>
+		IPipelineRef graphicsAmplifyMeshPipe(
+			const std::string& name,
+			std::vector<VkFormat>&& attachments,
+			VkFormat inDepthFormat = VK_FORMAT_UNDEFINED,
+			VkFormat inStencilFormat = VK_FORMAT_UNDEFINED,
+			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+		template<class MeshShader, class PixelShader>
+		IPipelineRef graphicsMeshPipe(
+			const std::string& name,
+			std::vector<VkFormat>&& attachments,
+			VkFormat inDepthFormat = VK_FORMAT_UNDEFINED,
+			VkFormat inStencilFormat = VK_FORMAT_UNDEFINED,
+			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+		inline IPipelineRef graphicsMeshShadingPipe(
+			std::shared_ptr<ShaderModule> amplifyShader,
+			std::shared_ptr<ShaderModule> meshShader,
+			std::shared_ptr<ShaderModule> pixelShader,
+			const std::string& name,
+			std::vector<VkFormat>&& attachments,
+			VkFormat inDepthFormat = VK_FORMAT_UNDEFINED,
+			VkFormat inStencilFormat = VK_FORMAT_UNDEFINED,
+			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+		
+
 		void waitDeviceIdle() const;
 		GPUBufferRef getDummySSBO() const { return m_dummySSBO; }
 		GPUBufferRef getDummyUniform() const { return m_dummyUniform; }

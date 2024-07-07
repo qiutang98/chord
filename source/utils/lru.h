@@ -146,6 +146,11 @@ namespace chord
 		using LRUList = std::list<std::pair<KeyType, std::shared_ptr<ValueType>>>;
 		using LRUListNode = LRUList::iterator;
 
+		std::string m_name;
+
+		// Lock mutex for map edit.
+		std::mutex m_lock;
+
 		// LRU data struct.
 		LRUList m_lruList;
 		std::unordered_map<KeyType, LRUListNode> m_lruMap;
@@ -158,10 +163,5 @@ namespace chord
 
 		// Shared_ptr(m_lruMap) used size.
 		std::atomic<size_t> m_usedSize = 0;
-
-		// Lock mutex for map edit.
-		std::mutex m_lock;
-
-		std::string m_name;
 	};
 }

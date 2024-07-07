@@ -1,5 +1,8 @@
 #pragma once
+
 #include <memory>
+#include <cstdint>
+#include <vector>
 
 namespace chord
 {
@@ -142,5 +145,87 @@ namespace chord
 			}
 			return *this;
 		}
+	};
+
+	// Free list based spare linear memory allocator. 
+	class SpanAllocator
+	{
+	public:
+		explicit SpanAllocator(bool bGrowOnly);
+
+		int32_t allocate(size_t size);
+		void free(size_t offset, size_t size);
+
+		// 
+		void prune();
+		void clear();
+
+		inline auto getMaxSize() const
+		{
+			return m_bGrowOnly ? m_peakMaxSize : m_currentMaxSize;
+		}
+	
+	private:
+		// Search in m_freeSpans which fit the size required, return -1 if no span found.
+		int32_t searchFreeList(size_t offset, size_t size) const;
+
+	private:
+		const bool m_bGrowOnly;
+		
+		// Size of linear range used by the allocator.
+		size_t m_currentMaxSize;
+
+		// 
+		size_t m_peakMaxSize;
+	
+		// 
+		size_t m_firstNonEmptySpan;
+
+		struct Allocation
+		{
+			size_t offset;
+			size_t size;
+		};
+		std::vector<Allocation> m_freeSpans;
+		std::vector<Allocation> m_pendingFreeSpans;
+	};
+
+
+	class PoolAllocator
+	{
+	public:
+		explicit PoolAllocator(size_t elementSize)
+			: m_elementSize(elementSize)
+			, m_currentMaxSize(0)
+		{
+
+		}
+
+		size_t allocate()
+		{
+			if (m_freeIds.empty())
+			{
+				return m_currentMaxSize ++;
+			}
+
+			size_t result = m_freeIds.top();
+			m_freeIds.pop();
+			return result;
+		}
+
+		void free(size_t id)
+		{
+			m_freeIds.push(id);
+		}
+
+		size_t getMaxSize() const
+		{
+			return m_currentMaxSize;
+		}
+
+	private:
+		size_t m_currentMaxSize;
+		size_t m_elementSize;
+		std::stack<size_t> m_freeIds;
 	};
 }

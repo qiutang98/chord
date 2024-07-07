@@ -74,12 +74,13 @@
     #define CHORD_PUSHCONST(Type, Name) [[vk::push_constant]] Type Name
     #define CHORD_DEFAULT_COMPARE_ARCHIVE(T)
     #define CHORD_CHECK_SIZE_GPU_SAFE(X)
+    #define ARCHIVE_DECLARE
 
 #endif ///////////////////////////////////////////////////////
 
 struct GPUScene
 {
-
+    
 };
 
 struct PerframeCameraView
@@ -93,3 +94,4 @@ struct PerframeCameraView
     float4x4 translatedWorldToClip;
     float4x4 clipToTranslatedWorld;
 };
+CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);

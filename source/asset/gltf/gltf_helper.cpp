@@ -30,8 +30,16 @@
 #include <asset/xatlas.h>
 #include <asset/mikktspace.h>
 
+#include <asset/meshoptimizer/meshoptimizer.h>
+
 namespace chord
 {
+	constexpr size_t kMeshletMaxVertices  = 64;
+	constexpr size_t kMeshletMaxTriangles = 124;
+	constexpr float  kMeshletConeWeight = 0.5f;
+	constexpr double kGLTFLODStepReduceFactor = 0.75;
+	constexpr float  kGLTFLODTargetError = 1e-2f;
+
 	enum class EKHRGLTFExtension : uint8
 	{
 		LightPunctual = 0,
@@ -823,6 +831,117 @@ namespace chord
 						xatlas::Destroy(singleMeshAtlas);	
 					}
 
+
+					// Mesh lod and meshlet generation.
+					uint32 lod0FirstIndex = gltfBin.primitiveData.indices.size();
+					uint32 lod0IndexCount = tempIndices.size();
+					{
+						meshopt_optimizeVertexCache(tempIndices.data(), tempIndices.data(), tempIndices.size(), tempPositions.size());
+
+						auto computeMeshlet = [&](const std::vector<math::vec3>& positions, const std::vector<uint32>& indices)
+						{
+							std::vector<meshopt_Meshlet> meshlets(meshopt_buildMeshletsBound(indices.size(), kMeshletMaxVertices, kMeshletMaxTriangles));
+							std::vector<uint32> meshletVertices(meshlets.size() * kMeshletMaxVertices);
+							std::vector<uint8> meshletTriangles(meshlets.size() * kMeshletMaxTriangles * 3);
+
+							meshlets.resize(meshopt_buildMeshlets(meshlets.data(), meshletVertices.data(), meshletTriangles.data(), indices.data(), indices.size(), &positions[0].x, positions.size(), sizeof(positions[0]), kMeshletMaxVertices, kMeshletMaxTriangles, kMeshletConeWeight));
+
+							for (const auto& meshlet : meshlets)
+							{
+								meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+
+								uint32 dataOffset = gltfBin.primitiveData.meshletData.size();
+								for (uint32 i = 0; i < meshlet.vertex_count; i++)
+								{
+									gltfBin.primitiveData.meshletData.push_back(meshletVertices[meshlet.vertex_offset + i]);
+								}
+
+								const uint32* indexGroups = reinterpret_cast<const uint32*>(&meshletTriangles[0] + meshlet.triangle_offset);
+								uint32 indexGroupCount = (meshlet.triangle_count * 3 + 3) / 4;
+
+								for (uint32 i = 0; i < indexGroupCount; ++i)
+								{
+									gltfBin.primitiveData.meshletData.push_back(indexGroups[i]);
+								}
+
+								meshopt_Bounds bounds = meshopt_computeMeshletBounds(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, &positions[0].x, positions.size(), sizeof(positions[0]));
+								GLTFMeshlet m = { };
+
+								m.dataOffset    = dataOffset;
+								m.triangleCount = meshlet.triangle_count;
+								m.vertexCount   = meshlet.vertex_count;
+								
+								math::vec3 posMin = math::vec3( FLT_MAX);
+								math::vec3 posMax = math::vec3(-FLT_MAX);
+								math::dvec3 posAvg = math::dvec3(0);
+								uint32 indexCount = 0;
+								for (uint32 triangleId = 0; triangleId < meshlet.triangle_count; triangleId++)
+								{
+									uint8 id0 = meshletTriangles[meshlet.triangle_offset + triangleId * 3 + 0];
+									uint8 id1 = meshletTriangles[meshlet.triangle_offset + triangleId * 3 + 1];
+									uint8 id2 = meshletTriangles[meshlet.triangle_offset + triangleId * 3 + 2];
+
+									uint32 index0 = meshletVertices[meshlet.vertex_offset + id0];
+									uint32 index1 = meshletVertices[meshlet.vertex_offset + id1];
+									uint32 index2 = meshletVertices[meshlet.vertex_offset + id2];
+
+									posMax = math::max(posMax, positions[index0]);
+									posMax = math::max(posMax, positions[index1]);
+									posMax = math::max(posMax, positions[index2]);
+
+									posMin = math::min(posMin, positions[index0]);
+									posMin = math::min(posMin, positions[index1]);
+									posMin = math::min(posMin, positions[index2]);
+
+									indexCount += 3;
+									posAvg += positions[index0];
+									posAvg += positions[index1];
+									posAvg += positions[index2];
+								}
+
+								m.posMin = posMin;
+								m.posMax = posMax;
+								posAvg /= double(indexCount);
+								m.posAverage = posAvg;
+
+								gltfBin.primitiveData.meshlets.push_back(m);
+							}
+
+							return meshlets.size();
+						};
+
+						std::vector<uint32> lodIndices = std::move(tempIndices);
+						while (primitiveMesh.lods.size() < kMaxGLTFLodCount)
+						{
+							primitiveMesh.lods.push_back({});
+							GLTFPrimitiveLOD& lod = primitiveMesh.lods.back();
+
+							lod.firstIndex   = gltfBin.primitiveData.indices.size();
+							lod.indexCount   = static_cast<uint32>(lodIndices.size());
+							lod.firstMeshlet = gltfBin.primitiveData.meshlets.size();
+							lod.meshletCount = computeMeshlet(tempPositions, lodIndices);
+
+							// Insert to bin data.
+							gltfBin.primitiveData.indices.insert(gltfBin.primitiveData.indices.end(), lodIndices.begin(), lodIndices.end());
+
+							if (primitiveMesh.lods.size() < kMaxGLTFLodCount)
+							{
+								size_t nextLodIndicesTarget = size_t(double(lodIndices.size()) * kGLTFLODStepReduceFactor);
+								size_t nextIndices = meshopt_simplify(lodIndices.data(), lodIndices.data(), lodIndices.size(), &tempPositions[0].x, tempPositions.size(), sizeof(tempPositions[0]), nextLodIndicesTarget, kGLTFLODTargetError);
+								
+								check(nextIndices <= lodIndices.size());
+								if (nextIndices == lodIndices.size())
+								{
+									// Reach error bound, pre-return.
+									break;
+								}
+
+								lodIndices.resize(nextIndices);
+								meshopt_optimizeVertexCache(lodIndices.data(), lodIndices.data(), lodIndices.size(), tempPositions.size());
+							}
+						}
+					}
+
 					// Get vertex offset.
 					primitiveMesh.vertexOffset = gltfBin.primitiveData.positions.size();
 					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.normals.size());
@@ -835,8 +954,6 @@ namespace chord
 					primitiveMesh.smoothNormalOffset  = gltfBin.primitiveData.smoothNormals.size();
 
 					// 
-					primitiveMesh.firstIndex = gltfBin.primitiveData.indices.size();
-					primitiveMesh.indexCount = static_cast<uint32>(tempIndices.size());
 					primitiveMesh.vertexCount = tempPositions.size();
 
 					// Position min, max and average.
@@ -848,7 +965,7 @@ namespace chord
 					gltfBin.primitiveData.texcoords0.insert(gltfBin.primitiveData.texcoords0.end(), tempUv0s.begin(), tempUv0s.end());
 					gltfBin.primitiveData.positions.insert(gltfBin.primitiveData.positions.end(), tempPositions.begin(), tempPositions.end());
 					gltfBin.primitiveData.normals.insert(gltfBin.primitiveData.normals.end(), tempNormals.begin(), tempNormals.end());
-					gltfBin.primitiveData.indices.insert(gltfBin.primitiveData.indices.end(), tempIndices.begin(), tempIndices.end());
+
 
 					// Tangent.
 					if (bExistTextureCoord0 && mesh.attributes.contains("TANGENT"))
@@ -893,7 +1010,7 @@ namespace chord
 						ctx.m_pInterface->m_getNumFaces = [](const SMikkTSpaceContext* pContext) -> int
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							return ctx->mesh->indexCount / 3;
+							return ctx->mesh->lods[0].indexCount / 3;
 						};
 						ctx.m_pInterface->m_getNumVerticesOfFace = [](const SMikkTSpaceContext* pContext, const int iFace) -> int
 						{
@@ -950,11 +1067,11 @@ namespace chord
 						primitiveMesh.bSmoothNormalExist = true;
 
 						std::vector<math::vec3> newSmoothNormals(primitiveMesh.vertexCount);
-						for (auto i = 0; i < primitiveMesh.indexCount; i += 3)
+						for (auto i = 0; i < lod0IndexCount; i += 3)
 						{
-							uint32 ind0 = gltfBin.primitiveData.indices[primitiveMesh.firstIndex + i + 0];
-							uint32 ind1 = gltfBin.primitiveData.indices[primitiveMesh.firstIndex + i + 1];
-							uint32 ind2 = gltfBin.primitiveData.indices[primitiveMesh.firstIndex + i + 2];
+							uint32 ind0 = gltfBin.primitiveData.indices[lod0FirstIndex + i + 0];
+							uint32 ind1 = gltfBin.primitiveData.indices[lod0FirstIndex + i + 1];
+							uint32 ind2 = gltfBin.primitiveData.indices[lod0FirstIndex + i + 2];
 
 							const auto n0 = gltfBin.primitiveData.normals[ind0];
 							const auto n1 = gltfBin.primitiveData.normals[ind1];
@@ -1146,7 +1263,9 @@ namespace chord
 			+ getValidSize(tangents)
 			+ getValidSize(colors)
 			+ getValidSize(uv1s)
-			+ getValidSize(smoothNormals);
+			+ getValidSize(smoothNormals)
+			+ getValidSize(meshlet)
+			+ getValidSize(meshletData);
 	}
 
 }

@@ -17,7 +17,6 @@ namespace chord
 		auto& cmd = queue.getActiveCmd()->commandBuffer;
 		RTs.beginRendering(queue);
 		{
-			vkCmdSetVertexInputEXT(cmd, 0, nullptr, 0, nullptr);
 			pipe->bind(cmd);
 
 			// Set blend state, set vertex state, set viewport state here.

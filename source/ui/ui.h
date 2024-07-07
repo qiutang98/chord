@@ -114,10 +114,23 @@ namespace chord
 
 		void tickWithCmds(const ApplicationTickData& data)
 		{
+			m_lastBroadcastFrame = data.tickCount;
 			onTickWithCmds.brocast(data, m_swapchain->getCommandList());
 		}
 
+		bool shouldPushTickCmds(uint64 data) const
+		{
+			if (m_lastBroadcastFrame == 0 || m_lastBroadcastFrame + 1 == data)
+			{
+				return true;
+			}
+
+			return false;
+		}
+
 	private:
+		uint64 m_lastBroadcastFrame = 0;
+
 		// Common buffers ring for current window.
 		std::vector<VkCommandBuffer> m_commandBuffers;
 

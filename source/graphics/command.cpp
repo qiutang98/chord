@@ -114,6 +114,11 @@ namespace chord::graphics
 
 	void Queue::sync(uint32 freeFrameCount)
 	{
+		if (m_usingCommands.size() > 100)
+		{
+			LOG_ERROR("SS");
+		}
+		
 		// Free command when finish.
 		if (!m_usingCommands.empty())
 		{

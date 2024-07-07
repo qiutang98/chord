@@ -90,10 +90,14 @@ namespace chord::graphics
 	{
 		explicit ShaderPermutationCompileInfo(const GlobalShaderRegisteredInfo& info, int32 inPermutationId)
 			: env(info)
-			, hash(getShaderModuleHash(inPermutationId, info))
 			, permutationId(inPermutationId)
 		{
+			updateHash();
+		}
 
+		void updateHash()
+		{
+			hash = getShaderModuleHash(permutationId, env.getMetaInfo());
 		}
 
 		ShaderCompileEnvironment env;
@@ -186,6 +190,19 @@ namespace chord::graphics
 			return m_registedInfo;
 		}
 
+		void updateBatchesHash()
+		{
+			for (auto& batch : m_batches)
+			{
+				batch.updateHash();
+			}
+		}
+
+		const GlobalShaderRegisteredInfo& getMetaInfo() const
+		{
+			return m_registedInfo;
+		}
+
 	private:
 		const GlobalShaderRegisteredInfo& m_registedInfo;
 		std::vector<ShaderPermutationCompileInfo> m_batches;
@@ -243,6 +260,8 @@ namespace chord::graphics
 
 		const auto& getTable() const { return m_registeredShaders; }
 		const auto& getBatchCompile() const { return m_batchCompile; }
+
+		auto& getBatchCompile() { return m_batchCompile; }
 
 	private:
 		GlobalShaderRegisterTable() = default;
@@ -314,8 +333,11 @@ namespace chord::graphics
 			return getShaderFile(info.shaderFilePath)->getShaderModule(info, permutation);
 		}
 
+		void tick(const ApplicationTickData& tickData);
+
 	private:
 		void release();
+		void handleRecompile();
 
 	private:
 		std::map<uint64, std::shared_ptr<ShaderFile>> m_shaderFiles;
@@ -371,6 +393,76 @@ namespace chord::graphics
 		const VkFormat stencilFormat;
 		const VkPrimitiveTopology topology;
 	};
+
+	template<class MeshShader, class PixelShader>
+	IPipelineRef Context::graphicsMeshPipe(
+		const std::string& name, 
+		std::vector<VkFormat>&& attachments, 
+		VkFormat inDepthFormat, 
+		VkFormat inStencilFormat, 
+		VkPrimitiveTopology inTopology)
+	{
+		auto meshShader = getShaderLibrary().getShader<MeshShader>();
+		auto pixelShader = getShaderLibrary().getShader<PixelShader>();
+
+		return graphicsMeshShadingPipe(nullptr, meshShader, pixelShader, name, std::move(attachments), inDepthFormat, inStencilFormat, inTopology);
+	}
+
+	template<class AmplifyShader, class MeshShader, class PixelShader>
+	IPipelineRef Context::graphicsAmplifyMeshPipe(
+		const std::string& name, 
+		std::vector<VkFormat>&& attachments,
+		VkFormat inDepthFormat, 
+		VkFormat inStencilFormat, 
+		VkPrimitiveTopology inTopology)
+	{
+		auto taskShader  = getShaderLibrary().getShader<AmplifyShader>();
+		auto meshShader  = getShaderLibrary().getShader<MeshShader>();
+		auto pixelShader = getShaderLibrary().getShader<PixelShader>();
+
+		return graphicsMeshShadingPipe(taskShader, meshShader, pixelShader, name, std::move(attachments), inDepthFormat, inStencilFormat, inTopology);
+	}
+
+	IPipelineRef Context::graphicsMeshShadingPipe(
+		std::shared_ptr<ShaderModule> amplifyShader,
+		std::shared_ptr<ShaderModule> meshShader,
+		std::shared_ptr<ShaderModule> pixelShader,
+		const std::string& name,
+		std::vector<VkFormat>&& attachments,
+		VkFormat inDepthFormat,
+		VkFormat inStencilFormat,
+		VkPrimitiveTopology inTopology)
+	{
+		uint32 pushConstantSize = 0;
+		if (amplifyShader != nullptr)
+		{
+			pushConstantSize = amplifyShader->getPushConstSize();
+		}
+
+		pushConstantSize = math::max(math::max(pushConstantSize, meshShader->getPushConstSize()), pixelShader->getPushConstSize());
+
+		std::vector<PipelineShaderStageCreateInfo> cis = { };
+		if (amplifyShader != nullptr)
+		{
+			cis.push_back(amplifyShader->getShaderStageCreateInfo());
+		}
+		cis.push_back(meshShader->getShaderStageCreateInfo());
+		cis.push_back(pixelShader->getShaderStageCreateInfo());
+
+		constexpr VkShaderStageFlags fullFlags   = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
+		constexpr VkShaderStageFlags noTaskFlags = VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		const auto graphicsCi = GraphicsPipelineCreateInfo(
+			std::move(cis),
+			std::move(attachments),
+			pushConstantSize,
+			inDepthFormat,
+			inStencilFormat,
+			inTopology,
+			amplifyShader != nullptr ? fullFlags : noTaskFlags);
+
+		return getPipelineContainer().graphics(name, graphicsCi);
+	}
 
 
 	template<class VertexShader, class PixelShader>

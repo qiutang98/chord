@@ -119,6 +119,11 @@ namespace chord::graphics
 			, entry(entryIn)
 			, stage(stageIn)
 		{
+			updateShaderFileHash();
+		}
+
+		void updateShaderFileHash()
+		{
 			// File last edit time and stage.
 			auto ftime = std::format("{}", std::filesystem::last_write_time(shaderFilePath));
 			m_shaderFileHash = cityhash::ctyhash64WithSeed(ftime.data(), ftime.size(), uint64(stage));

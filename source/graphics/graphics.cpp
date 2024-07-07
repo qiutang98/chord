@@ -931,6 +931,9 @@ namespace chord::graphics
 
 	bool Context::tick(const ApplicationTickData& tickData)
 	{
+		// 
+		m_shaderLibrary->tick(tickData);
+
 		// Update texture pool.
 		m_texturePool->tick(tickData);
 		m_bufferPool->tick(tickData);

@@ -59,16 +59,20 @@ namespace chord
 
 				if (auto viewport = ImGui::GetCurrentWindow()->Viewport)
 				{
+
 					if (auto* vrd = (ImGuiViewportData*)viewport->RendererUserData)
 					{
-						std::weak_ptr<IWidget> widget = shared_from_this();
-						vrd->onTickWithCmds.add([widget](const ApplicationTickData& tickData, graphics::CommandList& commandList)
+						if (vrd->shouldPushTickCmds(tickData.tickCount))
 						{
-							if (auto ptr = widget.lock())
+							std::weak_ptr<IWidget> widget = shared_from_this();
+							vrd->onTickWithCmds.add([widget](const ApplicationTickData& tickData, graphics::CommandList& commandList)
 							{
-								ptr->onVisibleTickCmd(tickData, commandList);
-							}
-						});
+								if (auto ptr = widget.lock())
+								{
+									ptr->onVisibleTickCmd(tickData, commandList);
+								}
+							});
+						}
 					}
 				}
 				ImGui::PopID();

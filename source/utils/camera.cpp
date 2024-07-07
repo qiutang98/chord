@@ -2,18 +2,19 @@
 
 namespace chord
 {
-    void ICamera::fillViewUniformParameter(PerframeCameraView& view) const
+    void ICamera::fillViewUniformParameter(PerframeCameraView& outUB) const
     {
-        const math::dmat4x4 cameraViewMatrix = getViewMatrix();
+        const math::mat4 view = math::mat4(getViewMatrix());
+        const math::mat4 projection = getProjectMatrix();
+        const math::mat4 viewProjection = projection * view;
 
-        // TODO: translate world.
-        view.translatedWorldToView = math::mat4(cameraViewMatrix);
-        view.viewToTranslatedWorld = math::inverse(view.translatedWorldToView);
+        outUB.translatedWorldToView = view;
+        outUB.viewToTranslatedWorld = math::inverse(view);
 
-        view.viewToClip = getProjectMatrix();
-        view.clipToView = math::inverse(view.viewToClip);
+        outUB.viewToClip = projection;
+        outUB.clipToView = math::inverse(projection);
 
-        view.translatedWorldToClip = view.viewToClip * view.translatedWorldToView;
-        view.clipToTranslatedWorld = math::inverse(view.translatedWorldToClip);
+        outUB.translatedWorldToClip = viewProjection;
+        outUB.clipToTranslatedWorld = math::inverse(viewProjection);
     }
 }

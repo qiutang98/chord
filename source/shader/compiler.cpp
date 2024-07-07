@@ -78,6 +78,13 @@ namespace chord::graphics
 			}
 		}
 
+		out.push_back(std::format("{0}={1}", "-fspv-extension", "SPV_EXT_descriptor_indexing"));
+		out.push_back(std::format("{0}={1}", "-fspv-target-env", "vulkan1.3"));
+		if (m_metaInfo.stage == EShaderStage::Mesh || m_metaInfo.stage == EShaderStage::Amplify)
+		{
+			out.push_back(std::format("{0}={1}", "-fspv-extension", "SPV_EXT_mesh_shader"));
+		}
+
 		// Shader instruction define.
 		for (const auto& instruction : m_instructions.getInstructions())
 		{
