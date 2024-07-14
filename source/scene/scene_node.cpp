@@ -30,6 +30,23 @@ namespace chord
         }
     }
 
+    void SceneNode::perframeCollect(PerframeCollected& collector)
+    {
+        for (auto& comp : m_components)
+        {
+            comp.second->onPerframeCollect(collector);
+        }
+    }
+
+    GPUObjectBasicData SceneNode::getObjectBasicData() const
+    {
+        GPUObjectBasicData data{};
+
+        data.localToWorld = getTransform()->getWorldMatrix();
+
+        return GPUObjectBasicData();
+    }
+
     void SceneNode::removeComponent(const std::string& id)
     {
         m_components.erase(id);

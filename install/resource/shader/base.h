@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SHADER_BASE_H
+#define SHADER_BASE_H
 
 #ifdef __cplusplus /////////////////////////////////////////
     
@@ -67,6 +68,15 @@
     #define CHORD_CHECK_SIZE_GPU_SAFE(X) \
         static_assert(sizeof(X) % (4 * sizeof(float)) == 0)
 
+    static inline float asuint(float floatValue)
+    {
+        return *reinterpret_cast<uint*>(&floatValue);
+    }
+
+    static inline float asfloat(uint32 uintValue)
+    {
+        return *reinterpret_cast<float*>(&uintValue);
+    }
 
 #else  ///////////////////////////////////////////////////////
 
@@ -77,11 +87,6 @@
     #define ARCHIVE_DECLARE
 
 #endif ///////////////////////////////////////////////////////
-
-struct GPUScene
-{
-    
-};
 
 struct PerframeCameraView
 {
@@ -95,3 +100,21 @@ struct PerframeCameraView
     float4x4 clipToTranslatedWorld;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);
+
+// Per-object descriptor in GPU, collected every frame.
+struct GPUObjectBasicData
+{
+    float4x4 localToWorld;
+    float4x4 lastFrameLocalToWorld;
+};
+
+struct GPUObjectGLTFPrimitive
+{
+    GPUObjectBasicData basicData;
+    uint GLTFPrimitiveDetail;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
+#endif // !SHADER_BASE_H

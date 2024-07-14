@@ -298,6 +298,50 @@ namespace chord::graphics::helper
 		return attachment;
 	}
 
+	static inline VkBufferMemoryBarrier2 bufferBarrier(
+		VkBuffer buffer,
+		VkPipelineStageFlags2 srcStageMask,
+		VkAccessFlags2 srcAccessMask,
+		uint32 srcFamily,
+		VkPipelineStageFlags2 dstStageMask,
+		VkAccessFlags2 dstAccessMask,
+		uint32 destFamily,
+		VkDeviceSize offset, 
+		VkDeviceSize size)
+	{
+		VkBufferMemoryBarrier2 result = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2 };
+
+		result.srcStageMask = srcStageMask;
+		result.srcAccessMask = srcAccessMask;
+		result.dstStageMask = dstStageMask;
+		result.dstAccessMask = dstAccessMask;
+		result.srcQueueFamilyIndex = srcFamily;
+		result.dstQueueFamilyIndex = destFamily;
+		result.buffer = buffer;
+		result.offset = offset;
+		result.size   = size;
+
+		return result;
+	}
+
+	static inline void pipelineBarrier(
+		VkCommandBuffer commandBuffer,
+		VkDependencyFlags dependencyFlags,
+		uint32 bufferBarrierCount,
+		const VkBufferMemoryBarrier2* bufferBarriers,
+		uint32 imageBarrierCount,
+		const VkImageMemoryBarrier2* imageBarriers)
+	{
+		VkDependencyInfo dependencyInfo = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+		dependencyInfo.dependencyFlags = dependencyFlags;
+		dependencyInfo.bufferMemoryBarrierCount = bufferBarrierCount;
+		dependencyInfo.pBufferMemoryBarriers = bufferBarriers;
+		dependencyInfo.imageMemoryBarrierCount = imageBarrierCount;
+		dependencyInfo.pImageMemoryBarriers = imageBarriers;
+
+		vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+	}
+
 	static inline VkRenderingInfo renderingInfo()
 	{
 		VkRenderingInfo renderInfo { };

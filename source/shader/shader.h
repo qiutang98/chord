@@ -343,6 +343,32 @@ namespace chord::graphics
 		std::map<uint64, std::shared_ptr<ShaderFile>> m_shaderFiles;
 	};
 
+	class ComputePipelineCreateInfo
+	{
+	public:
+		explicit ComputePipelineCreateInfo(
+			uint32 inPushConstSize, 
+			VkShaderModule inShaderModule,
+			const std::string& inShaderEntryName)
+			: pushConstantSize(inPushConstSize)
+			, shaderModule(inShaderModule)
+			, shaderEntryName(inShaderEntryName)
+		{
+
+		}
+
+		uint64 hash() const
+		{
+			uint64 hash = hashCombine(pushConstantSize, uint64(shaderModule));
+
+			return hash;
+		}
+
+		const VkShaderModule shaderModule;
+		const uint32 pushConstantSize;
+		const std::string shaderEntryName;
+	};
+
 	class GraphicsPipelineCreateInfo
 	{
 	public:
@@ -395,7 +421,7 @@ namespace chord::graphics
 	};
 
 	template<class MeshShader, class PixelShader>
-	IPipelineRef Context::graphicsMeshPipe(
+	GraphicsPipelineRef Context::graphicsMeshPipe(
 		const std::string& name, 
 		std::vector<VkFormat>&& attachments, 
 		VkFormat inDepthFormat, 
@@ -408,8 +434,15 @@ namespace chord::graphics
 		return graphicsMeshShadingPipe(nullptr, meshShader, pixelShader, name, std::move(attachments), inDepthFormat, inStencilFormat, inTopology);
 	}
 
+	template<class ComputeShader>
+	inline ComputePipelineRef Context::computePipe(const std::string& name)
+	{
+		auto computeShader = getShaderLibrary().getShader<ComputeShader>();
+		return computePipe(computeShader, name);
+	}
+
 	template<class AmplifyShader, class MeshShader, class PixelShader>
-	IPipelineRef Context::graphicsAmplifyMeshPipe(
+	GraphicsPipelineRef Context::graphicsAmplifyMeshPipe(
 		const std::string& name, 
 		std::vector<VkFormat>&& attachments,
 		VkFormat inDepthFormat, 
@@ -423,7 +456,7 @@ namespace chord::graphics
 		return graphicsMeshShadingPipe(taskShader, meshShader, pixelShader, name, std::move(attachments), inDepthFormat, inStencilFormat, inTopology);
 	}
 
-	IPipelineRef Context::graphicsMeshShadingPipe(
+	GraphicsPipelineRef Context::graphicsMeshShadingPipe(
 		std::shared_ptr<ShaderModule> amplifyShader,
 		std::shared_ptr<ShaderModule> meshShader,
 		std::shared_ptr<ShaderModule> pixelShader,
@@ -464,9 +497,20 @@ namespace chord::graphics
 		return getPipelineContainer().graphics(name, graphicsCi);
 	}
 
+	ComputePipelineRef Context::computePipe(
+		std::shared_ptr<ShaderModule> computeShader,
+		const std::string& name)
+	{
+		uint32 pushConstSize = computeShader->getPushConstSize();
+		auto pipelineCI = computeShader->getShaderStageCreateInfo();
+
+		const auto computeCI = ComputePipelineCreateInfo(pushConstSize, pipelineCI.module, pipelineCI.pName);
+		return getPipelineContainer().compute(name, computeCI);
+	}
+
 
 	template<class VertexShader, class PixelShader>
-	IPipelineRef Context::graphicsPipe(
+	GraphicsPipelineRef Context::graphicsPipe(
 		const std::string& name, 
 		std::vector<VkFormat>&& attachments, 
 		VkFormat inDepthFormat, 

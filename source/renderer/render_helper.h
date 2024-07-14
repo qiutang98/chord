@@ -187,4 +187,33 @@ namespace chord
 		queue.transitionSRV(texture, range);
 		return texture->requireView(range, viewType, true, false).SRV.get();
 	}
+
+	inline static uint32 asUAV(
+		graphics::GraphicsOrComputeQueue& queue,
+		graphics::GPUOnlyBufferRef buffer
+	)
+	{
+		queue.transitionUAV(buffer);
+		return buffer->requireView(true, false).storage.get();
+	}
+
+	inline static uint32 asSRV(
+		graphics::GraphicsOrComputeQueue& queue,
+		graphics::GPUOnlyBufferRef buffer
+	)
+	{
+		queue.transitionSRV(buffer);
+		return buffer->requireView(true, false).storage.get();
+	}
+
+	inline static uint32 asSRV(
+		graphics::GraphicsOrComputeQueue& queue,
+		graphics::GPUBufferRef buffer
+	)
+	{
+		check(hasFlag(buffer->getUsage(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		queue.transitionSRV(buffer);
+		return buffer->requireView(true, false).storage.get();
+	}
+
 }

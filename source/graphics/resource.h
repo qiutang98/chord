@@ -82,7 +82,12 @@ namespace chord::graphics
 		uint32 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		VkAccessFlags accesMask = VK_ACCESS_NONE;
 
-		bool operator==(const GPUSyncBarrierMasks&) const = default;
+		bool operator==(const GPUSyncBarrierMasks& A) const
+		{
+			return 
+				queueFamilyIndex == A.queueFamilyIndex && 
+				accesMask == A.accesMask;
+		}
 	};
 
 	struct GPUTextureSyncBarrierMasks
@@ -90,7 +95,12 @@ namespace chord::graphics
 		GPUSyncBarrierMasks barrierMasks = {};
 		VkImageLayout imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-		bool operator==(const GPUTextureSyncBarrierMasks&) const = default;
+		bool operator==(const GPUTextureSyncBarrierMasks& A) const
+		{
+			return 
+				barrierMasks == A.barrierMasks &&
+				imageLayout == A.imageLayout;
+		}
 	};
 
 	extern const VkImageSubresourceRange kDefaultImageSubresourceRange;
@@ -208,6 +218,8 @@ namespace chord::graphics
 		uint64 getDeviceAddress();
 		BufferView requireView(bool bStorage, bool bUniform, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
 
+		CHORD_NODISCARD VkBufferMemoryBarrier2 updateBarrier(GPUSyncBarrierMasks newMask);
+
 	protected:
 		// Buffer create info.
 		VkBufferCreateInfo m_createInfo;
@@ -225,6 +237,8 @@ namespace chord::graphics
 		VmaAllocation m_allocation = VK_NULL_HANDLE;
 
 		std::unordered_map<uint64, BufferView> m_views;
+
+		GPUSyncBarrierMasks m_syncBarrier;
 	};
 	using GPUBufferRef = std::shared_ptr<GPUBuffer>;
 
@@ -245,10 +259,6 @@ namespace chord::graphics
 			const VkBufferCreateInfo& createInfo);
 
 		virtual ~GPUOnlyBuffer();
-
-	protected:
-		// Whole GPU buffer state.
-		GPUSyncBarrierMasks m_syncBarrierMasks;
 	};
 	using GPUOnlyBufferRef = std::shared_ptr<GPUOnlyBuffer>;
 

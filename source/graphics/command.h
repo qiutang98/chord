@@ -59,7 +59,8 @@ namespace chord::graphics
 
 		uint32 getFamily() const { return m_queueFamily; }
 
-
+	public:
+		void copyBuffer(GPUBufferRef src, GPUBufferRef dest, size_t size, size_t srcOffset = 0, size_t destOffset = 0);
 
 	private:
 		CommandBufferRef getOrCreateCommandBuffer();
@@ -92,11 +93,10 @@ namespace chord::graphics
 		explicit GraphicsOrComputeQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
 
 		void transitionSRV(GPUTextureRef image, VkImageSubresourceRange range);
-
+		void transitionUAV(GPUBufferRef buffer);
+		void transitionSRV(GPUBufferRef buffer);
 		void clearImage(GPUTextureRef image, const VkClearColorValue* clear, uint32 rangeCount, const VkImageSubresourceRange* ranges);
 	};
-
-
 
 	class GraphicsQueue : public GraphicsOrComputeQueue
 	{
@@ -126,6 +126,7 @@ namespace chord::graphics
 		void sync(uint32 freeFrameCount);
 
 		GraphicsQueue& getGraphicsQueue() const { return *m_graphicsQueue; }
+		GraphicsOrComputeQueue& getAsyncComputeQueue() const { return *m_asyncComputeQueue; }
 
 		Queue& getQueue(EQueueType type)
 		{
@@ -146,7 +147,17 @@ namespace chord::graphics
 		Swapchain& m_swapchain;
 
 		std::unique_ptr<GraphicsQueue> m_graphicsQueue;
-		std::unique_ptr<Queue> m_asyncComputeQueue;
+		std::unique_ptr<GraphicsOrComputeQueue> m_asyncComputeQueue;
 		std::unique_ptr<Queue> m_asyncCopyQueue;
+	};
+
+	class CallOnceInOneFrameEvent
+	{
+	private:
+		static uint64 m_frameCounter;
+
+	public:
+		static CallOnceEvents<CallOnceInOneFrameEvent, const ApplicationTickData&, graphics::GraphicsQueue&> functions;
+		static void flush(const ApplicationTickData& tickData, graphics::GraphicsQueue& queue);
 	};
 }

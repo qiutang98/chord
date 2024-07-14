@@ -123,6 +123,9 @@ do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' f
 	RTTR_ENABLE(__VA_ARGS__);       \
 	RTTR_REGISTRATION_FRIEND();
 
+
+#define CHORD_DIVIDE_AND_ROUND_UP(A, B) (((A) + (B) - 1) / (B))
+
 namespace chord
 {
 	class ImageLdr2D;
@@ -356,7 +359,17 @@ namespace chord
 	// Interface for all resource used in application.
 	class IResource : NonCopyable 
 	{
+	private:
+		const uint64 m_id;
+
 	public:
+		explicit IResource();
+
+		uint64 hash() const
+		{
+			return m_id;
+		}
+
 		virtual ~IResource() { }
 	};
 	using ResourceRef = std::shared_ptr<IResource>;
@@ -505,6 +518,18 @@ namespace chord
 	static inline bool hasFlag(auto a, auto b)
 	{
 		return (a & b) == b;
+	}
+	
+	static inline uint32 getNextPOT(uint32 v)
+	{
+		v--;
+		v |= v >> 1;
+		v |= v >> 2;
+		v |= v >> 4;
+		v |= v >> 8;
+		v |= v >> 16;
+		v++;
+		return v;
 	}
 
 	extern math::mat4 infiniteInvertZPerspectiveRH_ZO(float aspect, float fovy, float zNear);

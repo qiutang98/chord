@@ -10,9 +10,18 @@
 #include <graphics/rendertargetpool.h>
 #include <asset/asset.h>
 #include <graphics/uploader.h>
+#include <renderer/gpu_scene.h>
+#include <asset/gltf/gltf.h>
+#include <asset/gltf/gltf_helper.h>
 
 namespace chord
 {
+    static uint64 sFrameCounter = 0;
+    uint64 chord::getFrameCounter()
+    {
+        return sFrameCounter;
+    }
+
     Application& Application::get()
     {
         static Application app{ };
@@ -194,6 +203,7 @@ namespace chord
             m_bInit &= m_engine->init(engineConfig);
         }
 
+        m_gpuScene = std::make_unique<GPUScene>();
 
         // Return result.
         return m_bInit;
@@ -203,15 +213,14 @@ namespace chord
     {
         m_runtimePeriod = ERuntimePeriod::Ticking;
 
-        // Default application.
-        ApplicationTickData tickData
+        m_tickData =
         {
-            .tickCount            = 0,
-            .totalTime            = m_timer.getRuntime(),
-            .fps                  = 60.0,
-            .dt                   = 1.0 / 60.0,
+            .tickCount = 0,
+            .totalTime = m_timer.getRuntime(),
+            .fps = 60.0,
+            .dt = 1.0 / 60.0,
             .bFpsUpdatedPerSecond = false,
-            .fpsUpdatedPerSecond  = 60.0
+            .fpsUpdatedPerSecond = 60.0
         };
 
         while (m_windowData.bContinue)
@@ -220,10 +229,11 @@ namespace chord
 
             const bool bFpsUpdatedPerSecond = m_timer.tick();
 
-            m_windowData.bContinue &= m_engine->tick(tickData);
+            sFrameCounter = m_tickData.tickCount;
+            m_windowData.bContinue &= m_engine->tick(m_tickData);
 
             // Graphics context tick.
-            m_windowData.bContinue &= m_context.tick(tickData);
+            m_windowData.bContinue &= m_context.tick(m_tickData);
 
             // Accept glfw close event.
             m_windowData.bContinue &= (glfwWindowShouldClose(m_windowData.window) == GLFW_FALSE);
@@ -244,15 +254,15 @@ namespace chord
             }
 
             // Flush sync event in main.
-            ThreadContext::main().tick(tickData.tickCount);
+            ThreadContext::main().tick(m_tickData.tickCount);
 
             // Update tick count.
-            tickData.tickCount = m_timer.getTickCount();
-            tickData.dt        = m_timer.getDt();
-            tickData.bFpsUpdatedPerSecond = bFpsUpdatedPerSecond;
-            tickData.fpsUpdatedPerSecond  = m_timer.getFpsUpdatedPerSecond();
-            tickData.fps       = m_timer.getFps();
-            tickData.totalTime = m_timer.getRuntime();
+            m_tickData.tickCount = m_timer.getTickCount();
+            m_tickData.dt        = m_timer.getDt();
+            m_tickData.bFpsUpdatedPerSecond = bFpsUpdatedPerSecond;
+            m_tickData.fpsUpdatedPerSecond  = m_timer.getFpsUpdatedPerSecond();
+            m_tickData.fps       = m_timer.getFps();
+            m_tickData.totalTime = m_timer.getRuntime();
         }
     }
 
@@ -271,6 +281,7 @@ namespace chord
         // Broadcast release event.
         onRelease.broadcast();
 
+        m_gpuScene.reset();
         m_engine.reset();
         m_assetManager.release();
         m_context.release();

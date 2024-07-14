@@ -33,6 +33,40 @@ namespace chord::graphics
 		check(m_activeCmdCtx.command != nullptr);
 	}
 
+	void Queue::copyBuffer(GPUBufferRef src, GPUBufferRef dest, size_t size, size_t srcOffset, size_t destOffset)
+	{
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(src);
+		cmd->pendingResources.insert(dest);
+
+		{
+			GPUSyncBarrierMasks srcMask  = { .queueFamilyIndex = m_queueFamily, .accesMask = VK_ACCESS_TRANSFER_READ_BIT };
+			GPUSyncBarrierMasks destMask = { .queueFamilyIndex = m_queueFamily, .accesMask = VK_ACCESS_TRANSFER_WRITE_BIT };
+
+			VkBufferMemoryBarrier2 barriers[2];
+
+			barriers[0] = src->updateBarrier(srcMask);
+			barriers[1] = dest->updateBarrier(destMask);
+
+			helper::pipelineBarrier(cmd->commandBuffer, 0, countof(barriers), barriers, 0, nullptr);
+		}
+
+		VkBufferCopy2 copyRegion{};
+		copyRegion.sType     = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+		copyRegion.srcOffset = srcOffset;
+		copyRegion.dstOffset = destOffset;
+		copyRegion.size      = size;
+
+		VkCopyBufferInfo2 copyInfo { };
+		copyInfo.sType       = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2;
+		copyInfo.srcBuffer   = *src;
+		copyInfo.dstBuffer   = *dest;
+		copyInfo.regionCount = 1;
+		copyInfo.pRegions    = &copyRegion;
+
+		vkCmdCopyBuffer2(cmd->commandBuffer, &copyInfo);
+	}
+
 	CommandBufferRef Queue::getOrCreateCommandBuffer()
 	{
 		CommandBufferRef cmdBuf;
@@ -142,7 +176,7 @@ namespace chord::graphics
 	{
 		const auto& queueInfos = getContext().getQueuesInfo();
 		m_graphicsQueue = std::make_unique<GraphicsQueue>(m_swapchain, EQueueType::Graphics, queueInfos.graphcisQueues[0].queue, queueInfos.graphicsFamily.get());
-		m_asyncComputeQueue = std::make_unique<Queue>(m_swapchain, EQueueType::Compute, queueInfos.computeQueues[0].queue, queueInfos.computeFamily.get());
+		m_asyncComputeQueue = std::make_unique<GraphicsOrComputeQueue>(m_swapchain, EQueueType::Compute, queueInfos.computeQueues[0].queue, queueInfos.computeFamily.get());
 		m_asyncCopyQueue = std::make_unique<Queue>(m_swapchain, EQueueType::Copy, queueInfos.copyQueues[0].queue, queueInfos.copyFamily.get());
 	}
 
@@ -262,6 +296,45 @@ namespace chord::graphics
 		mask.barrierMasks.queueFamilyIndex = getFamily();
 
 		image->transition(cmd->commandBuffer, mask, range);
+	}
+
+	void GraphicsOrComputeQueue::transitionUAV(GPUBufferRef buffer)
+	{
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(buffer);
+
+		GPUSyncBarrierMasks mask;
+		mask.accesMask = VK_ACCESS_SHADER_WRITE_BIT;
+		mask.queueFamilyIndex = getFamily();
+
+		auto barrier = buffer->updateBarrier(mask);
+		helper::pipelineBarrier(cmd->commandBuffer, 0, 1, & barrier, 0, nullptr);
+	}
+
+	void GraphicsOrComputeQueue::transitionSRV(GPUBufferRef buffer)
+	{
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(buffer);
+
+		GPUSyncBarrierMasks mask;
+		mask.accesMask = VK_ACCESS_SHADER_READ_BIT;
+		mask.queueFamilyIndex = getFamily();
+
+		auto barrier = buffer->updateBarrier(mask);
+		helper::pipelineBarrier(cmd->commandBuffer, 0, 1, &barrier, 0, nullptr);
+	}
+
+	uint64 CallOnceInOneFrameEvent::m_frameCounter = -1;
+	CallOnceEvents<CallOnceInOneFrameEvent, const ApplicationTickData&, graphics::GraphicsQueue&> CallOnceInOneFrameEvent::functions = {};
+	void CallOnceInOneFrameEvent::flush(const ApplicationTickData& tickData, graphics::GraphicsQueue& queue)
+	{
+		if (m_frameCounter == tickData.tickCount)
+		{
+			return;
+		}
+
+		m_frameCounter = tickData.tickCount;
+		functions.brocast(tickData, queue);
 	}
 }
 

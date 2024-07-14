@@ -29,6 +29,8 @@ namespace chord::graphics
 			{
 			}
 
+			GPUBufferRef getRef() const { return m_buffer; }
+
 		protected:
 			operator const GPUBuffer& () const { return *m_buffer; }
 			operator GPUBuffer& () { return *m_buffer; }
@@ -62,8 +64,10 @@ namespace chord::graphics
 			{
 			}
 
-			operator const GPUOnlyBuffer& () const { return *((GPUOnlyBuffer*)m_buffer.get()); }
-			operator GPUOnlyBuffer& () { return *((GPUOnlyBuffer*)m_buffer.get()); }
+			GPUOnlyBufferRef get() const 
+			{ 
+				return std::dynamic_pointer_cast<GPUOnlyBuffer>(m_buffer);
+			}
 		};
 
 		std::shared_ptr<GPUOnlyPoolBuffer> createGPUOnly(

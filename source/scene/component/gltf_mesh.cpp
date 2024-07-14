@@ -34,6 +34,18 @@ namespace chord
 		return result;
 	}
 
+	void GLTFMeshComponent::onPerframeCollect(PerframeCollected& collector) const
+	{
+		Super::onPerframeCollect(collector);
+
+		if (m_gltfGPU == nullptr || m_gltfAsset == nullptr)
+		{
+			return;
+		}
+
+
+	}
+
 	bool GLTFMeshComponent::setGLTFMesh(const AssetSaveInfo& asset, int32 meshId)
 	{
 		if (asset != m_gltfAssetInfo || meshId != m_gltfMeshId)

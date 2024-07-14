@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SHADER_BINDLESS_HLSLI
+#define SHADER_BINDLESS_HLSLI
 
 #include "binding.h"
 #include "base.h"
@@ -60,10 +61,12 @@ T_BINDLESS_TEXTURE_FORMAT_DECLARE(RWTexture3D, (int)chord::EBindingType::Bindles
 /////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////
+// Current no support.
+/******************* UniformTexelBuffer & StorageTexelBuffer *******************
 // RWBuffer/Buffer area. 
 #define T_BINDLESS_BUFFER_DECLARE(Type)  \
-    T_BINDLESS_DECLARE(Buffer,   (int)chord::EBindingType::BindlessStorageBuffer, Type) \
-    T_BINDLESS_DECLARE(RWBuffer, (int)chord::EBindingType::BindlessStorageBuffer, Type)
+    T_BINDLESS_DECLARE(Buffer,   (int)chord::EBindingType::BindlessUniformTexelBuffer, Type) \
+    T_BINDLESS_DECLARE(RWBuffer, (int)chord::EBindingType::BindlessStorageTexelBuffer, Type)
 
 T_BINDLESS_BUFFER_DECLARE(float)
 T_BINDLESS_BUFFER_DECLARE(float2)
@@ -83,7 +86,7 @@ T_BINDLESS_BUFFER_DECLARE(uint3)
 T_BINDLESS_BUFFER_DECLARE(uint4)
 
 #undef T_BINDLESS_BUFFER_DECLARE
-
+***************************************************************************************/
 ////////////////////////////////////////////////////////////////////////////////////////
 
 #define T_BINDLESS_STRUCTURED_BUFFER_DECLARE(Type) \
@@ -136,3 +139,6 @@ BINDLESS_DECLARE(SamplerComparisonState, (int)chord::EBindingType::BindlessSampl
 
 T_BINDLESS_CONSTATNT_BUFFER_DECLARE(PerframeCameraView)
 #define LoadCameraView(Index) TBindless(ConstantBuffer, PerframeCameraView, Index)
+
+
+#endif // !SHADER_BINDLESS_HLSLI

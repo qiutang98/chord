@@ -114,6 +114,9 @@ namespace chord
 
 		void tickWithCmds(const ApplicationTickData& data)
 		{
+			// Flush call once event.
+			graphics::CallOnceInOneFrameEvent::flush(data, m_swapchain->getCommandList().getGraphicsQueue());
+
 			m_lastBroadcastFrame = data.tickCount;
 			onTickWithCmds.brocast(data, m_swapchain->getCommandList());
 		}

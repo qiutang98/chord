@@ -68,6 +68,39 @@ namespace chord::graphics
 		setResourceName(VK_OBJECT_TYPE_PIPELINE, (uint64)m_pipeline, m_name.c_str());
 	}
 
+	ComputePipeline::ComputePipeline(const std::string& name, const ComputePipelineCreateInfo& ci)
+		: IPipeline(name, ci.pushConstantSize, VK_SHADER_STAGE_COMPUTE_BIT)
+	{
+		VkPushConstantRange pushConstantRange{};
+		uint32 pushConstCount = 0;
+		if (ci.pushConstantSize > 0)
+		{
+			pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+			pushConstantRange.size = ci.pushConstantSize;
+			pushConstCount = 1;
+		}
+
+		m_pipelineLayout = getContext().getPipelineLayoutManager().getLayout(1, &getContext().getBindlessManger().getSetLayout(), pushConstCount, &pushConstantRange);
+
+		VkPipelineShaderStageCreateInfo shaderStageCI{};
+		shaderStageCI.module = ci.shaderModule;
+		shaderStageCI.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		shaderStageCI.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+		shaderStageCI.pName = ci.shaderEntryName.c_str();
+
+		VkComputePipelineCreateInfo pipelineCI{};
+		pipelineCI.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+		pipelineCI.layout = m_pipelineLayout;
+		pipelineCI.flags = 0;
+		pipelineCI.stage = shaderStageCI;
+
+		VkPipeline pipeline;
+		checkVkResult(vkCreateComputePipelines(getDevice(), getContext().getPipelineCache(), 1, &pipelineCI, getContext().getAllocationCallbacks(), &pipeline));
+
+		// Assign in pipeline.
+		IPipeline::initPipeline(pipeline);
+	}
+
 	GraphicsPipeline::GraphicsPipeline(const std::string& name, const GraphicsPipelineCreateInfo& ci)
 		: IPipeline(name, ci.pushConstantSize, ci.shaderStageFlags)
 	{
@@ -158,7 +191,7 @@ namespace chord::graphics
 		getBindless().bind(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout);
 	}
 
-	IPipelineRef PipelineContainer::graphics(const std::string& name, const GraphicsPipelineCreateInfo& ci)
+	GraphicsPipelineRef PipelineContainer::graphics(const std::string& name, const GraphicsPipelineCreateInfo& ci)
 	{
 		uint64 hash = ci.hash();
 		if (m_graphics[hash] == nullptr)
@@ -166,6 +199,28 @@ namespace chord::graphics
 			m_graphics[hash] = std::make_shared<GraphicsPipeline>(name, ci);
 		}
 		return m_graphics[hash];
-	};
+	}
+
+	ComputePipelineRef PipelineContainer::compute(const std::string& name, const ComputePipelineCreateInfo& ci)
+	{
+		uint64 hash = ci.hash();
+		if (m_computes[hash] == nullptr)
+		{
+			m_computes[hash] = std::make_shared<ComputePipeline>(name, ci);
+		}
+		return m_computes[hash];
+	}
+
+	void ComputePipeline::bind(VkCommandBuffer cmd) const
+	{
+		check(m_pipeline != VK_NULL_HANDLE);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
+		getBindless().bind(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout);
+	}
+
+	ComputePipeline::~ComputePipeline()
+	{
+
+	}
 }
 

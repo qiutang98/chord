@@ -31,8 +31,8 @@ namespace chord
 			return cache;
 		}
 
-		auto assetPtr = shared_from_this();
-		auto newGPUPrimitives = std::make_shared<GPUGLTFPrimitiveAsset>(m_saveInfo.getName().u8());
+		auto assetPtr = std::dynamic_pointer_cast<GLTFAsset>(shared_from_this());
+		auto newGPUPrimitives = std::make_shared<GPUGLTFPrimitiveAsset>(m_saveInfo.getName().u8(), assetPtr);
 		const size_t totalUsedSize = m_gltfBinSize; // Primitive bin size.
 
 		getContext().getAsyncUploader().addTask(m_gltfBinSize,
@@ -82,56 +82,56 @@ namespace chord
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_indices"),
 						bufferFlagBasic | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 						bufferFlagVMA,
-						sizeof(gltfBin.primitiveData.indices[0]),
-						gltfBin.primitiveData.indices.size());
+						(uint32)sizeof(gltfBin.primitiveData.indices[0]),
+						(uint32)gltfBin.primitiveData.indices.size());
 					copyBuffer(*newGPUPrimitives->indices, gltfBin.primitiveData.indices.data());
 
 					newGPUPrimitives->meshlet = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_meshlet"),
 						bufferFlagBasic,
 						bufferFlagVMA,
-						sizeof(gltfBin.primitiveData.meshlets[0]),
-						gltfBin.primitiveData.meshlets.size());
+						(uint32)sizeof(gltfBin.primitiveData.meshlets[0]),
+						(uint32)gltfBin.primitiveData.meshlets.size());
 					copyBuffer(*newGPUPrimitives->meshlet, gltfBin.primitiveData.meshlets.data());
 
 					newGPUPrimitives->meshletData = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_meshletData"),
 						bufferFlagBasic,
 						bufferFlagVMA,
-						sizeof(gltfBin.primitiveData.meshletData[0]),
-						gltfBin.primitiveData.meshletData.size());
+						(uint32)sizeof(gltfBin.primitiveData.meshletData[0]),
+						(uint32)gltfBin.primitiveData.meshletData.size());
 					copyBuffer(*newGPUPrimitives->meshletData, gltfBin.primitiveData.meshletData.data());
 
 					newGPUPrimitives->positions = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_positions"),
 						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 						bufferFlagVMA,
-						sizeof(gltfBin.primitiveData.positions[0]),
-						gltfBin.primitiveData.positions.size());
+						(uint32)sizeof(gltfBin.primitiveData.positions[0]),
+						(uint32)gltfBin.primitiveData.positions.size());
 					copyBuffer(*newGPUPrimitives->positions, gltfBin.primitiveData.positions.data());
 
 					newGPUPrimitives->normals = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_normals"),
 						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 						bufferFlagVMA,
-						sizeof(gltfBin.primitiveData.normals[0]),
-						gltfBin.primitiveData.normals.size());
+						(uint32)sizeof(gltfBin.primitiveData.normals[0]),
+						(uint32)gltfBin.primitiveData.normals.size());
 					copyBuffer(*newGPUPrimitives->normals, gltfBin.primitiveData.normals.data());
 
 					newGPUPrimitives->uv0s = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_uv0s"),
 						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 						bufferFlagVMA,
-						sizeof(gltfBin.primitiveData.texcoords0[0]),
-						gltfBin.primitiveData.texcoords0.size());
+						(uint32)sizeof(gltfBin.primitiveData.texcoords0[0]),
+						(uint32)gltfBin.primitiveData.texcoords0.size());
 					copyBuffer(*newGPUPrimitives->uv0s, gltfBin.primitiveData.texcoords0.data());
 
 					newGPUPrimitives->tangents = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_tangents"),
 						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 						bufferFlagVMA,
-						sizeof(gltfBin.primitiveData.tangents[0]),
-						gltfBin.primitiveData.tangents.size());
+						(uint32)sizeof(gltfBin.primitiveData.tangents[0]),
+						(uint32)gltfBin.primitiveData.tangents.size());
 					copyBuffer(*newGPUPrimitives->tangents, gltfBin.primitiveData.tangents.data());
 
 					if (!gltfBin.primitiveData.smoothNormals.empty())
@@ -140,8 +140,8 @@ namespace chord
 							getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_smoothNormals"),
 							bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 							bufferFlagVMA,
-							sizeof(gltfBin.primitiveData.smoothNormals[0]),
-							gltfBin.primitiveData.smoothNormals.size());
+							(uint32)sizeof(gltfBin.primitiveData.smoothNormals[0]),
+							(uint32)gltfBin.primitiveData.smoothNormals.size());
 
 						copyBuffer(*newGPUPrimitives->smoothNormals, gltfBin.primitiveData.smoothNormals.data());
 					}
@@ -152,8 +152,8 @@ namespace chord
 							getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_colors0"),
 							bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 							bufferFlagVMA,
-							sizeof(gltfBin.primitiveData.colors0[0]),
-							gltfBin.primitiveData.colors0.size());
+							(uint32)sizeof(gltfBin.primitiveData.colors0[0]),
+							(uint32)gltfBin.primitiveData.colors0.size());
 
 						copyBuffer(*newGPUPrimitives->colors, gltfBin.primitiveData.colors0.data());
 					}
@@ -164,8 +164,8 @@ namespace chord
 							getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_texcoords1"),
 							bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 							bufferFlagVMA,
-							sizeof(gltfBin.primitiveData.texcoords1[0]),
-							gltfBin.primitiveData.texcoords1.size());
+							(uint32)sizeof(gltfBin.primitiveData.texcoords1[0]),
+							(uint32)gltfBin.primitiveData.texcoords1.size());
 
 						copyBuffer(*newGPUPrimitives->uv1s, gltfBin.primitiveData.texcoords1.data());
 					}
@@ -176,6 +176,7 @@ namespace chord
 			[newGPUPrimitives]() // Finish loading.
 			{
 				newGPUPrimitives->setLoadingState(false);
+				newGPUPrimitives->updateGPUScene();
 			});
 
 		m_gpuPrimitives = newGPUPrimitives;

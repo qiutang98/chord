@@ -150,7 +150,7 @@ namespace chord::graphics
 		auto& getBufferPool() { return *m_bufferPool; }
 
 		template<class VertexShader, class PixelShader>
-		IPipelineRef graphicsPipe(
+		GraphicsPipelineRef graphicsPipe(
 			const std::string& name,
 			std::vector<VkFormat>&& attachments,
 			VkFormat inDepthFormat = VK_FORMAT_UNDEFINED,
@@ -158,7 +158,7 @@ namespace chord::graphics
 			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
 		template<class AmplifyShader, class MeshShader, class PixelShader>
-		IPipelineRef graphicsAmplifyMeshPipe(
+		GraphicsPipelineRef graphicsAmplifyMeshPipe(
 			const std::string& name,
 			std::vector<VkFormat>&& attachments,
 			VkFormat inDepthFormat = VK_FORMAT_UNDEFINED,
@@ -166,14 +166,14 @@ namespace chord::graphics
 			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
 		template<class MeshShader, class PixelShader>
-		IPipelineRef graphicsMeshPipe(
+		GraphicsPipelineRef graphicsMeshPipe(
 			const std::string& name,
 			std::vector<VkFormat>&& attachments,
 			VkFormat inDepthFormat = VK_FORMAT_UNDEFINED,
 			VkFormat inStencilFormat = VK_FORMAT_UNDEFINED,
 			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
-		inline IPipelineRef graphicsMeshShadingPipe(
+		inline GraphicsPipelineRef graphicsMeshShadingPipe(
 			std::shared_ptr<ShaderModule> amplifyShader,
 			std::shared_ptr<ShaderModule> meshShader,
 			std::shared_ptr<ShaderModule> pixelShader,
@@ -183,7 +183,13 @@ namespace chord::graphics
 			VkFormat inStencilFormat = VK_FORMAT_UNDEFINED,
 			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
-		
+		inline ComputePipelineRef computePipe(
+			std::shared_ptr<ShaderModule> computeShader,
+			const std::string& name
+		);
+
+		template<class ComputeShader>
+		ComputePipelineRef computePipe(const std::string& name);
 
 		void waitDeviceIdle() const;
 		GPUBufferRef getDummySSBO() const { return m_dummySSBO; }

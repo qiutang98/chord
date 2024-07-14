@@ -14,6 +14,8 @@ namespace chord
 {
 	class Engine;
 	class AssetManager;
+	class GPUScene;
+
 	namespace graphics
 	{
 		class Context;
@@ -82,6 +84,7 @@ namespace chord
 		// App asset manager.
 		std::unique_ptr<AssetManager> m_assetManager = nullptr;
 		std::unique_ptr<Engine> m_engine = nullptr;
+		std::unique_ptr<GPUScene> m_gpuScene = nullptr;
 
 	public:
 		static Application& get();
@@ -109,6 +112,11 @@ namespace chord
 		Engine& getEngine() const
 		{
 			return *m_engine;
+		}
+
+		GPUScene& getGPUScene() const
+		{
+			return *m_gpuScene;
 		}
 
 		// Init application.
@@ -194,5 +202,9 @@ namespace chord
 
 		// Create main window for current application.
 		void createMainWindow(const InitConfig& config);
+
+		// Default application.
+		ApplicationTickData m_tickData = {};
 	};
+	extern uint64 getFrameCounter();
 }

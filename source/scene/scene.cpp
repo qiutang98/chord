@@ -80,6 +80,12 @@ namespace chord
 		{
 			node->tick(tickData);
 		}, m_root);
+
+		m_perframe = {}; 
+		loopNodeTopToDown([this, tickData](SceneNodeRef node)
+		{
+			node->perframeCollect(m_perframe);
+		}, m_root);
 	}
 
 	void Scene::deleteNode(SceneNodeRef node)

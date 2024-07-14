@@ -17,6 +17,9 @@ namespace chord
 
         static SceneNodeRef create(const size_t id, const u16str& name, SceneRef scene);
         void tick(const ApplicationTickData& tickData);
+        void perframeCollect(PerframeCollected& collector);
+
+        GPUObjectBasicData getObjectBasicData() const;
 
     public:
         const auto& getId() const { return m_id; }

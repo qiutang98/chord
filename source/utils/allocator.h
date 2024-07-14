@@ -153,8 +153,8 @@ namespace chord
 	public:
 		explicit SpanAllocator(bool bGrowOnly);
 
-		int32_t allocate(size_t size);
-		void free(size_t offset, size_t size);
+		int32_t allocate(uint32_t size);
+		void free(uint32_t offset, uint32_t size);
 
 		// 
 		void prune();
@@ -167,24 +167,24 @@ namespace chord
 	
 	private:
 		// Search in m_freeSpans which fit the size required, return -1 if no span found.
-		int32_t searchFreeList(size_t offset, size_t size) const;
+		int32_t searchFreeList(uint32_t offset, uint32_t size) const;
 
 	private:
 		const bool m_bGrowOnly;
 		
 		// Size of linear range used by the allocator.
-		size_t m_currentMaxSize;
+		uint32_t m_currentMaxSize;
 
 		// 
-		size_t m_peakMaxSize;
+		uint32_t m_peakMaxSize;
 	
 		// 
-		size_t m_firstNonEmptySpan;
+		uint32_t m_firstNonEmptySpan;
 
 		struct Allocation
 		{
-			size_t offset;
-			size_t size;
+			uint32_t offset;
+			uint32_t size;
 		};
 		std::vector<Allocation> m_freeSpans;
 		std::vector<Allocation> m_pendingFreeSpans;
@@ -194,38 +194,38 @@ namespace chord
 	class PoolAllocator
 	{
 	public:
-		explicit PoolAllocator(size_t elementSize)
+		explicit PoolAllocator(uint32_t elementSize)
 			: m_elementSize(elementSize)
 			, m_currentMaxSize(0)
 		{
 
 		}
 
-		size_t allocate()
+		uint32_t allocate()
 		{
 			if (m_freeIds.empty())
 			{
 				return m_currentMaxSize ++;
 			}
 
-			size_t result = m_freeIds.top();
+			uint32_t result = m_freeIds.top();
 			m_freeIds.pop();
 			return result;
 		}
 
-		void free(size_t id)
+		void free(uint32_t id)
 		{
 			m_freeIds.push(id);
 		}
 
-		size_t getMaxSize() const
+		uint32_t getMaxSize() const
 		{
 			return m_currentMaxSize;
 		}
 
 	private:
-		size_t m_currentMaxSize;
-		size_t m_elementSize;
-		std::stack<size_t> m_freeIds;
+		uint32_t m_currentMaxSize;
+		uint32_t m_elementSize;
+		std::stack<uint32_t> m_freeIds;
 	};
 }

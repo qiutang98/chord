@@ -7,6 +7,8 @@
 #include <renderer/postprocessing/postprocessing.h>
 #include <shader/base.h>
 #include <renderer/mesh/gltf_rendering.h>
+#include <application/application.h>
+#include <renderer/gpu_scene.h>
 
 namespace chord
 {
@@ -15,7 +17,7 @@ namespace chord
 	DeferredRenderer::DeferredRenderer(const std::string& name)
 		: m_name(name)
 	{
-
+		
 	}
 
 	DeferredRenderer::~DeferredRenderer()
@@ -137,7 +139,6 @@ namespace chord
 
 		// Graphics start timeline.
 		auto& graphics = cmd.getGraphicsQueue();
-		TimelineWait graphicsStartTimeline = graphics.getCurrentTimeline();
 
 		// Allocate view gpu uniform buffer.
 		uint32 viewGPUId;
@@ -145,8 +146,9 @@ namespace chord
 		
 		// 
 		auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
+		auto frameStartTimeline = graphics.getCurrentTimeline();
 
-		graphics.beginCommand({ graphicsStartTimeline });
+		graphics.beginCommand({ frameStartTimeline });
 		{
 			// Clear all gbuffer textures.
 			addClearGbufferPass(graphics, gbuffers);

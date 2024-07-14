@@ -21,7 +21,7 @@ namespace chord
 		m_pendingFreeSpans = {};
 	}
 
-	int32_t SpanAllocator::allocate(size_t size)
+	int32_t SpanAllocator::allocate(uint32_t size)
 	{
 		// 
 		int32_t freeSpanIndex = searchFreeList(m_firstNonEmptySpan, size);
@@ -54,7 +54,7 @@ namespace chord
 		}
 
 		// Need new allocation.
-		size_t offset = m_currentMaxSize;
+		uint32_t offset = m_currentMaxSize;
 
 		// Update new max size and peak size.
 		m_currentMaxSize += size;
@@ -63,13 +63,13 @@ namespace chord
 		return offset;
 	}
 
-	void SpanAllocator::free(size_t offset, size_t size)
+	void SpanAllocator::free(uint32_t offset, uint32_t size)
 	{
 		check(offset + size <= m_currentMaxSize);
 		m_pendingFreeSpans.push_back(Allocation{ .offset = offset, .size = size });
 	}
 
-	int32_t SpanAllocator::searchFreeList(size_t offset, size_t size) const
+	int32_t SpanAllocator::searchFreeList(uint32_t offset, uint32_t size) const
 	{
 		for (auto index = offset; index < m_freeSpans.size(); index++)
 		{
@@ -100,9 +100,9 @@ namespace chord
 		tempFreeSpans.reserve(m_freeSpans.size());
 
 		int32_t lastEndOffset   = -1;
-		size_t pendingFreeIndex =  0;
+		uint32_t pendingFreeIndex =  0;
 
-		constexpr size_t kMaxOffset = ~0U;
+		constexpr uint32_t kMaxOffset = ~0U;
 		for (auto index = 0; index < m_freeSpans.size() || pendingFreeIndex < m_pendingFreeSpans.size(); )
 		{
 			auto allocation = index < m_freeSpans.size() ? m_freeSpans[index] : Allocation { .offset = kMaxOffset, .size = 0 };

@@ -31,11 +31,13 @@
 #include <asset/mikktspace.h>
 
 #include <asset/meshoptimizer/meshoptimizer.h>
+#include <renderer/gpu_scene.h>
+#include <utils/thread.h>
 
 namespace chord
 {
-	constexpr size_t kMeshletMaxVertices  = 64;
-	constexpr size_t kMeshletMaxTriangles = 124;
+	constexpr uint32 kMeshletMaxVertices  = 64;
+	constexpr uint32 kMeshletMaxTriangles = 124;
 	constexpr float  kMeshletConeWeight = 0.5f;
 	constexpr double kGLTFLODStepReduceFactor = 0.75;
 	constexpr float  kGLTFLODTargetError = 1e-2f;
@@ -926,8 +928,8 @@ namespace chord
 
 							if (primitiveMesh.lods.size() < kMaxGLTFLodCount)
 							{
-								size_t nextLodIndicesTarget = size_t(double(lodIndices.size()) * kGLTFLODStepReduceFactor);
-								size_t nextIndices = meshopt_simplify(lodIndices.data(), lodIndices.data(), lodIndices.size(), &tempPositions[0].x, tempPositions.size(), sizeof(tempPositions[0]), nextLodIndicesTarget, kGLTFLODTargetError);
+								uint32 nextLodIndicesTarget = uint32(double(lodIndices.size()) * kGLTFLODStepReduceFactor);
+								uint32 nextIndices = meshopt_simplify(lodIndices.data(), lodIndices.data(), lodIndices.size(), &tempPositions[0].x, tempPositions.size(), sizeof(tempPositions[0]), nextLodIndicesTarget, kGLTFLODTargetError);
 								
 								check(nextIndices <= lodIndices.size());
 								if (nextIndices == lodIndices.size())
@@ -1197,20 +1199,25 @@ namespace chord
 		return result;
 	}
 
-
-	GPUGLTFPrimitiveAsset::GPUGLTFPrimitiveAsset(const std::string& inName)
+	GPUGLTFPrimitiveAsset::GPUGLTFPrimitiveAsset(const std::string& inName, std::shared_ptr<GLTFAsset> asset)
 		: IUploadAsset(nullptr)
 		, m_name(inName)
+		, m_gltfAssetWeak(asset)
 	{
+		
+	}
 
+	GPUGLTFPrimitiveAsset::~GPUGLTFPrimitiveAsset()
+	{
+		freeGPUScene();
 	}
 
 	GPUGLTFPrimitiveAsset::ComponentBuffer::ComponentBuffer(
 		const std::string& name, 
 		VkBufferUsageFlags flags, 
 		VmaAllocationCreateFlags vmaFlags,
-		size_t stripe,
-		size_t num)
+		uint32 stripe,
+		uint32 num)
 	{
 		this->elementNum = num;
 		this->stripe = stripe;
@@ -1244,9 +1251,9 @@ namespace chord
 		}
 	}
 
-	size_t GPUGLTFPrimitiveAsset::getSize() const
+	uint32 GPUGLTFPrimitiveAsset::getSize() const
 	{
-		auto getValidSize = [](const std::unique_ptr<ComponentBuffer>& buffer) -> size_t 
+		auto getValidSize = [](const std::unique_ptr<ComponentBuffer>& buffer) -> uint32 
 		{ 
 			if (buffer != nullptr) 
 			{ 
@@ -1266,6 +1273,145 @@ namespace chord
 			+ getValidSize(smoothNormals)
 			+ getValidSize(meshlet)
 			+ getValidSize(meshletData);
+	}
+
+	inline uint64 getPrimitiveDetailHash(uint64 GPUSceneHash, uint64 meshId, uint64 primitiveId)
+	{
+		return hashCombine(hashCombine(GPUSceneHash, primitiveId + 0x4c), meshId + 0xfe);
+	}
+
+	void GPUGLTFPrimitiveAsset::updateGPUScene()
+	{
+		check(isInMainThread());
+		freeGPUScene();
+
+		auto& gltfPrimitiveAssetPool = Application::get().getGPUScene().getGLTFPrimitiveDataPool();
+		m_gpuSceneGLTFPrimitiveAssetId = gltfPrimitiveAssetPool.requireId(GPUSceneHash());
+
+		GLTFPrimitiveDatasBuffer uploadData { };
+
+		#define ASSIGN_DATA(A, B) if(A != nullptr) { uploadData.B = A->bindless.get(); } else { uploadData.B = ~0; }
+		{
+			ASSIGN_DATA(indices, indicesBuffer);
+			ASSIGN_DATA(positions, positionBuffer);
+			ASSIGN_DATA(normals, normalBuffer);
+			ASSIGN_DATA(uv0s, textureCoord0Buffer);
+			ASSIGN_DATA(tangents, tangentBuffer);
+			ASSIGN_DATA(colors, color0Buffer);
+			ASSIGN_DATA(uv1s, textureCoord1Buffer);
+			ASSIGN_DATA(smoothNormals, smoothNormalsBuffer);
+			ASSIGN_DATA(meshlet, meshletBuffer);
+			ASSIGN_DATA(meshletData, meshletDataBuffer);
+		}
+		#undef ASSIGN_DATA
+
+		{
+			std::array<math::vec4, GPUGLTFPrimitiveAsset::kGPUSceneDataFloat4Count> uploadDatas{};
+
+			uploadDatas[0].x = asfloat(uploadData.indicesBuffer);
+			uploadDatas[0].y = asfloat(uploadData.meshletDataBuffer);
+			uploadDatas[0].z = asfloat(uploadData.meshletBuffer);
+			uploadDatas[0].w = asfloat(uploadData.positionBuffer);
+			uploadDatas[1].x = asfloat(uploadData.normalBuffer);
+			uploadDatas[1].y = asfloat(uploadData.textureCoord0Buffer);
+			uploadDatas[1].z = asfloat(uploadData.tangentBuffer);
+			uploadDatas[1].w = asfloat(uploadData.textureCoord1Buffer);
+			uploadDatas[2].x = asfloat(uploadData.color0Buffer);
+			uploadDatas[2].y = asfloat(uploadData.smoothNormalsBuffer);
+
+			gltfPrimitiveAssetPool.updateId(m_gpuSceneGLTFPrimitiveAssetId, uploadDatas);
+		}
+
+		//
+		auto assetRef = m_gltfAssetWeak.lock();
+		m_gpuSceneGLTFPrimitiveDetailAssetId.resize(assetRef->getMeshes().size());
+
+		auto& gltfPrimitiveDetailPool = Application::get().getGPUScene().getGLTFPrimitiveDetailPool();
+		for (uint32 meshId = 0; meshId < assetRef->getMeshes().size(); meshId++)
+		{
+			auto& meshPrimitiveIds = m_gpuSceneGLTFPrimitiveDetailAssetId[meshId];
+			const auto& meshInfo = assetRef->getMeshes().at(meshId);
+			meshPrimitiveIds.resize(meshInfo.primitives.size());
+			for (uint32 primitiveId = 0; primitiveId < meshInfo.primitives.size(); primitiveId++)
+			{
+				// Require GPU scene id.
+				meshPrimitiveIds[primitiveId] = gltfPrimitiveDetailPool.requireId(getPrimitiveDetailHash(GPUSceneHash(), meshId, primitiveId));
+
+				const auto& primitiveInfo = meshInfo.primitives[primitiveId];
+				std::array<math::vec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};
+
+				for (uint32 i = 0; i < kMaxGLTFLodCount; i++)
+				{
+					GLTFPrimitiveLOD lod{};
+					if (i < primitiveInfo.lods.size())
+					{
+						lod = primitiveInfo.lods[i];
+					}
+
+					uploadDatas[i].x = asfloat(lod.firstIndex);
+					uploadDatas[i].y = asfloat(lod.indexCount);
+					uploadDatas[i].z = asfloat(lod.firstMeshlet);
+					uploadDatas[i].w = asfloat(lod.meshletCount);
+				}
+
+				uploadDatas[kMaxGLTFLodCount + 0].x = primitiveInfo.posMin.x;
+				uploadDatas[kMaxGLTFLodCount + 0].y = primitiveInfo.posMin.y;
+				uploadDatas[kMaxGLTFLodCount + 0].z = primitiveInfo.posMin.z;
+				uploadDatas[kMaxGLTFLodCount + 0].w = asfloat(m_gpuSceneGLTFPrimitiveAssetId);
+
+				uploadDatas[kMaxGLTFLodCount + 1].x = primitiveInfo.posMax.x;
+				uploadDatas[kMaxGLTFLodCount + 1].y = primitiveInfo.posMax.y;
+				uploadDatas[kMaxGLTFLodCount + 1].z = primitiveInfo.posMax.z;
+				uploadDatas[kMaxGLTFLodCount + 1].w = asfloat(primitiveInfo.vertexOffset);
+
+				uploadDatas[kMaxGLTFLodCount + 2].x = primitiveInfo.posAverage.x;
+				uploadDatas[kMaxGLTFLodCount + 2].y = primitiveInfo.posAverage.y;
+				uploadDatas[kMaxGLTFLodCount + 2].z = primitiveInfo.posAverage.z;
+				uploadDatas[kMaxGLTFLodCount + 2].w = asfloat(primitiveInfo.vertexCount);
+
+				uploadDatas[kMaxGLTFLodCount + 3].x = asfloat(primitiveInfo.colors0Offset);
+				uploadDatas[kMaxGLTFLodCount + 3].y = asfloat(primitiveInfo.smoothNormalOffset);
+				uploadDatas[kMaxGLTFLodCount + 3].z = asfloat(primitiveInfo.textureCoord1Offset);
+				uploadDatas[kMaxGLTFLodCount + 3].w = asfloat(~0); // TODO: Material id.
+
+				// Updata to GPUScene.
+				gltfPrimitiveDetailPool.updateId(meshPrimitiveIds[primitiveId], uploadDatas);
+			}
+		}
+
+		enqueueGPUSceneUpdate();
+	}
+
+	void GPUGLTFPrimitiveAsset::freeGPUScene()
+	{
+		check(isInMainThread());
+
+		if (m_gpuSceneGLTFPrimitiveAssetId != -1)
+		{
+			auto& gltfPrimitiveAssetPool = Application::get().getGPUScene().getGLTFPrimitiveDataPool();
+
+			uint32 id = gltfPrimitiveAssetPool.free(GPUSceneHash());
+			check(id == m_gpuSceneGLTFPrimitiveAssetId);
+
+			m_gpuSceneGLTFPrimitiveAssetId = -1;
+		}
+
+		auto& gltfPrimitiveDetailPool = Application::get().getGPUScene().getGLTFPrimitiveDetailPool();
+		for (uint32 meshId = 0; meshId < m_gpuSceneGLTFPrimitiveDetailAssetId.size(); meshId++)
+		{
+			const auto& primitiveInfos = m_gpuSceneGLTFPrimitiveDetailAssetId[meshId];
+			for (uint32 primitiveId = 0; primitiveId < primitiveInfos.size(); primitiveId++)
+			{
+				uint32 freeId = gltfPrimitiveDetailPool.free(getPrimitiveDetailHash(GPUSceneHash(), meshId, primitiveId));
+				check(freeId == primitiveInfos[primitiveId]);
+			}
+		}
+		m_gpuSceneGLTFPrimitiveDetailAssetId.clear();
+	}
+
+	uint32 GPUGLTFPrimitiveAsset::getGPUSceneId() const
+	{
+		return m_gpuSceneGLTFPrimitiveAssetId;
 	}
 
 }

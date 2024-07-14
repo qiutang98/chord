@@ -36,6 +36,9 @@ struct GLTFMeshlet
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFMeshlet);
 }
 
+
+
+// Store in GPU scene.
 struct GLTFPrimitiveBuffer
 {
     GLTFPrimitiveLOD lods[kMaxGLTFLodCount];
@@ -55,6 +58,39 @@ struct GLTFPrimitiveBuffer
     uint materialBufferId;
 };
 
+#ifndef __cplusplus
+
+inline GLTFPrimitiveBuffer fillGLTFPrimitiveBuffer(float4 data[12])
+{
+    GLTFPrimitiveBuffer result;
+
+    for(int i = 0; i < kMaxGLTFLodCount; i ++)
+    {
+        result.lods->firstIndex   = asuint(data[i].x);
+        result.lods->indexCount   = asuint(data[i].y);
+        result.lods->firstMeshlet = asuint(data[i].z);
+        result.lods->meshletCount = asuint(data[i].w);
+    }
+
+    result.posMin = data[kMaxGLTFLodCount + 0].xyz;
+    result.primitiveDatasBufferId = asuint(data[kMaxGLTFLodCount + 0].w);
+
+    result.posMax = data[kMaxGLTFLodCount + 1].xyz;
+    result.vertexOffset = asuint(data[kMaxGLTFLodCount + 1].w);
+
+    result.posAverage  = data[kMaxGLTFLodCount + 2].xyz;
+    result.vertexCount = asuint(data[kMaxGLTFLodCount + 2].w);
+
+    result.color0Offset        = asuint(data[kMaxGLTFLodCount + 3].x);
+    result.smoothNormalOffset  = asuint(data[kMaxGLTFLodCount + 3].y); 
+    result.textureCoord1Offset = asuint(data[kMaxGLTFLodCount + 3].z);
+    result.materialBufferId    = asuint(data[kMaxGLTFLodCount + 3].w);
+    
+    return result;
+}
+#endif
+
+// Store in GPUScene.
 struct GLTFPrimitiveDatasBuffer
 {
     uint indicesBuffer;
@@ -70,3 +106,22 @@ struct GLTFPrimitiveDatasBuffer
     uint color0Buffer;
     uint smoothNormalsBuffer;
 };
+
+inline GLTFPrimitiveDatasBuffer fillGLTFPrimitiveDatasBuffer(float4 data[3])
+{
+    GLTFPrimitiveDatasBuffer result;
+
+    result.indicesBuffer       = asuint(data[0].x);
+    result.meshletDataBuffer   = asuint(data[0].y);
+    result.meshletBuffer       = asuint(data[0].z);
+    result.positionBuffer      = asuint(data[0].w);
+    result.normalBuffer        = asuint(data[1].x);
+    result.textureCoord0Buffer = asuint(data[1].y);
+    result.tangentBuffer       = asuint(data[1].z);
+    result.textureCoord1Buffer = asuint(data[1].w);
+    result.color0Buffer        = asuint(data[2].x);
+    result.smoothNormalsBuffer = asuint(data[2].y);
+
+    return result;
+}
+

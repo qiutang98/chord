@@ -2,9 +2,11 @@
 
 #include <scene/component.h>
 #include <scene/scene_node.h>
+#include <shader/base.h>
 
 namespace chord
 {
+
 	// Simple scene graph implement.
 	class Scene : public IAsset
 	{
@@ -142,6 +144,9 @@ namespace chord
 	private:
 		static AssetTypeMeta createTypeMeta();
 
+		// Perframe data collected from every components.
+		PerframeCollected m_perframe;
+
 	private:
 		// Cache scene node index. use for runtime guid.
 		size_t m_currentId = kRootId;
@@ -221,4 +226,7 @@ namespace chord
 		static_assert(std::is_base_of_v<Component, T>, "T must derive from Component.");
 		return addComponent(typeid(T).name(), component, node);
 	}
+
+
+
 }

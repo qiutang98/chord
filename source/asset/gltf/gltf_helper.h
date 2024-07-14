@@ -2,6 +2,7 @@
 
 #include <asset/asset.h>
 #include <asset/asset_common.h>
+#include <shader/gltf.h>
 
 namespace chord
 {
@@ -10,8 +11,10 @@ namespace chord
 		bool bGenerateSmoothNormal = false;
 	};
 	using GLTFAssetImportConfigRef = std::shared_ptr<GLTFAssetImportConfig>;
+	class GLTFAsset;
 
 	// Mesh primitive asset upload to gpu.
+	// Remap to GLTFPrimitiveDatasBuffer.
 	class GPUGLTFPrimitiveAsset : public graphics::IUploadAsset
 	{
 	public:
@@ -21,8 +24,8 @@ namespace chord
 				const std::string& name, 
 				VkBufferUsageFlags flags, 
 				VmaAllocationCreateFlags vmaFlags, 
-				size_t stripe,
-				size_t num);
+				uint32 stripe,
+				uint32 num);
 
 			~ComponentBuffer();
 
@@ -32,6 +35,14 @@ namespace chord
 			VkDeviceSize stripe = ~0U;
 			uint32 elementNum   = ~0U;
 		};
+
+		constexpr static uint32 kGPUSceneDataFloat4Count = CHORD_DIVIDE_AND_ROUND_UP(sizeof(GLTFPrimitiveDatasBuffer), sizeof(float) * 4);
+		constexpr static uint32 kGPUSceneDetailFloat4Count = CHORD_DIVIDE_AND_ROUND_UP(sizeof(GLTFPrimitiveBuffer), sizeof(float) * 4);
+
+		uint64 GPUSceneHash() const
+		{
+			return hash();
+		}
 
 		std::unique_ptr<ComponentBuffer> indices = nullptr;
 		std::unique_ptr<ComponentBuffer> positions = nullptr;
@@ -46,14 +57,24 @@ namespace chord
 		std::unique_ptr<ComponentBuffer> uv1s = nullptr;
 		std::unique_ptr<ComponentBuffer> smoothNormals = nullptr;
 
-		explicit GPUGLTFPrimitiveAsset(const std::string& name);
+		explicit GPUGLTFPrimitiveAsset(const std::string& name, std::shared_ptr<GLTFAsset> asset);
+		virtual ~GPUGLTFPrimitiveAsset();
 
 		// Current gpu buffer sizes.
-		size_t getSize() const;
+		uint32 getSize() const;
+
+		// Push data in GPU scene.
+		void updateGPUScene();
+		void freeGPUScene();
+
+		uint32 getGPUSceneId() const;
 
 	private:		
-		std::string m_name;
+		uint32 m_gpuSceneGLTFPrimitiveAssetId = -1;
+		std::vector<std::vector<uint32>> m_gpuSceneGLTFPrimitiveDetailAssetId = {};
+		std::weak_ptr<GLTFAsset> m_gltfAssetWeak = {};
 
+		std::string m_name;
 	};
 	using GPUGLTFPrimitiveAssetWeak = std::weak_ptr<GPUGLTFPrimitiveAsset>;
 	using GPUGLTFPrimitiveAssetRef = std::shared_ptr<GPUGLTFPrimitiveAsset>;

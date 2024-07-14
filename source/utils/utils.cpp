@@ -232,3 +232,15 @@ chord::math::mat4 chord::infiniteInvertZPerspectiveRH_ZO(float aspect, float fov
 
 	return result;
 }
+
+static chord::uint64 requireResourceId()
+{
+	static chord::uint64 sId = 0;
+	return sId ++;
+}
+
+chord::IResource::IResource()
+	: m_id(requireResourceId())
+{
+	
+}

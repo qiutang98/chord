@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SHADER_BINDING_H
+#define SHADER_BINDING_H
 
 namespace chord
 {
@@ -10,8 +11,6 @@ namespace chord
         // RWStructuredBuffer<T>
         // ByteAddressBuffer
         // RWByteAddressBuffer
-        // RWBuffer<T>
-        // Buffer<T>
         BindlessStorageBuffer = 0, 
 
         // ConstantBuffer<T>
@@ -30,6 +29,14 @@ namespace chord
         // SamplerComparisonState
         BindlessSampler,   
 
+        // Buffer<T>
+        // BindlessUniformTexelBuffer,
+
+        // RWBuffer<T>
+        // BindlessStorageTexelBuffer,
+
         MAX
     };
 }
+
+#endif // !SHADER_BINDING_H

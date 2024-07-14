@@ -2,6 +2,7 @@
 
 #include <asset/asset.h>
 #include <application/application.h>
+#include <shader/base.h>
 
 namespace chord
 {
@@ -15,6 +16,11 @@ namespace chord
     using ComponentWeak = std::weak_ptr<Component>;
     using SceneRef      = std::shared_ptr<Scene>;
     using SceneWeak     = std::weak_ptr<Scene>;
+
+    struct PerframeCollected
+    {
+        std::vector<GPUObject> objects;
+    };
 
     class UIComponentDrawDetails
     {

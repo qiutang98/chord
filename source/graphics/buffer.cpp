@@ -106,7 +106,20 @@ namespace chord::graphics
 		return view;
 	}
 
+	VkBufferMemoryBarrier2 GPUBuffer::updateBarrier(GPUSyncBarrierMasks newMask)
+	{
+		auto oldQueueFamily = (m_syncBarrier.queueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+			? newMask.queueFamilyIndex
+			: m_syncBarrier.queueFamilyIndex;
 
+		// Need transfer ownership.
+		VkBufferMemoryBarrier2 barrier = helper::bufferBarrier(m_buffer,
+			VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_syncBarrier.accesMask, oldQueueFamily,
+			VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, newMask.accesMask, newMask.queueFamilyIndex, 0, VK_WHOLE_SIZE);
+
+		m_syncBarrier = newMask;
+		return barrier;
+	}
 
 	GPUOnlyBuffer::GPUOnlyBuffer(
 		const std::string& name,

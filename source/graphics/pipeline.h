@@ -5,6 +5,7 @@
 namespace chord::graphics
 {
 	class GraphicsPipelineCreateInfo;
+	class ComputePipelineCreateInfo;
 
 	// Vulkan pipeline wrapper.
 	class IPipeline : NonCopyable
@@ -51,6 +52,16 @@ namespace chord::graphics
 	};
 	using IPipelineRef = std::shared_ptr<IPipeline>;
 
+	class ComputePipeline final : public IPipeline
+	{
+	public:
+		explicit ComputePipeline(const std::string& name, const ComputePipelineCreateInfo& ci);
+		~ComputePipeline();
+
+		virtual void bind(VkCommandBuffer cmd) const override;
+	};
+	using ComputePipelineRef = std::shared_ptr<ComputePipeline>;
+
 	class GraphicsPipeline final : public IPipeline
 	{
 	public:
@@ -65,10 +76,12 @@ namespace chord::graphics
 	class PipelineContainer : NonCopyable
 	{
 	public:
-		IPipelineRef graphics(const std::string& name, const GraphicsPipelineCreateInfo& ci);
+		GraphicsPipelineRef graphics(const std::string& name, const GraphicsPipelineCreateInfo& ci);
+		ComputePipelineRef compute(const std::string& name, const ComputePipelineCreateInfo& ci);
 
 	private:
 		// Graphics pipeline map, hash by GraphicsPipelineCreateInfo.
 		std::map<uint64, std::shared_ptr<GraphicsPipeline>> m_graphics;
+		std::map<uint64, std::shared_ptr<ComputePipeline>> m_computes; 
 	};
 }

@@ -28,4 +28,19 @@ namespace chord
 		RTs.endRendering(queue);
 	}
 
+	void chord::addComputePass(
+		GraphicsOrComputeQueue& queue, 
+		const std::string& name, 
+		ComputePipelineRef pipe,
+		math::uvec3 dispatchParameter,
+		std::function<void(GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
+	{
+		queue.checkRecording();
+		auto& cmd = queue.getActiveCmd()->commandBuffer;
+
+		pipe->bind(cmd);
+		lambda(queue, pipe, cmd);
+		vkCmdDispatch(cmd, dispatchParameter.x, dispatchParameter.y, dispatchParameter.z);
+	}
+
 };
