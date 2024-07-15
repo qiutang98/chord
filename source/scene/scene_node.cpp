@@ -30,21 +30,23 @@ namespace chord
         }
     }
 
-    void SceneNode::perframeCollect(PerframeCollected& collector)
+    void SceneNode::perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const
     {
         for (auto& comp : m_components)
         {
-            comp.second->onPerframeCollect(collector);
+            comp.second->onPerViewPerframeCollect(collector, cameraView);
         }
     }
 
-    GPUObjectBasicData SceneNode::getObjectBasicData() const
+    GPUObjectBasicData SceneNode::getObjectBasicData(const PerframeCameraView& cameraView) const
     {
-        GPUObjectBasicData data{};
+        GPUObjectBasicData data { };
 
-        data.localToWorld = getTransform()->getWorldMatrix();
+        // TODO: Relative camera transform.
+        data.localToWorld = math::mat4(getTransform()->getWorldMatrix());
+        data.lastFrameLocalToWorld = math::mat4(getTransform()->getPrevWorldMatrix());
 
-        return GPUObjectBasicData();
+        return data;
     }
 
     void SceneNode::removeComponent(const std::string& id)
@@ -121,11 +123,16 @@ namespace chord
         return m_id == Scene::kRootId;
     }
 
-    std::shared_ptr<Component> SceneNode::getComponent(const std::string& id)
+    std::shared_ptr<Component> SceneNode::getComponent(const std::string& id, bool bCheckRange) const
     {
+        if (!bCheckRange)
+        {
+            return m_components.at(id);
+        }
+
         if (m_components.contains(id))
         {
-            return m_components[id];
+            return m_components.at(id);
         }
         else
         {

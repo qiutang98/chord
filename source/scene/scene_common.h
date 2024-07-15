@@ -19,7 +19,7 @@ namespace chord
 
     struct PerframeCollected
     {
-        std::vector<GPUObject> objects;
+        std::vector<GPUObjectGLTFPrimitive> gltfPrimitives;
     };
 
     class UIComponentDrawDetails

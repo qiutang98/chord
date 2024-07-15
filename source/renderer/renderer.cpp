@@ -77,6 +77,9 @@ namespace chord
 		CommandList& cmd,
 		ICamera* camera)
 	{
+		m_perframeCameraView.basicData = getGPUBasicData();
+
+
 		camera->fillViewUniformParameter(m_perframeCameraView);
 		auto perframeGPU = getContext().getBufferPool().createHostVisible(
 			"PerframeCameraView - " + m_name,
@@ -167,5 +170,20 @@ namespace chord
 			graphics.transitionPresent(finalOutput->get());
 		}
 		graphics.endCommand();
+	}
+
+	GPUBasicData getGPUBasicData()
+	{
+		GPUBasicData result{};
+
+		const auto& GPUScene = Application::get().getGPUScene();
+
+		result.frameCounter = getFrameCounter();
+		result.frameCounterMod8 = getFrameCounter() % 8;
+		
+		result.GLTFPrimitiveDataBuffer = GPUScene.getGLTFPrimitiveDataPool().getBindlessSRVId();
+		result.GLTFPrimitiveDetailBuffer = GPUScene.getGLTFPrimitiveDetailPool().getBindlessSRVId();
+
+		return result;
 	}
 }

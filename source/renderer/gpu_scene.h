@@ -7,6 +7,8 @@
 #include <shader/gltf.h>
 #include <asset/gltf/gltf.h>
 
+#include <renderer/render_helper.h>
+
 namespace chord
 {
 	extern void GPUSceneScatterUpload(
@@ -129,6 +131,16 @@ namespace chord
 			m_updateObjects.clear();
 
 			return true;
+		}
+
+		uint32 getBindlessSRVId() const
+		{
+			if (m_currentGPUBuffer == nullptr)
+			{
+				return ~0;
+			}
+
+			return m_currentGPUBuffer->get()->requireView(true, false).storage.get();
 		}
 
 	private:

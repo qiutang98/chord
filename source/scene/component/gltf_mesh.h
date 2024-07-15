@@ -16,7 +16,7 @@ namespace chord
 		GLTFMeshComponent() = default;
 		GLTFMeshComponent(SceneNodeRef sceneNode) : Component(sceneNode) { }
 
-		virtual void onPerframeCollect(PerframeCollected& collector) const override;
+		virtual void onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const override;
 
 		virtual ~GLTFMeshComponent() = default;
 
@@ -34,7 +34,7 @@ namespace chord
 
 	private:
 		// Using gltf mesh id.
-		int32 m_gltfMeshId;
+		int32 m_gltfMeshId = -1;
 
 		// Using GLTF asset info.
 		AssetSaveInfo m_gltfAssetInfo;

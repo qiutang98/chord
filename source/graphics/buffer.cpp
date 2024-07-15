@@ -7,7 +7,7 @@
 
 namespace chord::graphics
 {
-	static bool bGraphicsBufferLifeLogTraceEnable = true;
+	static bool bGraphicsBufferLifeLogTraceEnable = false;
 	static AutoCVarRef<bool> cVarBufferLifeLogTraceEnable(
 		"r.graphics.resource.buffer.lifeLogTrace",
 		bGraphicsBufferLifeLogTraceEnable,

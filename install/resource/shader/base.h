@@ -88,8 +88,24 @@
 
 #endif ///////////////////////////////////////////////////////
 
+struct GPUBasicData
+{
+    uint frameCounter;
+    uint frameCounterMod8;
+
+    uint GLTFPrimitiveDetailBuffer;
+    uint GLTFPrimitiveDataBuffer;
+
+    uint GLTFObjectCount;
+    uint GLTFObjectBuffer;
+    uint pad0;
+    uint pad1;
+};
+
 struct PerframeCameraView
 {
+    GPUBasicData basicData;
+
     float4x4 translatedWorldToView;
     float4x4 viewToTranslatedWorld;
 
@@ -116,5 +132,7 @@ struct GPUObjectGLTFPrimitive
     uint pad1;
     uint pad2;
 };
+
+#define GPU_WAVE_THREADS 32
 
 #endif // !SHADER_BASE_H

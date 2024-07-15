@@ -36,12 +36,10 @@ struct GLTFMeshlet
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFMeshlet);
 }
 
-
-
 // Store in GPU scene.
 struct GLTFPrimitiveBuffer
 {
-    GLTFPrimitiveLOD lods[kMaxGLTFLodCount];
+    chord::GLTFPrimitiveLOD lods[kMaxGLTFLodCount];
 
     float3 posMin;
     uint primitiveDatasBufferId;
@@ -66,10 +64,10 @@ inline GLTFPrimitiveBuffer fillGLTFPrimitiveBuffer(float4 data[12])
 
     for(int i = 0; i < kMaxGLTFLodCount; i ++)
     {
-        result.lods->firstIndex   = asuint(data[i].x);
-        result.lods->indexCount   = asuint(data[i].y);
-        result.lods->firstMeshlet = asuint(data[i].z);
-        result.lods->meshletCount = asuint(data[i].w);
+        result.lods[i].firstIndex   = asuint(data[i].x);
+        result.lods[i].indexCount   = asuint(data[i].y);
+        result.lods[i].firstMeshlet = asuint(data[i].z);
+        result.lods[i].meshletCount = asuint(data[i].w);
     }
 
     result.posMin = data[kMaxGLTFLodCount + 0].xyz;
@@ -88,6 +86,9 @@ inline GLTFPrimitiveBuffer fillGLTFPrimitiveBuffer(float4 data[12])
     
     return result;
 }
+
+T_BINDLESS_CONSTATNT_BUFFER_DECLARE(GLTFPrimitiveBuffer)
+
 #endif
 
 // Store in GPUScene.
@@ -107,6 +108,8 @@ struct GLTFPrimitiveDatasBuffer
     uint smoothNormalsBuffer;
 };
 
+#ifndef __cplusplus
+
 inline GLTFPrimitiveDatasBuffer fillGLTFPrimitiveDatasBuffer(float4 data[3])
 {
     GLTFPrimitiveDatasBuffer result;
@@ -125,3 +128,7 @@ inline GLTFPrimitiveDatasBuffer fillGLTFPrimitiveDatasBuffer(float4 data[3])
     return result;
 }
 
+T_BINDLESS_CONSTATNT_BUFFER_DECLARE(GLTFPrimitiveDatasBuffer)
+T_BINDLESS_CONSTATNT_BUFFER_DECLARE(GPUObjectGLTFPrimitive)
+
+#endif

@@ -17,9 +17,9 @@ namespace chord
 
         static SceneNodeRef create(const size_t id, const u16str& name, SceneRef scene);
         void tick(const ApplicationTickData& tickData);
-        void perframeCollect(PerframeCollected& collector);
+        void perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const;
 
-        GPUObjectBasicData getObjectBasicData() const;
+        GPUObjectBasicData getObjectBasicData(const PerframeCameraView& cameraView) const;
 
     public:
         const auto& getId() const { return m_id; }
@@ -31,16 +31,16 @@ namespace chord
         bool getVisibility() const { return m_bVisibility; }
         bool getStatic() const { return m_bStatic; }
 
-        std::shared_ptr<Component> getComponent(const std::string& id);
+        std::shared_ptr<Component> getComponent(const std::string& id, bool bCheckRange = false) const;
 
         template <typename T>
-        std::shared_ptr<T> getComponent()
+        std::shared_ptr<T> getComponent(bool bCheckRange = false) const
         {
             static_assert(std::is_base_of_v<Component, T>, "T must derive from Component.");
-            return std::dynamic_pointer_cast<T>(getComponent(typeid(T).name()));
+            return std::dynamic_pointer_cast<T>(getComponent(typeid(T).name(), bCheckRange));
         }
 
-        auto getTransform() { return getComponent<Transform>(); }
+        auto getTransform() const { return getComponent<Transform>(); }
         auto getParent() { return m_parent.lock(); }
         auto getPtr() { return shared_from_this(); }
         auto getScene() { return m_scene.lock(); }

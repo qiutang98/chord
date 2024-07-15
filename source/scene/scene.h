@@ -33,6 +33,9 @@ namespace chord
 		// Tick every frame.
 		void tick(const ApplicationTickData& tickData);
 
+		// Perview perframe collect.
+		void perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView);
+
 		// Get root node.
 		SceneNodeRef getRootNode() const
 		{
@@ -143,9 +146,6 @@ namespace chord
 
 	private:
 		static AssetTypeMeta createTypeMeta();
-
-		// Perframe data collected from every components.
-		PerframeCollected m_perframe;
 
 	private:
 		// Cache scene node index. use for runtime guid.

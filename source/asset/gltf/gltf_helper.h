@@ -68,7 +68,7 @@ namespace chord
 		void freeGPUScene();
 
 		uint32 getGPUSceneId() const;
-
+		uint32 getGPUScenePrimitiveDetailId(uint32 meshId, uint32 primitiveId) const;
 	private:		
 		uint32 m_gpuSceneGLTFPrimitiveAssetId = -1;
 		std::vector<std::vector<uint32>> m_gpuSceneGLTFPrimitiveDetailAssetId = {};

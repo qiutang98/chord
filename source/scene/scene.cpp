@@ -80,11 +80,13 @@ namespace chord
 		{
 			node->tick(tickData);
 		}, m_root);
+	}
 
-		m_perframe = {}; 
-		loopNodeTopToDown([this, tickData](SceneNodeRef node)
+	void Scene::perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView)
+	{
+		loopNodeTopToDown([&](SceneNodeRef node)
 		{
-			node->perframeCollect(m_perframe);
+			node->perviewPerframeCollect(collector, cameraView);
 		}, m_root);
 	}
 

@@ -34,16 +34,26 @@ namespace chord
 		return result;
 	}
 
-	void GLTFMeshComponent::onPerframeCollect(PerframeCollected& collector) const
+	void GLTFMeshComponent::onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const
 	{
-		Super::onPerframeCollect(collector);
+		Super::onPerViewPerframeCollect(collector, cameraView);
 
-		if (m_gltfGPU == nullptr || m_gltfAsset == nullptr)
+		if (m_gltfGPU == nullptr || m_gltfAsset == nullptr || m_gltfMeshId < 0)
 		{
 			return;
 		}
 
+		GPUObjectGLTFPrimitive templatePrimitive { };
+		templatePrimitive.basicData = getNode()->getObjectBasicData(cameraView);
 
+		const auto& meshes = m_gltfAsset->getMeshes().at(m_gltfMeshId);
+		for (uint32 primitiveId = 0; primitiveId < meshes.primitives.size(); primitiveId++)
+		{
+			templatePrimitive.GLTFPrimitiveDetail = m_gltfGPU->getGPUScenePrimitiveDetailId(m_gltfMeshId, primitiveId);
+
+			// Add one primitive.
+			collector.gltfPrimitives.push_back(templatePrimitive);
+		}
 	}
 
 	bool GLTFMeshComponent::setGLTFMesh(const AssetSaveInfo& asset, int32 meshId)

@@ -16,6 +16,8 @@ namespace chord
 
 	};
 
+	extern GPUBasicData getGPUBasicData();
+
 	class DeferredRenderer : NonCopyable
 	{
 	public:

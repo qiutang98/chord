@@ -1414,4 +1414,9 @@ namespace chord
 		return m_gpuSceneGLTFPrimitiveAssetId;
 	}
 
+	uint32 GPUGLTFPrimitiveAsset::getGPUScenePrimitiveDetailId(uint32 meshId, uint32 primitiveId) const
+	{
+		return m_gpuSceneGLTFPrimitiveDetailAssetId.at(meshId).at(primitiveId);
+	}
+
 }

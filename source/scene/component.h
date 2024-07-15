@@ -22,7 +22,8 @@ namespace chord
 		virtual void tick(const ApplicationTickData& tickData) {}
 		virtual void release() { }
 
-		virtual void onPerframeCollect(PerframeCollected& collector) const { }
+		// Perview collect.
+		virtual void onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const { }
 		// ~Component Interface.
 		
 		// Change owner node.

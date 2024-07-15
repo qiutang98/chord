@@ -55,6 +55,9 @@ namespace chord
 		{
 			pipe->pushConst(cmd, pushConst);
 		});
+
+		// Post update, change stage to SRV.
+		asSRV(computeQueue, GPUSceneBuffer->get());
 	}
 
 	void chord::enqueueGPUSceneUpdate()
