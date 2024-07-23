@@ -43,6 +43,11 @@ namespace chord
 			return;
 		}
 
+		if (!m_gltfGPU->isReady())
+		{
+			return;
+		}
+
 		GPUObjectGLTFPrimitive templatePrimitive { };
 		templatePrimitive.basicData = getNode()->getObjectBasicData(cameraView);
 

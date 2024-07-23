@@ -30,7 +30,7 @@ namespace chord
 		graphics::GraphicsOrComputeQueue& computeQueue,
 		graphics::PoolBufferGPUOnlyRef GPUSceneBuffer,
 		std::vector<math::uvec4>&& indexingData,
-		std::vector<math::vec4>&& collectedData)
+		std::vector<math::uvec4>&& collectedData)
 	{
 		auto indexingDataBuffer = getContext().getBufferPool().createHostVisible(
 			"indexingDataBuffer", 
@@ -40,7 +40,7 @@ namespace chord
 		auto collectedDataBuffer = getContext().getBufferPool().createHostVisible(
 			"collectedDataBuffer",
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-			SizedBuffer(sizeof(math::vec4) * collectedData.size(), (void*)collectedData.data()));
+			SizedBuffer(sizeof(math::uvec4) * collectedData.size(), (void*)collectedData.data()));
 
 		GPUSceneScatterUploadPushConsts pushConst { };
 		pushConst.indexingBufferId = asSRV(computeQueue, indexingDataBuffer->getRef());

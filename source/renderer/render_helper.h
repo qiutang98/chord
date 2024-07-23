@@ -9,6 +9,17 @@ namespace chord
 {
 	struct DepthStencilRT
 	{
+		DepthStencilRT() = default;
+
+		DepthStencilRT(graphics::PoolTextureRef inRT, graphics::EDepthStencilOp inDepthOp, graphics::ERenderTargetLoadStoreOp inLoadStoreOp, VkClearValue inClearValue = {})
+			: RT(inRT)
+			, depthStencilOp(inDepthOp)
+			, Op(inLoadStoreOp)
+			, clearValue(inClearValue)
+		{
+
+		}
+
 		graphics::PoolTextureRef RT = nullptr;
 		graphics::EDepthStencilOp depthStencilOp = graphics::EDepthStencilOp::DepthNop_StencilNop;
 		graphics::ERenderTargetLoadStoreOp Op = graphics::ERenderTargetLoadStoreOp::Nope_Nope;

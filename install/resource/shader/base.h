@@ -133,6 +133,4 @@ struct GPUObjectGLTFPrimitive
     uint pad2;
 };
 
-#define GPU_WAVE_THREADS 32
-
 #endif // !SHADER_BASE_H

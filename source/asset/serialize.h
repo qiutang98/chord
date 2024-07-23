@@ -10,18 +10,18 @@
 
 registerPODClassMember(GLTFPrimitiveLOD)
 {
-	ar(firstIndex, indexCount);
-	ar(firstMeshlet, meshletCount);
+	ar(data.firstIndex, data.indexCount);
+	ar(data.firstMeshlet, data.meshletCount);
 }
 
 registerPODClassMember(GLTFMeshlet)
 {
-	ar(posMin);
-	ar(vertexCount);
-	ar(posMax);
-	ar(triangleCount);
-	ar(posAverage);
-	ar(dataOffset);
+	ar(data.posMin);
+	ar(data.vertexCount);
+	ar(data.posMax);
+	ar(data.triangleCount);
+	ar(data.posAverage);
+	ar(data.dataOffset);
 }
 
 registerPODClassMember(GLTFPrimitive)

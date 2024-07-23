@@ -71,6 +71,22 @@ namespace chord
 		float occlusionTextureStrength = 1.0f;
 	};
 
+	struct GLTFPrimitiveLOD
+	{
+		ARCHIVE_DECLARE;
+
+		GPUGLTFPrimitiveLOD data;
+	};
+	CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveLOD);
+
+	struct GLTFMeshlet
+	{
+		ARCHIVE_DECLARE;
+
+		GPUGLTFMeshlet data;
+	};
+	CHORD_CHECK_SIZE_GPU_SAFE(GLTFMeshlet);
+
 	struct GLTFPrimitive
 	{
 		ARCHIVE_DECLARE;

@@ -9,6 +9,7 @@
 #include <renderer/mesh/gltf_rendering.h>
 #include <application/application.h>
 #include <renderer/gpu_scene.h>
+#include <scene/scene_manager.h>
 
 namespace chord
 {
@@ -71,30 +72,6 @@ namespace chord
 		}
 	}
 
-	PoolBufferHostVisible DeferredRenderer::getCameraViewUniformBuffer(
-		uint32& outId,
-		const ApplicationTickData& tickData, 
-		CommandList& cmd,
-		ICamera* camera)
-	{
-		m_perframeCameraView.basicData = getGPUBasicData();
-
-
-		camera->fillViewUniformParameter(m_perframeCameraView);
-		auto perframeGPU = getContext().getBufferPool().createHostVisible(
-			"PerframeCameraView - " + m_name,
-			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-			SizedBuffer(sizeof(m_perframeCameraView), (void*)&m_perframeCameraView));
-
-		// Insert perframe lazy destroy.
-		cmd.insertPendingResource(perframeGPU);
-
-		// Require buffer.
-		outId = perframeGPU->get().requireView(false, true).uniform.get();
-
-		return perframeGPU;
-	}
-
 	bool DeferredRenderer::DimensionConfig::updateDimension(uint32 outputWidth, uint32 outputHeight, float renderScaleToPost, float postScaleToOutput)
 	{
 		check(renderScaleToPost > 0.0 && postScaleToOutput > 0.0);
@@ -130,11 +107,76 @@ namespace chord
 
 	}
 
+	template<typename T>
+	uint32 uploadBufferToGPU(bool bUniform, bool bStorage, CommandList& cmd, const std::string& name, const T* data, uint32 count = 1)
+	{
+		VkBufferUsageFlags usageFlag = 0;
+		if (bUniform)
+		{
+			usageFlag |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+		}
+		if (bStorage)
+		{
+			usageFlag |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+		}
+
+		auto newGPUBuffer = getContext().getBufferPool().createHostVisible(
+			name,
+			usageFlag,
+			SizedBuffer(sizeof(T) * count, (void*)data));
+
+		// Insert perframe lazy destroy.
+		cmd.insertPendingResource(newGPUBuffer);
+		const auto& viewC = newGPUBuffer->get().requireView(bStorage, bUniform);
+
+		if (bUniform)
+		{
+			return viewC.uniform.get();
+		}
+
+		check(bStorage);
+		return viewC.storage.get();
+	}
+
 	void DeferredRenderer::render(
 		const ApplicationTickData& tickData, 
 		graphics::CommandList& cmd,
 		ICamera* camera)
 	{
+		auto* sceneManager = &Application::get().getEngine().getSubsystem<SceneManager>();
+		auto scene = sceneManager->getActiveScene();
+
+		// Update camera info first.
+		{
+			m_perframeCameraView.basicData = getGPUBasicData();
+			camera->fillViewUniformParameter(m_perframeCameraView);
+		}
+
+		// Now collect perframe camera.
+		PerframeCollected perframe { };
+		GLTFRenderDescriptor gltfRenderDescritptor{};
+		{
+			// Collected.
+			scene->perviewPerframeCollect(perframe, m_perframeCameraView);
+
+			gltfRenderDescritptor.objectCount = perframe.gltfPrimitives.size();
+			gltfRenderDescritptor.perframeCollect = &perframe;
+
+			if (gltfRenderDescritptor.objectCount > 0)
+			{
+				gltfRenderDescritptor.bufferId =
+					uploadBufferToGPU(false, true, cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfRenderDescritptor.objectCount);
+			}
+			else
+			{
+				gltfRenderDescritptor.bufferId = ~0;
+			}
+
+			m_perframeCameraView.basicData.GLTFObjectCount = gltfRenderDescritptor.objectCount;
+			m_perframeCameraView.basicData.GLTFObjectBuffer = gltfRenderDescritptor.bufferId;
+		}
+
+
 		const uint32 currentRenderWidth = m_dimensionConfig.getRenderWidth();
 		const uint32 currentRenderHeight = m_dimensionConfig.getRenderHeight();
 
@@ -144,8 +186,7 @@ namespace chord
 		auto& graphics = cmd.getGraphicsQueue();
 
 		// Allocate view gpu uniform buffer.
-		uint32 viewGPUId;
-		auto viewGPU = getCameraViewUniformBuffer(viewGPUId, tickData, cmd, camera);
+		uint32 viewGPUId = uploadBufferToGPU(true, false, cmd, "PerViewCamera-" + m_name, &m_perframeCameraView);
 		
 		// 
 		auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
@@ -157,7 +198,7 @@ namespace chord
 			addClearGbufferPass(graphics, gbuffers);
 
 			// Render GLTF
-			gltfBasePassRendering(graphics, gbuffers, viewGPUId);
+			gltfBasePassRendering(graphics, gbuffers, viewGPUId, gltfRenderDescritptor);
 
 		}
 		auto gbufferPassTimeline = graphics.endCommand();
@@ -178,9 +219,11 @@ namespace chord
 
 		const auto& GPUScene = Application::get().getGPUScene();
 
+		// Basic data collect.
 		result.frameCounter = getFrameCounter();
 		result.frameCounterMod8 = getFrameCounter() % 8;
 		
+		// GPU scene.
 		result.GLTFPrimitiveDataBuffer = GPUScene.getGLTFPrimitiveDataPool().getBindlessSRVId();
 		result.GLTFPrimitiveDetailBuffer = GPUScene.getGLTFPrimitiveDetailPool().getBindlessSRVId();
 

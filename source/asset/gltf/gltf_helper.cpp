@@ -33,11 +33,10 @@
 #include <asset/meshoptimizer/meshoptimizer.h>
 #include <renderer/gpu_scene.h>
 #include <utils/thread.h>
+#include <shader/gltf.h>
 
 namespace chord
 {
-	constexpr uint32 kMeshletMaxVertices  = 64;
-	constexpr uint32 kMeshletMaxTriangles = 124;
 	constexpr float  kMeshletConeWeight = 0.5f;
 	constexpr double kGLTFLODStepReduceFactor = 0.75;
 	constexpr float  kGLTFLODTargetError = 1e-2f;
@@ -858,20 +857,25 @@ namespace chord
 									gltfBin.primitiveData.meshletData.push_back(meshletVertices[meshlet.vertex_offset + i]);
 								}
 
-								const uint32* indexGroups = reinterpret_cast<const uint32*>(&meshletTriangles[0] + meshlet.triangle_offset);
-								uint32 indexGroupCount = (meshlet.triangle_count * 3 + 3) / 4;
-
-								for (uint32 i = 0; i < indexGroupCount; ++i)
+								const uint8* triangleOffset = &meshletTriangles[0] + meshlet.triangle_offset;
+								for (uint32 i = 0; i < meshlet.triangle_count; ++i)
 								{
-									gltfBin.primitiveData.meshletData.push_back(indexGroups[i]);
+									uint32 data = 0x0;
+
+									uint8* dataArray = (uint8*)(&data);
+									dataArray[0] = triangleOffset[i * 3 + 0];
+									dataArray[1] = triangleOffset[i * 3 + 1];
+									dataArray[2] = triangleOffset[i * 3 + 2];
+
+									gltfBin.primitiveData.meshletData.push_back(data);
 								}
 
 								meshopt_Bounds bounds = meshopt_computeMeshletBounds(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, &positions[0].x, positions.size(), sizeof(positions[0]));
 								GLTFMeshlet m = { };
 
-								m.dataOffset    = dataOffset;
-								m.triangleCount = meshlet.triangle_count;
-								m.vertexCount   = meshlet.vertex_count;
+								m.data.dataOffset    = dataOffset;
+								m.data.triangleCount = meshlet.triangle_count;
+								m.data.vertexCount   = meshlet.vertex_count;
 								
 								math::vec3 posMin = math::vec3( FLT_MAX);
 								math::vec3 posMax = math::vec3(-FLT_MAX);
@@ -901,10 +905,10 @@ namespace chord
 									posAvg += positions[index2];
 								}
 
-								m.posMin = posMin;
-								m.posMax = posMax;
+								m.data.posMin = posMin;
+								m.data.posMax = posMax;
 								posAvg /= double(indexCount);
-								m.posAverage = posAvg;
+								m.data.posAverage = posAvg;
 
 								gltfBin.primitiveData.meshlets.push_back(m);
 							}
@@ -918,10 +922,10 @@ namespace chord
 							primitiveMesh.lods.push_back({});
 							GLTFPrimitiveLOD& lod = primitiveMesh.lods.back();
 
-							lod.firstIndex   = gltfBin.primitiveData.indices.size();
-							lod.indexCount   = static_cast<uint32>(lodIndices.size());
-							lod.firstMeshlet = gltfBin.primitiveData.meshlets.size();
-							lod.meshletCount = computeMeshlet(tempPositions, lodIndices);
+							lod.data.firstIndex   = gltfBin.primitiveData.indices.size();
+							lod.data.indexCount   = static_cast<uint32>(lodIndices.size());
+							lod.data.firstMeshlet = gltfBin.primitiveData.meshlets.size();
+							lod.data.meshletCount = computeMeshlet(tempPositions, lodIndices);
 
 							// Insert to bin data.
 							gltfBin.primitiveData.indices.insert(gltfBin.primitiveData.indices.end(), lodIndices.begin(), lodIndices.end());
@@ -1012,7 +1016,7 @@ namespace chord
 						ctx.m_pInterface->m_getNumFaces = [](const SMikkTSpaceContext* pContext) -> int
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							return ctx->mesh->lods[0].indexCount / 3;
+							return ctx->mesh->lods[0].data.indexCount / 3;
 						};
 						ctx.m_pInterface->m_getNumVerticesOfFace = [](const SMikkTSpaceContext* pContext, const int iFace) -> int
 						{
@@ -1306,18 +1310,8 @@ namespace chord
 		#undef ASSIGN_DATA
 
 		{
-			std::array<math::vec4, GPUGLTFPrimitiveAsset::kGPUSceneDataFloat4Count> uploadDatas{};
-
-			uploadDatas[0].x = asfloat(uploadData.indicesBuffer);
-			uploadDatas[0].y = asfloat(uploadData.meshletDataBuffer);
-			uploadDatas[0].z = asfloat(uploadData.meshletBuffer);
-			uploadDatas[0].w = asfloat(uploadData.positionBuffer);
-			uploadDatas[1].x = asfloat(uploadData.normalBuffer);
-			uploadDatas[1].y = asfloat(uploadData.textureCoord0Buffer);
-			uploadDatas[1].z = asfloat(uploadData.tangentBuffer);
-			uploadDatas[1].w = asfloat(uploadData.textureCoord1Buffer);
-			uploadDatas[2].x = asfloat(uploadData.color0Buffer);
-			uploadDatas[2].y = asfloat(uploadData.smoothNormalsBuffer);
+			std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDataFloat4Count> uploadDatas{};
+			memcpy(uploadDatas.data(), &uploadData, sizeof(uploadData));
 
 			gltfPrimitiveAssetPool.updateId(m_gpuSceneGLTFPrimitiveAssetId, uploadDatas);
 		}
@@ -1338,41 +1332,35 @@ namespace chord
 				meshPrimitiveIds[primitiveId] = gltfPrimitiveDetailPool.requireId(getPrimitiveDetailHash(GPUSceneHash(), meshId, primitiveId));
 
 				const auto& primitiveInfo = meshInfo.primitives[primitiveId];
-				std::array<math::vec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};
 
-				for (uint32 i = 0; i < kMaxGLTFLodCount; i++)
+				// Fill upload content.
+				GLTFPrimitiveBuffer primitiveBufferData{};
 				{
-					GLTFPrimitiveLOD lod{};
-					if (i < primitiveInfo.lods.size())
+					for (uint32 i = 0; i < kMaxGLTFLodCount; i++)
 					{
-						lod = primitiveInfo.lods[i];
+						GLTFPrimitiveLOD lod{};
+						if (i < primitiveInfo.lods.size())
+						{
+							lod = primitiveInfo.lods[i];
+						}
+
+						primitiveBufferData.lods[i] = lod.data;
 					}
 
-					uploadDatas[i].x = asfloat(lod.firstIndex);
-					uploadDatas[i].y = asfloat(lod.indexCount);
-					uploadDatas[i].z = asfloat(lod.firstMeshlet);
-					uploadDatas[i].w = asfloat(lod.meshletCount);
+					primitiveBufferData.posMin = primitiveInfo.posMin;
+					primitiveBufferData.primitiveDatasBufferId = m_gpuSceneGLTFPrimitiveAssetId;
+					primitiveBufferData.posMax = primitiveInfo.posMax;
+					primitiveBufferData.vertexOffset = primitiveInfo.vertexOffset;
+					primitiveBufferData.posAverage = primitiveInfo.posAverage;
+					primitiveBufferData.vertexCount = primitiveInfo.vertexCount;
+					primitiveBufferData.color0Offset = primitiveInfo.colors0Offset;
+					primitiveBufferData.smoothNormalOffset = primitiveInfo.smoothNormalOffset;
+					primitiveBufferData.textureCoord1Offset = primitiveInfo.textureCoord1Offset;
+					primitiveBufferData.materialBufferId = asfloat(~0); // TODO: Material id.
 				}
 
-				uploadDatas[kMaxGLTFLodCount + 0].x = primitiveInfo.posMin.x;
-				uploadDatas[kMaxGLTFLodCount + 0].y = primitiveInfo.posMin.y;
-				uploadDatas[kMaxGLTFLodCount + 0].z = primitiveInfo.posMin.z;
-				uploadDatas[kMaxGLTFLodCount + 0].w = asfloat(m_gpuSceneGLTFPrimitiveAssetId);
-
-				uploadDatas[kMaxGLTFLodCount + 1].x = primitiveInfo.posMax.x;
-				uploadDatas[kMaxGLTFLodCount + 1].y = primitiveInfo.posMax.y;
-				uploadDatas[kMaxGLTFLodCount + 1].z = primitiveInfo.posMax.z;
-				uploadDatas[kMaxGLTFLodCount + 1].w = asfloat(primitiveInfo.vertexOffset);
-
-				uploadDatas[kMaxGLTFLodCount + 2].x = primitiveInfo.posAverage.x;
-				uploadDatas[kMaxGLTFLodCount + 2].y = primitiveInfo.posAverage.y;
-				uploadDatas[kMaxGLTFLodCount + 2].z = primitiveInfo.posAverage.z;
-				uploadDatas[kMaxGLTFLodCount + 2].w = asfloat(primitiveInfo.vertexCount);
-
-				uploadDatas[kMaxGLTFLodCount + 3].x = asfloat(primitiveInfo.colors0Offset);
-				uploadDatas[kMaxGLTFLodCount + 3].y = asfloat(primitiveInfo.smoothNormalOffset);
-				uploadDatas[kMaxGLTFLodCount + 3].z = asfloat(primitiveInfo.textureCoord1Offset);
-				uploadDatas[kMaxGLTFLodCount + 3].w = asfloat(~0); // TODO: Material id.
+				std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};
+				memcpy(uploadDatas.data(), &primitiveBufferData, sizeof(primitiveBufferData));
 
 				// Updata to GPUScene.
 				gltfPrimitiveDetailPool.updateId(meshPrimitiveIds[primitiveId], uploadDatas);

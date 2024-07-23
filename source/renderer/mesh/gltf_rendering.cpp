@@ -6,7 +6,7 @@
 #include <renderer/fullscreen.h>
 #include <renderer/mesh/gltf_rendering.h>
 #include <shader/shader.h>
-#include <shader/gltf.hlsl>
+#include <shader/gltf_basepass.hlsl>
 
 namespace chord
 {
@@ -34,59 +34,56 @@ namespace chord
         sGLTFRenderingShaderDebugPosition,
         "Position"
     );
-
+#if 0
     namespace GLTFRendering
     {
-        class SV_bDebugPrint  : SHADER_VARIANT_BOOL("DEBUG_PRINT");
-        class SV_PositionMode : SHADER_VARIANT_SPARSE_INT("POSITION_MODE", 5, 9);
-        class SV_ColorMode    : SHADER_VARIANT_RANGE_INT("COLOR_MODE", 0, 3);
-
-        class GLTFRenderingAS : public GlobalShader
+        class GLTFRenderingVS : public GlobalShader
         {
         public:
             DECLARE_SUPER_TYPE(GlobalShader);
-            using Permutation = TShaderVariantVector<SV_bDebugPrint>;
-        };
 
-        class GLTFRenderingMS : public GlobalShader
+        };
+        IMPLEMENT_GLOBAL_SHADER(GLTFRenderingVS, "resource/shader/gltf_basepass.hlsl", "mainVS", EShaderStage::Vertex);
+
+        class GLTFRenderingPS : public GlobalShader
         {
         public:
             DECLARE_SUPER_TYPE(GlobalShader);
-            using Permutation = TShaderVariantVector<SV_PositionMode, SV_ColorMode>;
+
         };
-
-        IMPLEMENT_GLOBAL_SHADER(GLTFRenderingAS, "resource/shader/gltf.hlsl", "mainAS", EShaderStage::Amplify);
-        IMPLEMENT_GLOBAL_SHADER(GLTFRenderingMS, "resource/shader/gltf.hlsl", "mainMS", EShaderStage::Mesh);
-
-        PRIVATE_GLOBAL_SHADER(GLTFRenderingPS, "resource/shader/gltf.hlsl", "mainPS", EShaderStage::Pixel);
+        IMPLEMENT_GLOBAL_SHADER(GLTFRenderingPS, "resource/shader/gltf_basepass.hlsl", "mainPS", EShaderStage::Pixel);
     }
-
+#endif
     void chord::gltfBasePassRendering(
         graphics::GraphicsQueue& queue, 
         GBufferTextures& gbuffers, 
-        uint32 cameraView)
+        uint32 cameraView,
+        const GLTFRenderDescriptor& gltfRenderDescriptor)
     {
+#if 0
+        if (gltfRenderDescriptor.objectCount == 0)
+        {
+            return;
+        }
+
         using namespace GLTFRendering;
 
         queue.checkRecording();
 
         RenderTargets RTs{ };
         RTs.RTs[0] = RenderTargetRT(gbuffers.color, ERenderTargetLoadStoreOp::Load_Store);
+        RTs.depthStencil = DepthStencilRT(
+            gbuffers.color, 
+            EDepthStencilOp::DepthWrite_StencilNop,
+            ERenderTargetLoadStoreOp::Load_Store);
 
-        GLTFDrawPushConsts pushConst { };
-        pushConst.cameraViewId = cameraView;
+        
+        auto taskShader = nullptr;
 
-        GLTFRenderingAS::Permutation taskShaderPermutations;
-        taskShaderPermutations.set<SV_bDebugPrint>(sGLTFRenderingShaderDebugMode);
+        // Mesh shader
+        auto meshShader = getContext().getShaderLibrary().getShader<GLTFRenderingMS>();
 
-
-        auto taskShader = getContext().getShaderLibrary().getShader<GLTFRenderingAS>(taskShaderPermutations);
-
-        GLTFRenderingMS::Permutation meshShaderPermutations;
-        meshShaderPermutations.set<SV_PositionMode>(sGLTFRenderingShaderDebugPosition);
-        meshShaderPermutations.set<SV_ColorMode>(sGLTFRenderingShaderDebugColor);
-        auto meshShader = getContext().getShaderLibrary().getShader<GLTFRenderingMS>(meshShaderPermutations);
-
+        // Pixel shader
         auto pixelShader = getContext().getShaderLibrary().getShader<GLTFRenderingPS>();
 
         auto pipeline = getContext().graphicsMeshShadingPipe(
@@ -102,11 +99,22 @@ namespace chord
             vkCmdSetVertexInputEXT(cmd, 0, nullptr, 0, nullptr);
 
             pipeline->bind(cmd);
-            pipeline->pushConst(cmd, pushConst);
+            const auto& primitives = gltfRenderDescriptor.perframeCollect->gltfPrimitives;
 
-            vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+            for (uint32 i = 0; i < gltfRenderDescriptor.objectCount; i++)
+            {
+                GLTFDrawPushConsts pushConst{ };
+                pushConst.cameraViewId = cameraView;
+                pushConst.objectId = i;
+                pushConst.lod = 0;
+
+                pipeline->pushConst(cmd, pushConst);
+
+                vkCmdDrawMeshTasksEXT(cmd, 10240, 1, 1);
+            }
         }
         RTs.endRendering(queue);
+#endif
     }
 
 }

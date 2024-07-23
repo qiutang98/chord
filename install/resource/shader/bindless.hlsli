@@ -114,6 +114,8 @@ T_BINDLESS_STRUCTURED_BUFFER_DECLARE(uint2)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(uint3)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(uint4)
 
+#undef T_BINDLESS_STRUCTURED_BUFFER_DECLARE
+
 // ByteAddressBuffer don't care type. 
 BINDLESS_DECLARE(ByteAddressBuffer, (int)chord::EBindingType::BindlessStorageBuffer)
 BINDLESS_DECLARE(RWByteAddressBuffer, (int)chord::EBindingType::BindlessStorageBuffer)
@@ -125,20 +127,17 @@ BINDLESS_DECLARE(SamplerComparisonState, (int)chord::EBindingType::BindlessSampl
 // Helper macro to load all template type.
 #define TBindless(Type, DataType, Index) T_BINDLESS_NAMED_RESOURCE(Type, DataType)[NonUniformResourceIndex(Index)]
 #define  Bindless(Type, Index) BINDLESS_NAMED_RESOURCE(Type)[NonUniformResourceIndex(Index)]
+#define ByteAddressBindless(Index) Bindless(ByteAddressBuffer, Index)
+#define RWByteAddressBindless(Index) Bindless(RWByteAddressBuffer, Index)
 
-// Other type array:
-// 
-// T_BINDLESS_CONSTATNT_BUFFER_DECLARE()
-// T_BINDLESS_STRUCTURED_BUFFER_DECLARE()
-// 
 // Usage:
 //
 // TBindless(ConstantBuffer, ...)
-// TBindless(StructuredBuffer, ...)
-// TBindless(RWStructuredBuffer, ...)
+// ByteAddressBindless()
 
+
+// Constant buffer use for uniform.
 T_BINDLESS_CONSTATNT_BUFFER_DECLARE(PerframeCameraView)
 #define LoadCameraView(Index) TBindless(ConstantBuffer, PerframeCameraView, Index)
-
 
 #endif // !SHADER_BINDLESS_HLSLI

@@ -15,14 +15,14 @@ namespace chord
 		graphics::GraphicsOrComputeQueue& computeQueue,
 		graphics::PoolBufferGPUOnlyRef GPUSceneBuffer,
 		std::vector<math::uvec4>&& indexingData,
-		std::vector<math::vec4>&& collectedData);
+		std::vector<math::uvec4>&& collectedData);
 
 	template<typename T, uint32 kFloat4Count>
 	class GPUScenePool
 	{
 	public:
 		// Upload type store all need update datas.
-		using UploadType = std::array<math::vec4, kFloat4Count>;
+		using UploadType = std::array<math::uvec4, kFloat4Count>;
 		constexpr static uint32 kPerAllocatedSize = kFloat4Count * sizeof(float) * 4;
 
 		// 
@@ -110,17 +110,17 @@ namespace chord
 
 			//
 			std::vector<math::uvec4> indexingData;
-			std::vector<math::vec4> collectedData;
+			std::vector<math::uvec4> collectedData;
 
 			for (const UpdatedObject& updateObject : m_updateObjects)
 			{
 				math::uvec4 indexing;
 				indexing.x = collectedData.size();
 				indexing.y = kFloat4Count;
-				indexing.z = updateObject.offset;
-				indexingData.push_back(std::move(indexing));
+				indexing.z = updateObject.offset * kFloat4Count;
 
 				// Data copy.
+				indexingData.push_back(std::move(indexing));
 				collectedData.insert(collectedData.end(), updateObject.data.begin(), updateObject.data.end());
 			}
 

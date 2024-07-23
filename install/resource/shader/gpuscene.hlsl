@@ -29,32 +29,33 @@ CHORD_PUSHCONST(GPUSceneScatterUploadPushConsts, pushConsts);
 
 // Scatter upload shader.
 [numthreads(kGPUSceneScatterUploadDimX, 1, 1)]
-void mainCS(uint3 dispatchThreadId : SV_DispatchThreadID)
+void mainCS(uint lane : SV_DispatchThreadID)
 {
-    const uint lane = dispatchThreadId.x;
     if (lane >= pushConsts.uploadCount)
     {
         return;
     }
     
     /**
-        uvec4 indexingDataBuffer[];
-        float4 CollectUploadDataBin[];
+        uint4 indexingDataBuffer[];
+        uint4 CollectUploadDataBin[];
     **/
-    StructuredBuffer<uint4> indexingBuffer = TBindless(StructuredBuffer, uint4, pushConsts.indexingBufferId);
-    const uint4 indexingInfo = indexingBuffer[lane];
+    const uint stripe = 4 * 4;
+    const uint4 indexingInfo = ByteAddressBindless(pushConsts.indexingBufferId).Load<uint4>(lane * stripe);
 
-    RWStructuredBuffer<float4> gpuSceneBuffer = TBindless(RWStructuredBuffer, float4, pushConsts.GPUSceneBufferId);
-    StructuredBuffer<float4> collectedDataBuffer = TBindless(StructuredBuffer, float4, pushConsts.collectedUploadDataBufferId);
+    RWByteAddressBuffer gpuSceneBuffer = RWByteAddressBindless(pushConsts.GPUSceneBufferId);
+    ByteAddressBuffer collectedDataBuffer = ByteAddressBindless(pushConsts.collectedUploadDataBufferId);
 
     const uint scatterBase  = indexingInfo.x;
-    const uint float4Count  = indexingInfo.y;
+    const uint uint4Count   = indexingInfo.y;
     const uint bufferOffset = indexingInfo.z;
 
     // Fill data in GPU scene.
-    for(uint i = 0; i < float4Count; i ++)
+    for (uint i = 0; i < uint4Count; i ++)
     {
-        gpuSceneBuffer[bufferOffset + i] = collectedDataBuffer[scatterBase + i];
+        const uint storePos = (bufferOffset + i) * stripe;
+        const uint loadPos  = (scatterBase  + i) * stripe;
+        gpuSceneBuffer.Store<uint4>(storePos, collectedDataBuffer.Load<uint4>(loadPos));
     }
 }
 
