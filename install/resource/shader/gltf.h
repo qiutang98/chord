@@ -23,13 +23,13 @@ struct GPUGLTFPrimitiveLOD
 struct GPUGLTFMeshlet
 {
     float3 posMin;
-    uint vertexCount;
+    uint firstIndex;
 
     float3 posMax;
     uint triangleCount;
 
     float3 posAverage;
-    uint dataOffset;
+    uint pad0;
 };
 
 // Store in GPU scene.
@@ -57,18 +57,18 @@ CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveBuffer);
 struct GLTFPrimitiveDatasBuffer
 {
     uint indicesBuffer;
-    uint meshletDataBuffer;
     uint meshletBuffer;
     uint positionBuffer;
-
     uint normalBuffer;
+
     uint textureCoord0Buffer;
     uint tangentBuffer;
     uint textureCoord1Buffer;
-
     uint color0Buffer;
+
     uint smoothNormalsBuffer;
     uint pad0;
     uint pad1;
+    uint pad2;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveDatasBuffer);

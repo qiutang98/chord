@@ -40,8 +40,7 @@ void mainCS(uint lane : SV_DispatchThreadID)
         uint4 indexingDataBuffer[];
         uint4 CollectUploadDataBin[];
     **/
-    const uint stripe = 4 * 4;
-    const uint4 indexingInfo = ByteAddressBindless(pushConsts.indexingBufferId).Load<uint4>(lane * stripe);
+    const uint4 indexingInfo = ByteAddressBindless(pushConsts.indexingBufferId).Load<uint4>(lane * sizeof(uint4));
 
     RWByteAddressBuffer gpuSceneBuffer = RWByteAddressBindless(pushConsts.GPUSceneBufferId);
     ByteAddressBuffer collectedDataBuffer = ByteAddressBindless(pushConsts.collectedUploadDataBufferId);
@@ -53,8 +52,8 @@ void mainCS(uint lane : SV_DispatchThreadID)
     // Fill data in GPU scene.
     for (uint i = 0; i < uint4Count; i ++)
     {
-        const uint storePos = (bufferOffset + i) * stripe;
-        const uint loadPos  = (scatterBase  + i) * stripe;
+        const uint storePos = (bufferOffset + i) * sizeof(uint4);
+        const uint loadPos  = (scatterBase  + i) * sizeof(uint4);
         gpuSceneBuffer.Store<uint4>(storePos, collectedDataBuffer.Load<uint4>(loadPos));
     }
 }

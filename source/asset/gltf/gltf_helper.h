@@ -50,7 +50,6 @@ namespace chord
 		std::unique_ptr<ComponentBuffer> uv0s = nullptr;
 		std::unique_ptr<ComponentBuffer> tangents = nullptr;
 		std::unique_ptr<ComponentBuffer> meshlet = nullptr;
-		std::unique_ptr<ComponentBuffer> meshletData = nullptr;
 
 		// Optional
 		std::unique_ptr<ComponentBuffer> colors = nullptr;

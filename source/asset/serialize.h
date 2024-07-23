@@ -17,11 +17,10 @@ registerPODClassMember(GLTFPrimitiveLOD)
 registerPODClassMember(GLTFMeshlet)
 {
 	ar(data.posMin);
-	ar(data.vertexCount);
+	ar(data.firstIndex);
 	ar(data.posMax);
 	ar(data.triangleCount);
 	ar(data.posAverage);
-	ar(data.dataOffset);
 }
 
 registerPODClassMember(GLTFPrimitive)
@@ -58,7 +57,6 @@ registerPODClassMember(GLTFBinary)
 	ar(primitiveData.texcoords1);
 	ar(primitiveData.colors0);
 	ar(primitiveData.meshlets);
-	ar(primitiveData.meshletData);
 }
 
 registerClassMember(IAsset)

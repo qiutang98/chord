@@ -150,7 +150,6 @@ namespace chord
 		struct PrimitiveDatas
 		{
 			std::vector<uint32> indices;
-			std::vector<uint32> meshletData;
 
 			// Meshlet need to push to gpu buffer directly, take care of size pad.
 			std::vector<GLTFMeshlet> meshlets;
@@ -178,8 +177,7 @@ namespace chord
 					+ sizeofV(texcoords1)
 					+ sizeofV(colors0)
 					+ sizeofV(smoothNormals) 
-					+ sizeofV(meshlets)
-					+ sizeofV(meshletData);
+					+ sizeofV(meshlets);
 			}
 		} primitiveData;
 	};

@@ -7,7 +7,7 @@ struct GLTFMeshDrawCmd
     uint firstVertex;
     uint objectId;
     uint packLodMeshlet;
-}
+};
 
 struct GLTFDrawPushConsts
 {
@@ -52,8 +52,8 @@ void perobjectCullingCS(uint lane : SV_DispatchThreadID)
         return;
     }
 
-    const GPUObjectGLTFPrimitive objectInfo = ByteAddressBindless(scene.GLTFObjectBuffer).Load<GPUObjectGLTFPrimitive>(lane);
-    const GLTFPrimitiveBuffer primitiveInfo = ByteAddressBindless(scene.GLTFPrimitiveDetailBuffer).Load<GLTFPrimitiveBuffer>(objectInfo.GLTFPrimitiveDetail);
+    const GPUObjectGLTFPrimitive objectInfo = ByteAddressBindless(scene.GLTFObjectBuffer).Load<GPUObjectGLTFPrimitive>(lane * sizeof(GPUObjectGLTFPrimitive));
+    const GLTFPrimitiveBuffer primitiveInfo = ByteAddressBindless(scene.GLTFPrimitiveDetailBuffer).Load<GLTFPrimitiveBuffer>(objectInfo.GLTFPrimitiveDetail * sizeof(GLTFPrimitiveBuffer));
     
     bool bVisible = true;
     {
@@ -123,8 +123,8 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         meshletId += groupThreadID;
     }
 
-    const GPUObjectGLTFPrimitive objectInfo = ByteAddressBindless(scene.GLTFObjectBuffer).Load<GPUObjectGLTFPrimitive>(objectId);
-    const GLTFPrimitiveBuffer primitiveInfo = ByteAddressBindless(scene.GLTFPrimitiveDetailBuffer).Load<GLTFPrimitiveBuffer>(objectInfo.GLTFPrimitiveDetail);
+    const GPUObjectGLTFPrimitive objectInfo = ByteAddressBindless(scene.GLTFObjectBuffer).Load<GPUObjectGLTFPrimitive>(objectId * sizeof(GPUObjectGLTFPrimitive));
+    const GLTFPrimitiveBuffer primitiveInfo = ByteAddressBindless(scene.GLTFPrimitiveDetailBuffer).Load<GLTFPrimitiveBuffer>(objectInfo.GLTFPrimitiveDetail * sizeof(GLTFPrimitiveBuffer));
     const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
 
     // Skip out of range meshlt. 
@@ -133,8 +133,8 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         return;
     }
 
-    const GLTFPrimitiveDatasBuffer primitiveDataInfo = ByteAddressBindless(scene.GLTFPrimitiveDataBuffer).Load<GLTFPrimitiveDatasBuffer>(primitiveInfo.primitiveDatasBufferId);
-    const GPUGLTFMeshlet meshlet = ByteAddressBindless(primitiveDataInfo.meshletBuffer).Load<GPUGLTFMeshlet>(meshletId);
+    const GLTFPrimitiveDatasBuffer primitiveDataInfo = ByteAddressBindless(scene.GLTFPrimitiveDataBuffer).Load<GLTFPrimitiveDatasBuffer>(primitiveInfo.primitiveDatasBufferId * sizeof(GLTFPrimitiveDatasBuffer));
+    const GPUGLTFMeshlet meshlet = ByteAddressBindless(primitiveDataInfo.meshletBuffer).Load<GPUGLTFMeshlet>(meshletId * sizeof(GPUGLTFMeshlet));
 
     bool bVisible = true;
     {
@@ -162,7 +162,7 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         drawCmd.objectId       = objectId;
         drawCmd.packLodMeshlet = packLodMeshlet(selectedLod, meshletId);
 
-        RWByteAddressBindless(pushConsts.drawedMeshletCmdId).Store<GLTFMeshDrawCmd>(drawCmdId, drawCmd);
+        RWByteAddressBindless(pushConsts.drawedMeshletCmdId).Store<GLTFMeshDrawCmd>(drawCmdId * sizeof(GLTFMeshDrawCmd), drawCmd);
     }
 }
 
@@ -179,75 +179,42 @@ void mainVS(
     uint instanceId : SV_INSTANCEID,
     out BasePassVS2PS output)
 {
+    const GLTFMeshDrawCmd drawCmd = ByteAddressBindless(pushConsts.drawedMeshletCmdId).Load<GLTFMeshDrawCmd>(instanceId * sizeof(GLTFMeshDrawCmd));
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
 
-    GPUObjectGLTFPrimitive objectInfo;
-    GLTFPrimitiveBuffer primitiveInfo; 
-    loadGLTFObjectPrimitive(perView, pushConsts.objectId, objectInfo, primitiveInfo);
+    uint objectId = drawCmd.objectId;
+    uint selectedLod;
+    uint meshletId;
+    {
+        unpackLodMeshlet(drawCmd.packLodMeshlet, selectedLod, meshletId);
+    }
 
-    GPUGLTFPrimitiveLOD lod = primitiveInfo.lods[pushConsts.lod];
+    const GPUObjectGLTFPrimitive objectInfo = ByteAddressBindless(scene.GLTFObjectBuffer).Load<GPUObjectGLTFPrimitive>(objectId * sizeof(GPUObjectGLTFPrimitive));
+    const GLTFPrimitiveBuffer primitiveInfo = ByteAddressBindless(scene.GLTFPrimitiveDetailBuffer).Load<GLTFPrimitiveBuffer>(objectInfo.GLTFPrimitiveDetail * sizeof(GLTFPrimitiveBuffer));
+    const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
+    const GLTFPrimitiveDatasBuffer primitiveDataInfo = ByteAddressBindless(scene.GLTFPrimitiveDataBuffer).Load<GLTFPrimitiveDatasBuffer>(primitiveInfo.primitiveDatasBufferId * sizeof(GLTFPrimitiveDatasBuffer));
+    const GPUGLTFMeshlet meshlet = ByteAddressBindless(primitiveDataInfo.meshletBuffer).Load<GPUGLTFMeshlet>(meshletId * sizeof(GPUGLTFMeshlet));
 
+    ByteAddressBuffer indicesDataBuffer = ByteAddressBindless(primitiveDataInfo.indicesBuffer);
+    ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
+    ByteAddressBuffer normalDataBuffer = ByteAddressBindless(primitiveDataInfo.normalBuffer);
 
-    GLTFPrimitiveDatasBuffer primitiveData = loadGLTFPrimitiveDatasBuffer(perView, primitiveInfo);
-
-    const uint meshletIndex = lod.firstMeshlet + groupId;
-    GPUGLTFMeshlet meshlet = ByteAddressBindless(primitiveData.meshletBuffer).Load<GPUGLTFMeshlet>(meshletIndex);
-
-    // Setup mesh output count. 
-    SetMeshOutputCounts(meshlet.vertexCount, meshlet.triangleCount);
-
-    ByteAddressBuffer meshletDataBuffer = ByteAddressBindless(primitiveData.meshletDataBuffer);
-
-    const uint dataOffset = meshletDataBuffer.Load<uint>(meshlet.dataOffset);
-    const uint vertexOffset = dataOffset;
-    const uint indexOffset  = dataOffset + meshlet.vertexCount;
-
-    ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveData.positionBuffer);
-    ByteAddressBuffer normalDataBuffer = ByteAddressBindless(primitiveData.normalBuffer);
-
+    const uint indicesId = indicesDataBuffer.Load<uint>((meshlet.firstIndex + vertexId) * sizeof(uint));
     // 
     float4x4 localToWorld = objectInfo.basicData.localToWorld;
     float4x4 translatedWorldToView = perView.translatedWorldToView;
     float4x4 viewToClip = perView.viewToClip;
 
-    // Generally vertexCount < 
-    uint vertexIndex = groupThreadId;
-    while (vertexIndex < meshlet.vertexCount)
-    {
-        const uint indicesId = meshletDataBuffer.Load<uint>(vertexOffset + groupThreadId);
+    float4 positionLS = float4(positionDataBuffer.Load<float3>(indicesId * sizeof(float3)), 1.0);
+    float4 positionWS = mul(localToWorld, positionLS);
+    float4 positionVS = mul(translatedWorldToView, positionWS);
+    float4 positionHS = mul(viewToClip, positionVS);
 
-        BasePassMS2PS vertex;
+    output.positionVS = positionVS.xyz;
+    output.positionHS = positionHS;
 
-        float4 positionLS = float4(positionDataBuffer.Load<float3>(indicesId), 1.0);
-        float4 positionWS = mul(localToWorld, positionLS);
-        float4 positionVS = mul(translatedWorldToView, positionWS);
-        float4 positionHS = mul(viewToClip, positionVS);
-
-        vertex.positionVS = positionVS.xyz;
-        vertex.positionHS = positionHS;
-
-        vertex.normalVS   = normalDataBuffer.Load<float3>(indicesId);
-
-        // Fill in buffer.
-        vertices[groupThreadId] = vertex;
-        vertexIndex += 128;
-    }
-
-    uint triangleId = groupThreadId;
-    while (triangleId < meshlet.triangleCount)
-    {
-        const uint idPack = meshletDataBuffer.Load<uint>(indexOffset + groupThreadId);
-
-        uint3 activeTriangle;
-
-        activeTriangle.x = (idPack >> 24) & 0xFF;
-        activeTriangle.y = (idPack >> 16) & 0xFF;
-        activeTriangle.z = (idPack >>  8) & 0xFF;
-
-        // Fill in buffer.
-        triangles[groupThreadId] = activeTriangle;
-        triangleId += 128;
-    }
+    // TODO: Viewspace normal.
+    output.normalVS   = normalDataBuffer.Load<float3>(indicesId * sizeof(float3));
 }
 
 // Draw pixel color.

@@ -828,7 +828,6 @@ namespace chord
 						tempPosAvg    = std::move(newAvgPos);
 
 						// NOTE: Tangent auto recompute when uv0 input unvalid.
-
 						xatlas::Destroy(singleMeshAtlas);	
 					}
 
@@ -838,9 +837,12 @@ namespace chord
 					uint32 lod0IndexCount = tempIndices.size();
 					{
 						meshopt_optimizeVertexCache(tempIndices.data(), tempIndices.data(), tempIndices.size(), tempPositions.size());
-
-						auto computeMeshlet = [&](const std::vector<math::vec3>& positions, const std::vector<uint32>& indices)
+						
+						auto computeMeshlet = [&](const std::vector<math::vec3>& positions, const std::vector<uint32>& indices, std::vector<uint32>& remapIndices)
 						{
+							remapIndices = {};
+							remapIndices.reserve(indices.size());
+
 							std::vector<meshopt_Meshlet> meshlets(meshopt_buildMeshletsBound(indices.size(), kMeshletMaxVertices, kMeshletMaxTriangles));
 							std::vector<uint32> meshletVertices(meshlets.size() * kMeshletMaxVertices);
 							std::vector<uint8> meshletTriangles(meshlets.size() * kMeshletMaxTriangles * 3);
@@ -851,36 +853,19 @@ namespace chord
 							{
 								meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
 
-								uint32 dataOffset = gltfBin.primitiveData.meshletData.size();
-								for (uint32 i = 0; i < meshlet.vertex_count; i++)
-								{
-									gltfBin.primitiveData.meshletData.push_back(meshletVertices[meshlet.vertex_offset + i]);
-								}
-
-								const uint8* triangleOffset = &meshletTriangles[0] + meshlet.triangle_offset;
-								for (uint32 i = 0; i < meshlet.triangle_count; ++i)
-								{
-									uint32 data = 0x0;
-
-									uint8* dataArray = (uint8*)(&data);
-									dataArray[0] = triangleOffset[i * 3 + 0];
-									dataArray[1] = triangleOffset[i * 3 + 1];
-									dataArray[2] = triangleOffset[i * 3 + 2];
-
-									gltfBin.primitiveData.meshletData.push_back(data);
-								}
-
 								meshopt_Bounds bounds = meshopt_computeMeshletBounds(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, &positions[0].x, positions.size(), sizeof(positions[0]));
 								GLTFMeshlet m = { };
 
-								m.data.dataOffset    = dataOffset;
+								// Triangle count and first index.
 								m.data.triangleCount = meshlet.triangle_count;
-								m.data.vertexCount   = meshlet.vertex_count;
+								m.data.firstIndex    = remapIndices.size();
 								
 								math::vec3 posMin = math::vec3( FLT_MAX);
 								math::vec3 posMax = math::vec3(-FLT_MAX);
 								math::dvec3 posAvg = math::dvec3(0);
 								uint32 indexCount = 0;
+
+								// Loop all triangle, also fill new indices.
 								for (uint32 triangleId = 0; triangleId < meshlet.triangle_count; triangleId++)
 								{
 									uint8 id0 = meshletTriangles[meshlet.triangle_offset + triangleId * 3 + 0];
@@ -890,6 +875,10 @@ namespace chord
 									uint32 index0 = meshletVertices[meshlet.vertex_offset + id0];
 									uint32 index1 = meshletVertices[meshlet.vertex_offset + id1];
 									uint32 index2 = meshletVertices[meshlet.vertex_offset + id2];
+
+									remapIndices.push_back(index0);
+									remapIndices.push_back(index1);
+									remapIndices.push_back(index2);
 
 									posMax = math::max(posMax, positions[index0]);
 									posMax = math::max(posMax, positions[index1]);
@@ -925,10 +914,13 @@ namespace chord
 							lod.data.firstIndex   = gltfBin.primitiveData.indices.size();
 							lod.data.indexCount   = static_cast<uint32>(lodIndices.size());
 							lod.data.firstMeshlet = gltfBin.primitiveData.meshlets.size();
-							lod.data.meshletCount = computeMeshlet(tempPositions, lodIndices);
 
-							// Insert to bin data.
-							gltfBin.primitiveData.indices.insert(gltfBin.primitiveData.indices.end(), lodIndices.begin(), lodIndices.end());
+							std::vector<uint32> remapIndices;
+							lod.data.meshletCount = computeMeshlet(tempPositions, lodIndices, remapIndices);
+							check(remapIndices.size() == lodIndices.size());
+
+							// Insert to bin data: use remap indices.
+							gltfBin.primitiveData.indices.insert(gltfBin.primitiveData.indices.end(), remapIndices.begin(), remapIndices.end());
 
 							if (primitiveMesh.lods.size() < kMaxGLTFLodCount)
 							{
@@ -1275,8 +1267,7 @@ namespace chord
 			+ getValidSize(colors)
 			+ getValidSize(uv1s)
 			+ getValidSize(smoothNormals)
-			+ getValidSize(meshlet)
-			+ getValidSize(meshletData);
+			+ getValidSize(meshlet);
 	}
 
 	inline uint64 getPrimitiveDetailHash(uint64 GPUSceneHash, uint64 meshId, uint64 primitiveId)
@@ -1305,7 +1296,6 @@ namespace chord
 			ASSIGN_DATA(uv1s, textureCoord1Buffer);
 			ASSIGN_DATA(smoothNormals, smoothNormalsBuffer);
 			ASSIGN_DATA(meshlet, meshletBuffer);
-			ASSIGN_DATA(meshletData, meshletDataBuffer);
 		}
 		#undef ASSIGN_DATA
 

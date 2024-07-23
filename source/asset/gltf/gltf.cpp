@@ -94,14 +94,6 @@ namespace chord
 						(uint32)gltfBin.primitiveData.meshlets.size());
 					copyBuffer(*newGPUPrimitives->meshlet, gltfBin.primitiveData.meshlets.data());
 
-					newGPUPrimitives->meshletData = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
-						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_meshletData"),
-						bufferFlagBasic,
-						bufferFlagVMA,
-						(uint32)sizeof(gltfBin.primitiveData.meshletData[0]),
-						(uint32)gltfBin.primitiveData.meshletData.size());
-					copyBuffer(*newGPUPrimitives->meshletData, gltfBin.primitiveData.meshletData.data());
-
 					newGPUPrimitives->positions = std::make_unique<GPUGLTFPrimitiveAsset::ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_positions"),
 						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
