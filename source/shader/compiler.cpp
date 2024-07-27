@@ -30,6 +30,9 @@ namespace chord::graphics
 		// Spv.
 		out.push_back("-spirv");
 		out.push_back("-fvk-allow-rwstructuredbuffer-arrays");
+	#ifdef CHORD_DEBUG
+	//  out.push_back("-fspv-debug=vulkan-with-source");
+	#endif
 
 		// Included path.
 		out.push_back("-I"); out.push_back("resource/shader");

@@ -12,8 +12,8 @@ namespace chord
 	struct GLTFRenderDescriptor
 	{
 		const PerframeCollected* perframeCollect;
-		uint objectCount;
-		uint bufferId;
+		uint gltfObjectCount;
+		uint gltfBufferId;
 	};
 
 	extern void gltfBasePassRendering(

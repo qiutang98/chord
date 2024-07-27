@@ -52,13 +52,17 @@ namespace chord
 		templatePrimitive.basicData = getNode()->getObjectBasicData(cameraView);
 
 		const auto& meshes = m_gltfAsset->getMeshes().at(m_gltfMeshId);
+
+		uint meshletCount = 0;
 		for (uint32 primitiveId = 0; primitiveId < meshes.primitives.size(); primitiveId++)
 		{
 			templatePrimitive.GLTFPrimitiveDetail = m_gltfGPU->getGPUScenePrimitiveDetailId(m_gltfMeshId, primitiveId);
 
-			// Add one primitive.
+			meshletCount += meshes.primitives[primitiveId].lods[0].data.meshletCount;
 			collector.gltfPrimitives.push_back(templatePrimitive);
 		}
+
+		collector.gltfLod0MeshletCount.fetch_add(meshletCount);
 	}
 
 	bool GLTFMeshComponent::setGLTFMesh(const AssetSaveInfo& asset, int32 meshId)

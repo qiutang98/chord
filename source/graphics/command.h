@@ -2,6 +2,8 @@
 #include <graphics/common.h>
 #include <list>
 #include <graphics/resource.h>
+#include <graphics/bufferpool.h>
+#include <graphics/rendertargetpool.h>
 
 namespace chord::graphics
 {
@@ -60,7 +62,7 @@ namespace chord::graphics
 		uint32 getFamily() const { return m_queueFamily; }
 
 	public:
-		void copyBuffer(GPUBufferRef src, GPUBufferRef dest, size_t size, size_t srcOffset = 0, size_t destOffset = 0);
+		void copyBuffer(PoolBufferRef src, PoolBufferRef dest, size_t size, size_t srcOffset = 0, size_t destOffset = 0);
 
 	private:
 		CommandBufferRef getOrCreateCommandBuffer();
@@ -92,10 +94,12 @@ namespace chord::graphics
 	public:
 		explicit GraphicsOrComputeQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
 
-		void transitionSRV(GPUTextureRef image, VkImageSubresourceRange range);
-		void transitionUAV(GPUBufferRef buffer);
-		void transitionSRV(GPUBufferRef buffer);
-		void clearImage(GPUTextureRef image, const VkClearColorValue* clear, uint32 rangeCount, const VkImageSubresourceRange* ranges);
+		void transitionSRV(PoolTextureRef image, VkImageSubresourceRange range);
+		void transitionUAV(PoolBufferRef buffer);
+		void transitionSRV(PoolBufferRef buffer);
+		void transition(PoolBufferRef buffer, VkAccessFlags flag);
+		void clearImage(PoolTextureRef image, const VkClearColorValue* clear, uint32 rangeCount, const VkImageSubresourceRange* ranges);
+		void clearUAV(PoolBufferRef buffer);
 	};
 
 	class GraphicsQueue : public GraphicsOrComputeQueue
@@ -105,14 +109,14 @@ namespace chord::graphics
 
 		
 		void clearDepthStencil(
-			GPUTextureRef image, 
+			PoolTextureRef image,
 			const VkClearDepthStencilValue* clear, 
 			VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 
-		void transitionPresent(GPUTextureRef image);
+		void transitionPresent(PoolTextureRef image);
 
-		void transitionColorAttachment(GPUTextureRef image);
-		void transitionDepthStencilAttachment(GPUTextureRef image, EDepthStencilOp op);
+		void transitionColorAttachment(PoolTextureRef image);
+		void transitionDepthStencilAttachment(PoolTextureRef image, EDepthStencilOp op);
 	};
 
 	// Command list control command open and closed.

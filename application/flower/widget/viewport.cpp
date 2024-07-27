@@ -58,7 +58,7 @@ void WidgetViewport::onVisibleTick(const ApplicationTickData& tickData)
 
 		{
 			const auto& builtinResources = Flower::get().getBuiltinTextures();
-			ui::drawImage(m_deferredRenderer->getOutput()->get(), kDefaultImageSubresourceRange, ImVec2(width, height));
+			ui::drawImage(m_deferredRenderer->getOutput(), kDefaultImageSubresourceRange, ImVec2(width, height));
 		}
 
 		bool bClickViewport = ImGui::IsItemClicked();

@@ -89,12 +89,15 @@ T_BINDLESS_BUFFER_DECLARE(uint4)
 ***************************************************************************************/
 ////////////////////////////////////////////////////////////////////////////////////////
 
+#define T_BINDLESS_CONSTATNT_BUFFER_DECLARE(Type) \
+    T_BINDLESS_DECLARE(ConstantBuffer, (int)chord::EBindingType::BindlessUniformBuffer, Type)
+
+////////////////////////////////////////////////////////////////////////////////////////
+// Current no support.
+/******************* StructureBuffer & RWStructureBuffer *******************
 #define T_BINDLESS_STRUCTURED_BUFFER_DECLARE(Type) \
     T_BINDLESS_DECLARE(StructuredBuffer,   (int)chord::EBindingType::BindlessStorageBuffer, Type) \
     T_BINDLESS_DECLARE(RWStructuredBuffer, (int)chord::EBindingType::BindlessStorageBuffer, Type) 
-
-#define T_BINDLESS_CONSTATNT_BUFFER_DECLARE(Type) \
-    T_BINDLESS_DECLARE(ConstantBuffer, (int)chord::EBindingType::BindlessUniformBuffer, Type)
 
 // Float type structural buffer declare.
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(float)
@@ -115,6 +118,8 @@ T_BINDLESS_STRUCTURED_BUFFER_DECLARE(uint3)
 T_BINDLESS_STRUCTURED_BUFFER_DECLARE(uint4)
 
 #undef T_BINDLESS_STRUCTURED_BUFFER_DECLARE
+***************************************************************************************/
+////////////////////////////////////////////////////////////////////////////////////////
 
 // ByteAddressBuffer don't care type. 
 BINDLESS_DECLARE(ByteAddressBuffer, (int)chord::EBindingType::BindlessStorageBuffer)
@@ -135,9 +140,12 @@ BINDLESS_DECLARE(SamplerComparisonState, (int)chord::EBindingType::BindlessSampl
 // TBindless(ConstantBuffer, ...)
 // ByteAddressBindless()
 
+#define TypeLoad(Type, ElementId) Load<Type>(ElementId * sizeof(Type))
+#define TypeStore(Type, ElementId, Value) Store<Type>(ElementId * sizeof(Type), Value)
 
-// Constant buffer use for uniform.
-T_BINDLESS_CONSTATNT_BUFFER_DECLARE(PerframeCameraView)
-#define LoadCameraView(Index) TBindless(ConstantBuffer, PerframeCameraView, Index)
+#define BATL(Type, BufferId, ElementId) ByteAddressBindless(BufferId).TypeLoad(Type, ElementId)
+#define BATS(Type, BufferId, ElementId, Value) RWByteAddressBindless(BufferId).TypeStore(Type, ElementId, Value)
+ 
+#define LoadCameraView(Index) BATL(PerframeCameraView, Index, 0)
 
 #endif // !SHADER_BINDLESS_HLSLI

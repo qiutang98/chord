@@ -5,6 +5,7 @@ struct GLTFMeshDrawCmd
     uint vertexCount;
     uint instanceCount;
     uint firstVertex;
+    uint firstInstance;
     uint objectId;
     uint packLodMeshlet;
 };
@@ -45,20 +46,20 @@ void unpackLodMeshlet(uint packData, out uint lod, out uint meshlet)
 void perobjectCullingCS(uint lane : SV_DispatchThreadID)
 {
     const PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
-    const GPUBasicData scene = perView.basicData;
+    const GPUBasicData scene = perView.basicData;  
 
     if (lane >= scene.GLTFObjectCount)
     {
         return;
-    }
+    } 
 
-    const GPUObjectGLTFPrimitive objectInfo = ByteAddressBindless(scene.GLTFObjectBuffer).Load<GPUObjectGLTFPrimitive>(lane * sizeof(GPUObjectGLTFPrimitive));
-    const GLTFPrimitiveBuffer primitiveInfo = ByteAddressBindless(scene.GLTFPrimitiveDetailBuffer).Load<GLTFPrimitiveBuffer>(objectInfo.GLTFPrimitiveDetail * sizeof(GLTFPrimitiveBuffer));
+    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, lane);
+    const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
     
     bool bVisible = true;
     {
         // Visible culling. 
-    }
+    } 
 
     if (!bVisible)
     {
@@ -75,26 +76,25 @@ void perobjectCullingCS(uint lane : SV_DispatchThreadID)
 
     uint meshletBaseOffset;
     {
-        RWStructuredBuffer<uint> meshletCountBuffer = TBindless(RWStructuredBuffer, uint, pushConsts.meshletCullGroupCountId);
-        InterlockedAdd(meshletCountBuffer[0], dispatchCullGroupCount, meshletBaseOffset);
+        RWByteAddressBuffer meshletCountBuffer = RWByteAddressBindless(pushConsts.meshletCullGroupCountId);
+        meshletCountBuffer.InterlockedAdd(0, dispatchCullGroupCount, meshletBaseOffset);
     }
 
-    RWStructuredBuffer<uint2> meshletCullGroupBuffer = TBindless(RWStructuredBuffer, uint2, pushConsts.meshletCullGroupDetailId);
+    RWByteAddressBuffer meshletCullGroupBuffer = RWByteAddressBindless(pushConsts.meshletCullGroupDetailId);
     for (uint i = 0; i < dispatchCullGroupCount; i ++)
     {
         const uint id = i + meshletBaseOffset;
         const uint meshletBaseIndex = lodInfo.firstMeshlet + i * 64;
 
         // Fill meshlet dispatch param, pack to 64.
-        meshletCullGroupBuffer[id] = uint2(lane, packLodMeshlet(selectedLod, meshletBaseIndex));
+        meshletCullGroupBuffer.TypeStore(uint2, id, uint2(lane, packLodMeshlet(selectedLod, meshletBaseIndex)));
     }
 }
 
 [numthreads(1, 1, 1)]
 void fillMeshletCullCmdCS()
 {
-    StructuredBuffer<uint> meshletCountBuffer = TBindless(StructuredBuffer, uint, pushConsts.meshletCullGroupCountId);
-    const uint meshletGroupCount = meshletCountBuffer[0];
+    const uint meshletGroupCount = BATL(uint, pushConsts.meshletCullGroupCountId, 0);
 
     uint4 cmdParameter;
     cmdParameter.x = meshletGroupCount;
@@ -102,18 +102,22 @@ void fillMeshletCullCmdCS()
     cmdParameter.z = 1;
     cmdParameter.w = 1;
 
-    RWStructuredBuffer<uint4> meshletCullCmdBuffer = TBindless(RWStructuredBuffer, uint4, pushConsts.meshletCullCmdId);
-    meshletCullCmdBuffer[0] = cmdParameter;
+    if (pushConsts.debugFlags == 3)
+    {
+        debug::printFormat(float4(cmdParameter));
+    }
+
+    BATS(uint4, pushConsts.meshletCullCmdId, 0, cmdParameter);
 }
 
 [numthreads(64, 1, 1)]
 void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupThreadID)
 {
-    StructuredBuffer<uint> meshletCountBuffer = TBindless(StructuredBuffer, uint, pushConsts.meshletCullGroupCountId);
-    const uint meshletGroupCount = meshletCountBuffer[0];
+    const PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
+    const GPUBasicData scene = perView.basicData;
 
-    StructuredBuffer<uint2> meshletCullGroupBuffer = TBindless(StructuredBuffer, uint2, pushConsts.meshletCullGroupDetailId);
-    const uint2 meshletGroup = meshletCullGroupBuffer[groupID];
+    const uint meshletGroupCount = BATL(uint, pushConsts.meshletCullGroupCountId, 0);
+    const uint2 meshletGroup =  BATL(uint2, pushConsts.meshletCullGroupDetailId, groupID);
 
     uint objectId = meshletGroup.x;
     uint selectedLod;
@@ -123,8 +127,8 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         meshletId += groupThreadID;
     }
 
-    const GPUObjectGLTFPrimitive objectInfo = ByteAddressBindless(scene.GLTFObjectBuffer).Load<GPUObjectGLTFPrimitive>(objectId * sizeof(GPUObjectGLTFPrimitive));
-    const GLTFPrimitiveBuffer primitiveInfo = ByteAddressBindless(scene.GLTFPrimitiveDetailBuffer).Load<GLTFPrimitiveBuffer>(objectInfo.GLTFPrimitiveDetail * sizeof(GLTFPrimitiveBuffer));
+    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
+    const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
     const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
 
     // Skip out of range meshlt. 
@@ -133,8 +137,8 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         return;
     }
 
-    const GLTFPrimitiveDatasBuffer primitiveDataInfo = ByteAddressBindless(scene.GLTFPrimitiveDataBuffer).Load<GLTFPrimitiveDatasBuffer>(primitiveInfo.primitiveDatasBufferId * sizeof(GLTFPrimitiveDatasBuffer));
-    const GPUGLTFMeshlet meshlet = ByteAddressBindless(primitiveDataInfo.meshletBuffer).Load<GPUGLTFMeshlet>(meshletId * sizeof(GPUGLTFMeshlet));
+    const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
+    const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
 
     bool bVisible = true;
     {
@@ -148,8 +152,8 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
 
     uint drawCmdId;
     {
-        RWStructuredBuffer<uint> drawedCountBuffer = TBindless(RWStructuredBuffer, uint, pushConsts.drawedMeshletCountId);
-        InterlockedAdd(drawedCountBuffer[0], 1, drawCmdId);
+        RWByteAddressBuffer drawedCountBuffer = RWByteAddressBindless(pushConsts.drawedMeshletCountId);
+        drawedCountBuffer.InterlockedAdd(0, 1, drawCmdId);
     }
 
     // Fill in draw cmd. 
@@ -159,10 +163,15 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         drawCmd.vertexCount    = meshlet.triangleCount * 3;
         drawCmd.instanceCount  = 1;
         drawCmd.firstVertex    = 0;
+        drawCmd.firstInstance  = drawCmdId;
         drawCmd.objectId       = objectId;
         drawCmd.packLodMeshlet = packLodMeshlet(selectedLod, meshletId);
 
-        RWByteAddressBindless(pushConsts.drawedMeshletCmdId).Store<GLTFMeshDrawCmd>(drawCmdId * sizeof(GLTFMeshDrawCmd), drawCmd);
+        if (pushConsts.debugFlags == 2 && drawCmdId > 220)
+        {
+            debug::printFormat(float4(objectId, selectedLod, meshletId, drawCmdId));
+        }
+        BATS(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, drawCmdId, drawCmd);
     }
 }
 
@@ -175,12 +184,12 @@ struct BasePassVS2PS
 
 void mainVS(
     uint vertexId : SV_VertexID, 
-    uint primitiveId : SV_PRIMITIVEID, 
     uint instanceId : SV_INSTANCEID,
     out BasePassVS2PS output)
 {
-    const GLTFMeshDrawCmd drawCmd = ByteAddressBindless(pushConsts.drawedMeshletCmdId).Load<GLTFMeshDrawCmd>(instanceId * sizeof(GLTFMeshDrawCmd));
+    const GLTFMeshDrawCmd drawCmd = BATL(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, instanceId);
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
+    const GPUBasicData scene = perView.basicData;
 
     uint objectId = drawCmd.objectId;
     uint selectedLod;
@@ -189,23 +198,35 @@ void mainVS(
         unpackLodMeshlet(drawCmd.packLodMeshlet, selectedLod, meshletId);
     }
 
-    const GPUObjectGLTFPrimitive objectInfo = ByteAddressBindless(scene.GLTFObjectBuffer).Load<GPUObjectGLTFPrimitive>(objectId * sizeof(GPUObjectGLTFPrimitive));
-    const GLTFPrimitiveBuffer primitiveInfo = ByteAddressBindless(scene.GLTFPrimitiveDetailBuffer).Load<GLTFPrimitiveBuffer>(objectInfo.GLTFPrimitiveDetail * sizeof(GLTFPrimitiveBuffer));
+    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
+    const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
     const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
-    const GLTFPrimitiveDatasBuffer primitiveDataInfo = ByteAddressBindless(scene.GLTFPrimitiveDataBuffer).Load<GLTFPrimitiveDatasBuffer>(primitiveInfo.primitiveDatasBufferId * sizeof(GLTFPrimitiveDatasBuffer));
-    const GPUGLTFMeshlet meshlet = ByteAddressBindless(primitiveDataInfo.meshletBuffer).Load<GPUGLTFMeshlet>(meshletId * sizeof(GPUGLTFMeshlet));
+    const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
+    const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
 
     ByteAddressBuffer indicesDataBuffer = ByteAddressBindless(primitiveDataInfo.indicesBuffer);
     ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
     ByteAddressBuffer normalDataBuffer = ByteAddressBindless(primitiveDataInfo.normalBuffer);
 
-    const uint indicesId = indicesDataBuffer.Load<uint>((meshlet.firstIndex + vertexId) * sizeof(uint));
+    const uint indicesId = primitiveInfo.vertexOffset + indicesDataBuffer.TypeLoad(uint, lodInfo.firstIndex + meshlet.firstIndex + vertexId);
+
+    if (pushConsts.debugFlags == 1 && vertexId == 0 && meshletId > 220)
+    {
+        // debug::printFormat(float4(meshletId, lodInfo.firstIndex, meshlet.firstIndex, meshlet.triangleCount));
+        debug::printFormat(float4(meshletId, primitiveInfo.vertexCount, indicesDataBuffer.TypeLoad(uint, lodInfo.firstIndex + meshlet.firstIndex + vertexId), meshlet.triangleCount));
+    }
+
+    if (pushConsts.debugFlags == 4 && indicesId > primitiveInfo.vertexCount)
+    {
+
+    }
+
     // 
     float4x4 localToWorld = objectInfo.basicData.localToWorld;
     float4x4 translatedWorldToView = perView.translatedWorldToView;
     float4x4 viewToClip = perView.viewToClip;
 
-    float4 positionLS = float4(positionDataBuffer.Load<float3>(indicesId * sizeof(float3)), 1.0);
+    float4 positionLS = float4(positionDataBuffer.TypeLoad(float3, indicesId), 1.0);
     float4 positionWS = mul(localToWorld, positionLS);
     float4 positionVS = mul(translatedWorldToView, positionWS);
     float4 positionHS = mul(viewToClip, positionVS);
@@ -214,12 +235,12 @@ void mainVS(
     output.positionHS = positionHS;
 
     // TODO: Viewspace normal.
-    output.normalVS   = normalDataBuffer.Load<float3>(indicesId * sizeof(float3));
+    output.normalVS = normalDataBuffer.TypeLoad(float3, indicesId);
 }
-
+ 
 // Draw pixel color.
-void mainPS(
-    in BasePassVS2PS input,
+void mainPS(  
+    in BasePassVS2PS input, 
     out float4 outSceneColor : SV_Target0)
 {
     outSceneColor.xyz = input.normalVS * 0.5 + 0.5;

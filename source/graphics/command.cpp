@@ -33,7 +33,7 @@ namespace chord::graphics
 		check(m_activeCmdCtx.command != nullptr);
 	}
 
-	void Queue::copyBuffer(GPUBufferRef src, GPUBufferRef dest, size_t size, size_t srcOffset, size_t destOffset)
+	void Queue::copyBuffer(PoolBufferRef src, PoolBufferRef dest, size_t size, size_t srcOffset, size_t destOffset)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(src);
@@ -45,8 +45,8 @@ namespace chord::graphics
 
 			VkBufferMemoryBarrier2 barriers[2];
 
-			barriers[0] = src->updateBarrier(srcMask);
-			barriers[1] = dest->updateBarrier(destMask);
+			barriers[0] = src->get().updateBarrier(srcMask);
+			barriers[1] = dest->get().updateBarrier(destMask);
 
 			helper::pipelineBarrier(cmd->commandBuffer, 0, countof(barriers), barriers, 0, nullptr);
 		}
@@ -59,8 +59,8 @@ namespace chord::graphics
 
 		VkCopyBufferInfo2 copyInfo { };
 		copyInfo.sType       = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2;
-		copyInfo.srcBuffer   = *src;
-		copyInfo.dstBuffer   = *dest;
+		copyInfo.srcBuffer   = src->get();
+		copyInfo.dstBuffer   = dest->get();
 		copyInfo.regionCount = 1;
 		copyInfo.pRegions    = &copyRegion;
 
@@ -202,7 +202,7 @@ namespace chord::graphics
 	{
 	}
 
-	void GraphicsOrComputeQueue::clearImage(GPUTextureRef image, const VkClearColorValue* clear, uint32 rangeCount, const VkImageSubresourceRange* ranges)
+	void GraphicsOrComputeQueue::clearImage(PoolTextureRef image, const VkClearColorValue* clear, uint32 rangeCount, const VkImageSubresourceRange* ranges)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(image);
@@ -216,14 +216,21 @@ namespace chord::graphics
 		// Transition before clear.
 		for (uint32 rangeIndex = 0; rangeIndex < rangeCount; rangeIndex++)
 		{
-			image->transition(cmd->commandBuffer, mask, ranges[rangeIndex]);
+			image->get().transition(cmd->commandBuffer, mask, ranges[rangeIndex]);
 		}
 
 		// Clear image, only work for compute or graphics queue.
-		vkCmdClearColorImage(cmd->commandBuffer, *image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, clear, rangeCount, ranges);
+		vkCmdClearColorImage(cmd->commandBuffer, image->get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, clear, rangeCount, ranges);
 	}
 
-	void GraphicsQueue::clearDepthStencil(GPUTextureRef image, const VkClearDepthStencilValue* clear, VkImageAspectFlags flags)
+	void GraphicsOrComputeQueue::clearUAV(PoolBufferRef buffer)
+	{
+		auto cmd = m_activeCmdCtx.command;
+		transitionUAV(buffer);
+		vkCmdFillBuffer(cmd->commandBuffer, buffer->get(), 0, buffer->get().getSize(), 0u);
+	}
+
+	void GraphicsQueue::clearDepthStencil(PoolTextureRef image, const VkClearDepthStencilValue* clear, VkImageAspectFlags flags)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(image);
@@ -236,12 +243,12 @@ namespace chord::graphics
 		mask.barrierMasks.accesMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		mask.barrierMasks.queueFamilyIndex = getFamily();
 
-		image->transition(cmd->commandBuffer, mask, rangeClearDepth);
+		image->get().transition(cmd->commandBuffer, mask, rangeClearDepth);
 
-		vkCmdClearDepthStencilImage(cmd->commandBuffer, *image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, clear, 1, &rangeClearDepth);
+		vkCmdClearDepthStencilImage(cmd->commandBuffer, image->get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, clear, 1, &rangeClearDepth);
 	}
 
-	void GraphicsQueue::transitionPresent(GPUTextureRef image)
+	void GraphicsQueue::transitionPresent(PoolTextureRef image)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(image);
@@ -251,10 +258,10 @@ namespace chord::graphics
 		mask.barrierMasks.accesMask = VK_ACCESS_MEMORY_READ_BIT;
 		mask.barrierMasks.queueFamilyIndex = getFamily();
 
-		image->transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource());
+		image->get().transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource());
 	}
 
-	void GraphicsQueue::transitionColorAttachment(GPUTextureRef image)
+	void GraphicsQueue::transitionColorAttachment(PoolTextureRef image)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(image);
@@ -264,10 +271,10 @@ namespace chord::graphics
 		mask.barrierMasks.accesMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 		mask.barrierMasks.queueFamilyIndex = getFamily();
 
-		image->transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource());
+		image->get().transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource());
 	}
 
-	void GraphicsQueue::transitionDepthStencilAttachment(GPUTextureRef image, EDepthStencilOp op)
+	void GraphicsQueue::transitionDepthStencilAttachment(PoolTextureRef image, EDepthStencilOp op)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(image);
@@ -277,7 +284,7 @@ namespace chord::graphics
 		mask.barrierMasks.accesMask = getAccessFlagBits(op);
 		mask.barrierMasks.queueFamilyIndex = getFamily();
 
-		image->transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource(getImageAspectFlags(op)));
+		image->get().transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource(getImageAspectFlags(op)));
 	}
 
 	GraphicsOrComputeQueue::GraphicsOrComputeQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
@@ -285,7 +292,7 @@ namespace chord::graphics
 	{
 	}
 
-	void GraphicsOrComputeQueue::transitionSRV(GPUTextureRef image, VkImageSubresourceRange range)
+	void GraphicsOrComputeQueue::transitionSRV(PoolTextureRef image, VkImageSubresourceRange range)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(image);
@@ -295,32 +302,29 @@ namespace chord::graphics
 		mask.barrierMasks.accesMask = VK_ACCESS_SHADER_READ_BIT;
 		mask.barrierMasks.queueFamilyIndex = getFamily();
 
-		image->transition(cmd->commandBuffer, mask, range);
+		image->get().transition(cmd->commandBuffer, mask, range);
 	}
 
-	void GraphicsOrComputeQueue::transitionUAV(GPUBufferRef buffer)
+	void GraphicsOrComputeQueue::transitionUAV(PoolBufferRef buffer)
+	{
+		transition(buffer, VK_ACCESS_SHADER_WRITE_BIT);
+	}
+
+	void GraphicsOrComputeQueue::transitionSRV(PoolBufferRef buffer)
+	{
+		transition(buffer, VK_ACCESS_SHADER_READ_BIT);
+	}
+
+	void GraphicsOrComputeQueue::transition(PoolBufferRef buffer, VkAccessFlags flag)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(buffer);
 
 		GPUSyncBarrierMasks mask;
-		mask.accesMask = VK_ACCESS_SHADER_WRITE_BIT;
+		mask.accesMask = flag;
 		mask.queueFamilyIndex = getFamily();
 
-		auto barrier = buffer->updateBarrier(mask);
-		helper::pipelineBarrier(cmd->commandBuffer, 0, 1, & barrier, 0, nullptr);
-	}
-
-	void GraphicsOrComputeQueue::transitionSRV(GPUBufferRef buffer)
-	{
-		auto cmd = m_activeCmdCtx.command;
-		cmd->pendingResources.insert(buffer);
-
-		GPUSyncBarrierMasks mask;
-		mask.accesMask = VK_ACCESS_SHADER_READ_BIT;
-		mask.queueFamilyIndex = getFamily();
-
-		auto barrier = buffer->updateBarrier(mask);
+		auto barrier = buffer->get().updateBarrier(mask);
 		helper::pipelineBarrier(cmd->commandBuffer, 0, 1, &barrier, 0, nullptr);
 	}
 

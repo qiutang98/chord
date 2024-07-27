@@ -90,7 +90,7 @@ namespace chord
 			size_t allocatorUsedMemory = m_allocator.getMaxSize() * kPerAllocatedSize;
 
 			// Update GPU buffer size if overflow.
-			if (m_currentGPUBuffer == nullptr || allocatorUsedMemory > m_currentGPUBuffer->get()->getSize())
+			if (m_currentGPUBuffer == nullptr || allocatorUsedMemory > m_currentGPUBuffer->get().getSize())
 			{
 				size_t roundUpSize = math::max(size_t(64), allocatorUsedMemory);
 				roundUpSize = getNextPOT(roundUpSize);
@@ -103,7 +103,7 @@ namespace chord
 				if (m_currentGPUBuffer != nullptr)
 				{
 					// Copy buffer from old to new.
-					computeQueue.copyBuffer(m_currentGPUBuffer->getRef(), newGPUBuffer->getRef(), m_currentGPUBuffer->get()->getSize(), 0, 0);
+					computeQueue.copyBuffer(m_currentGPUBuffer, newGPUBuffer, m_currentGPUBuffer->get().getSize(), 0, 0);
 				}
 				m_currentGPUBuffer = newGPUBuffer;
 			}
@@ -140,7 +140,7 @@ namespace chord
 				return ~0;
 			}
 
-			return m_currentGPUBuffer->get()->requireView(true, false).storage.get();
+			return m_currentGPUBuffer->get().requireView(true, false).storage.get();
 		}
 
 	private:

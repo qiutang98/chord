@@ -75,7 +75,7 @@ namespace chord
 			for (auto& RT : RTs)
 			{
 				if(RT.RT == nullptr) { break; }
-				result.push_back(RT.RT->get()->getFormat());
+				result.push_back(RT.RT->get().getFormat());
 			}
 			return std::move(result);
 		}
@@ -83,7 +83,7 @@ namespace chord
 		VkFormat getDepthStencilFormat() const
 		{
 			if(depthStencil.RT == nullptr) return VK_FORMAT_UNDEFINED;
-			return depthStencil.RT->get()->getFormat();
+			return depthStencil.RT->get().getFormat();
 		}
 
 		void beginRendering(graphics::GraphicsQueue& queue) const
@@ -100,10 +100,10 @@ namespace chord
 			VkRenderingAttachmentInfo depthAttachmentInfo = graphics::helper::renderingAttachmentInfo(true);
 			if (bDepthStencilValue)
 			{
-				width = depthStencil.RT->get()->getExtent().width;
-				height = depthStencil.RT->get()->getExtent().height;
+				width = depthStencil.RT->get().getExtent().width;
+				height = depthStencil.RT->get().getExtent().height;
 
-				depthAttachmentInfo.imageView = depthStencil.RT->get()->requireView(
+				depthAttachmentInfo.imageView = depthStencil.RT->get().requireView(
 					graphics::helper::buildBasicImageSubresource(getImageAspectFlags(depthStencil.depthStencilOp)), VK_IMAGE_VIEW_TYPE_2D, false, false).handle.get();
 				depthAttachmentInfo.clearValue = depthStencil.clearValue;
 				depthAttachmentInfo.loadOp = getAttachmentLoadOp(depthStencil.Op);
@@ -119,12 +119,12 @@ namespace chord
 				RTCount++;
 				if (width == ~0 || height == ~0)
 				{
-					width = RT.RT->get()->getExtent().width;
-					height = RT.RT->get()->getExtent().height;
+					width = RT.RT->get().getExtent().width;
+					height = RT.RT->get().getExtent().height;
 				}
 
 				attachments.emplace_back(helper::renderingAttachmentInfo(false));
-				attachments.back().imageView = RT.RT->get()->requireView(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D, false, false).handle.get();
+				attachments.back().imageView = RT.RT->get().requireView(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D, false, false).handle.get();
 				attachments.back().clearValue = RT.clearValue;
 				attachments.back().loadOp = getAttachmentLoadOp(RT.Op);
 				attachments.back().storeOp = getAttachmentStoreOp(RT.Op);
@@ -179,52 +179,44 @@ namespace chord
 				{
 					break;
 				}
-				queue.transitionColorAttachment(RT.RT->get());
+				queue.transitionColorAttachment(RT.RT);
 			}
 
 			if (depthStencil.RT)
 			{
-				queue.transitionDepthStencilAttachment(depthStencil.RT->get(), depthStencil.depthStencilOp);
+				queue.transitionDepthStencilAttachment(depthStencil.RT, depthStencil.depthStencilOp);
 			}
 		}
 	};
 
 	inline static uint32 asSRV(
 		graphics::GraphicsOrComputeQueue& queue, 
-		graphics::GPUTextureRef texture,
+		graphics::PoolTextureRef texture,
 		const VkImageSubresourceRange& range = graphics::helper::buildBasicImageSubresource(),
 		VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D)
 	{
 		queue.transitionSRV(texture, range);
-		return texture->requireView(range, viewType, true, false).SRV.get();
+		return texture->get().requireView(range, viewType, true, false).SRV.get();
 	}
 
 	inline static uint32 asUAV(
 		graphics::GraphicsOrComputeQueue& queue,
-		graphics::GPUOnlyBufferRef buffer
+		graphics::PoolBufferRef buffer
 	)
 	{
+		check(hasFlag(buffer->get().getUsage(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		queue.transitionUAV(buffer);
-		return buffer->requireView(true, false).storage.get();
+		return buffer->get().requireView(true, false).storage.get();
 	}
 
 	inline static uint32 asSRV(
 		graphics::GraphicsOrComputeQueue& queue,
-		graphics::GPUOnlyBufferRef buffer
+		graphics::PoolBufferRef buffer
 	)
 	{
+		check(hasFlag(buffer->get().getUsage(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		queue.transitionSRV(buffer);
-		return buffer->requireView(true, false).storage.get();
-	}
-
-	inline static uint32 asSRV(
-		graphics::GraphicsOrComputeQueue& queue,
-		graphics::GPUBufferRef buffer
-	)
-	{
-		check(hasFlag(buffer->getUsage(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		queue.transitionSRV(buffer);
-		return buffer->requireView(true, false).storage.get();
+		return buffer->get().requireView(true, false).storage.get();
 	}
 
 }

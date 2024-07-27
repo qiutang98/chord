@@ -32,10 +32,8 @@ namespace chord::graphics
 			{
 			}
 
-			operator const GPUTexture&() const { return *m_texture; }
-			operator GPUTexture&() { return *m_texture; }
-
-			GPUTextureRef get() const { return m_texture; }
+			const GPUTexture& get() const { return *m_texture; }
+			GPUTexture& get() { return *m_texture; }
 
 			virtual ~PoolTexture();
 

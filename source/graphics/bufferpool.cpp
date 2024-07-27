@@ -145,6 +145,12 @@ namespace chord::graphics
 		else
 		{
 			buffer = std::dynamic_pointer_cast<HostVisibleGPUBuffer>(list.back().buffer);
+
+			if (name == "indexingDataBuffer" || buffer->getName() == "indexingDataBuffer")
+			{
+				LOG_TRACE("Buffer '{0}' reuse to '{1}'.", buffer->getName(), name);
+			}
+
 			buffer->rename(name);
 
 			if (data.isValid())

@@ -41,7 +41,7 @@ namespace chord
 				VK_FORMAT_R8G8B8A8_SRGB,
 				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
-			m_outputTexture->get()->transitionImmediately(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, helper::buildBasicImageSubresource());
+			m_outputTexture->get().transitionImmediately(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, helper::buildBasicImageSubresource());
 		}
 
 		return m_outputTexture;
@@ -108,17 +108,9 @@ namespace chord
 	}
 
 	template<typename T>
-	uint32 uploadBufferToGPU(bool bUniform, bool bStorage, CommandList& cmd, const std::string& name, const T* data, uint32 count = 1)
+	uint32 uploadBufferToGPU(CommandList& cmd, const std::string& name, const T* data, uint32 count = 1)
 	{
-		VkBufferUsageFlags usageFlag = 0;
-		if (bUniform)
-		{
-			usageFlag |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-		}
-		if (bStorage)
-		{
-			usageFlag |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		}
+		VkBufferUsageFlags usageFlag = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
 		auto newGPUBuffer = getContext().getBufferPool().createHostVisible(
 			name,
@@ -127,14 +119,7 @@ namespace chord
 
 		// Insert perframe lazy destroy.
 		cmd.insertPendingResource(newGPUBuffer);
-		const auto& viewC = newGPUBuffer->get().requireView(bStorage, bUniform);
-
-		if (bUniform)
-		{
-			return viewC.uniform.get();
-		}
-
-		check(bStorage);
+		const auto& viewC = newGPUBuffer->get().requireView(true, false);
 		return viewC.storage.get();
 	}
 
@@ -159,21 +144,21 @@ namespace chord
 			// Collected.
 			scene->perviewPerframeCollect(perframe, m_perframeCameraView);
 
-			gltfRenderDescritptor.objectCount = perframe.gltfPrimitives.size();
+			gltfRenderDescritptor.gltfObjectCount = perframe.gltfPrimitives.size();
 			gltfRenderDescritptor.perframeCollect = &perframe;
 
-			if (gltfRenderDescritptor.objectCount > 0)
+			if (gltfRenderDescritptor.gltfObjectCount > 0)
 			{
-				gltfRenderDescritptor.bufferId =
-					uploadBufferToGPU(false, true, cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfRenderDescritptor.objectCount);
+				gltfRenderDescritptor.gltfBufferId =
+					uploadBufferToGPU(cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfRenderDescritptor.gltfObjectCount);
 			}
 			else
 			{
-				gltfRenderDescritptor.bufferId = ~0;
+				gltfRenderDescritptor.gltfBufferId = ~0;
 			}
 
-			m_perframeCameraView.basicData.GLTFObjectCount = gltfRenderDescritptor.objectCount;
-			m_perframeCameraView.basicData.GLTFObjectBuffer = gltfRenderDescritptor.bufferId;
+			m_perframeCameraView.basicData.GLTFObjectCount = gltfRenderDescritptor.gltfObjectCount;
+			m_perframeCameraView.basicData.GLTFObjectBuffer = gltfRenderDescritptor.gltfBufferId;
 		}
 
 
@@ -186,7 +171,7 @@ namespace chord
 		auto& graphics = cmd.getGraphicsQueue();
 
 		// Allocate view gpu uniform buffer.
-		uint32 viewGPUId = uploadBufferToGPU(true, false, cmd, "PerViewCamera-" + m_name, &m_perframeCameraView);
+		uint32 viewGPUId = uploadBufferToGPU(cmd, "PerViewCamera-" + m_name, &m_perframeCameraView);
 		
 		// 
 		auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
@@ -208,7 +193,7 @@ namespace chord
 		{
 			tonemapping(graphics, gbuffers.color, finalOutput);
 
-			graphics.transitionPresent(finalOutput->get());
+			graphics.transitionPresent(finalOutput);
 		}
 		graphics.endCommand();
 	}

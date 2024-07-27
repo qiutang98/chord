@@ -157,6 +157,15 @@ namespace chord::graphics
 			VkFormat inStencilFormat = VK_FORMAT_UNDEFINED,
 			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
+		inline GraphicsPipelineRef graphicsPipe(
+			std::shared_ptr<ShaderModule> vertexShader,
+			std::shared_ptr<ShaderModule> pixelShader,
+			const std::string& name,
+			std::vector<VkFormat>&& attachments,
+			VkFormat inDepthFormat = VK_FORMAT_UNDEFINED,
+			VkFormat inStencilFormat = VK_FORMAT_UNDEFINED,
+			VkPrimitiveTopology inTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
 		template<class AmplifyShader, class MeshShader, class PixelShader>
 		GraphicsPipelineRef graphicsAmplifyMeshPipe(
 			const std::string& name,

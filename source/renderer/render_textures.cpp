@@ -40,17 +40,17 @@ namespace chord
             static const auto range = helper::buildBasicImageSubresource();
 
             // Color.
-            queue.clearImage(textures.color->get(), &clearValue, 1, &range);
+            queue.clearImage(textures.color, &clearValue, 1, &range);
 
             // Extract gbuffer.
-            queue.clearImage(textures.gbufferA->get(), &clearValue, 1, &range);
-            queue.clearImage(textures.gbufferB->get(), &clearValue, 1, &range);
-            queue.clearImage(textures.gbufferC->get(), &clearValue, 1, &range);
+            queue.clearImage(textures.gbufferA, &clearValue, 1, &range);
+            queue.clearImage(textures.gbufferB, &clearValue, 1, &range);
+            queue.clearImage(textures.gbufferC, &clearValue, 1, &range);
         }
 
         {
             static const auto depthStencilClear = VkClearDepthStencilValue{ 0.0f, 0 };
-            queue.clearDepthStencil(textures.depthStencil->get(), &depthStencilClear);
+            queue.clearDepthStencil(textures.depthStencil, &depthStencilClear);
         }
     }
 

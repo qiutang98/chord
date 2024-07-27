@@ -14,17 +14,13 @@ namespace chord
 		RenderTargets RTs { };
 		RTs.RTs[0] = RenderTargetRT(outImage, ERenderTargetLoadStoreOp::Nope_Store);
 
-		uint32 srcImageId = asSRV(queue, srcImage->get());
+		uint32 srcImageId = asSRV(queue, srcImage);
 
 		TonemappingPushConsts pushConst { };
 		pushConst.textureId = srcImageId;
 		pushConst.pointClampSamplerId = getSamplers().pointClampBorder0000().index.get();
 
-		addFullScreenPass<TonemappingPS>(queue, "Tonemapping", RTs, 
-		[&](GraphicsQueue& queue, GraphicsPipelineRef pipe, VkCommandBuffer cmd)
-		{
-			pipe->pushConst(cmd, pushConst);
-		});
+		addFullScreenPass2<TonemappingPS>(queue, "Tonemapping", RTs, pushConst);
 	}
 
 }

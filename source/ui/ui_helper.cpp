@@ -215,6 +215,27 @@ namespace chord::ui
 		ImGui::Image(image->requireView(subRange, VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get(), size, uv0, uv1, tint_col, border_col);
 	}
 
+	void drawImage(graphics::PoolTextureRef image, const VkImageSubresourceRange& subRange, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
+	{
+		if (ImGui::GetCurrentWindow()->Viewport == nullptr)
+		{
+			return;
+		}
+
+		// Insert pending resource avoid release.
+		auto* vrd = (ImGuiViewportData*)ImGui::GetCurrentWindow()->Viewport->RendererUserData;
+		if (vrd == nullptr)
+		{
+			return;
+		}
+
+		graphics::Swapchain& swapchain = vrd->swapchain();
+		swapchain.insertPendingResource(image);
+
+		// Require image view.
+		ImGui::Image(image->get().requireView(subRange, VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get(), size, uv0, uv1, tint_col, border_col);
+	}
+
 	void ui::drawImage(
 		graphics::GPUTextureAssetRef image,
 		const VkImageSubresourceRange& subRange,

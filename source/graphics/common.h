@@ -81,14 +81,26 @@ namespace chord::graphics
 
 	inline VkImageLayout getLayoutFromDepthStencilOp(EDepthStencilOp op)
 	{
+	#if 1
+		if (op == EDepthStencilOp::DepthWrite_StnecilRead)  return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
+		if (op == EDepthStencilOp::DepthWrite_StencilNop)   return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
+		if (op == EDepthStencilOp::DepthWrite_StencilWrite) return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		if (op == EDepthStencilOp::DepthRead_StencilWrite)  return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+		if (op == EDepthStencilOp::DepthNop_StencilWrite)   return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+		if (op == EDepthStencilOp::DepthRead_StencilNop)    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		if (op == EDepthStencilOp::DepthRead_StnecilRead)   return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		if (op == EDepthStencilOp::DepthNop_StnecilRead)    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+	#else 
+
 		if (op == EDepthStencilOp::DepthWrite_StencilWrite) return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		if (op == EDepthStencilOp::DepthWrite_StnecilRead)  return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
-		if (op == EDepthStencilOp::DepthWrite_StencilNop)   return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+		if (op == EDepthStencilOp::DepthWrite_StencilNop)   return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		if (op == EDepthStencilOp::DepthRead_StencilWrite)  return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
 		if (op == EDepthStencilOp::DepthRead_StnecilRead)   return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 		if (op == EDepthStencilOp::DepthRead_StencilNop)    return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
 		if (op == EDepthStencilOp::DepthNop_StencilWrite)   return VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
 		if (op == EDepthStencilOp::DepthNop_StnecilRead)    return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
+	#endif
 
 		checkEntry();
 		return VK_IMAGE_LAYOUT_UNDEFINED;
@@ -116,6 +128,7 @@ namespace chord::graphics
 
 	inline VkImageAspectFlags getImageAspectFlags(EDepthStencilOp op)
 	{
+	#if 0
 		switch (op)
 		{
 		case EDepthStencilOp::DepthWrite_StencilWrite:
@@ -135,6 +148,9 @@ namespace chord::graphics
 
 		checkEntry();
 		return VK_IMAGE_ASPECT_NONE;
+	#else
+		return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+	#endif
 	}
 
 	class ImageView;

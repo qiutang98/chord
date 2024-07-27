@@ -456,6 +456,8 @@ namespace chord::graphics
 		return graphicsMeshShadingPipe(taskShader, meshShader, pixelShader, name, std::move(attachments), inDepthFormat, inStencilFormat, inTopology);
 	}
 
+
+
 	GraphicsPipelineRef Context::graphicsMeshShadingPipe(
 		std::shared_ptr<ShaderModule> amplifyShader,
 		std::shared_ptr<ShaderModule> meshShader,
@@ -508,6 +510,44 @@ namespace chord::graphics
 		return getPipelineContainer().compute(name, computeCI);
 	}
 
+	inline GraphicsPipelineRef Context::graphicsPipe(
+		std::shared_ptr<ShaderModule> vertexShader,
+		std::shared_ptr<ShaderModule> pixelShader,
+		const std::string& name,
+		std::vector<VkFormat>&& attachments,
+		VkFormat inDepthFormat,
+		VkFormat inStencilFormat,
+		VkPrimitiveTopology inTopology)
+	{
+		// We always share push const, so should use max size.
+		uint32 pushConstantSize = vertexShader->getPushConstSize();
+		
+		if (pixelShader != nullptr)
+		{
+			pushConstantSize = math::max(pushConstantSize, pixelShader->getPushConstSize());
+		}
+
+		std::vector<PipelineShaderStageCreateInfo> stageCIs{};
+		VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		stageCIs.push_back(vertexShader->getShaderStageCreateInfo());
+
+		if (pixelShader != nullptr)
+		{
+			stageCIs.push_back(pixelShader->getShaderStageCreateInfo());
+			stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+		}
+
+		const auto graphicsCi = GraphicsPipelineCreateInfo(
+			std::move(stageCIs),
+			std::move(attachments),
+			pushConstantSize,
+			inDepthFormat,
+			inStencilFormat,
+			inTopology,
+			stageFlags);
+
+		return getPipelineContainer().graphics(name, graphicsCi);
+	}
 
 	template<class VertexShader, class PixelShader>
 	GraphicsPipelineRef Context::graphicsPipe(

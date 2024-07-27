@@ -39,11 +39,16 @@ namespace chord
 		addFullScreenPass(queue, name, std::dynamic_pointer_cast<GraphicsPipeline>(graphicsPipeline), RTs, std::move(lambda));
     }
 
-	extern void addComputePass(
-		graphics::GraphicsOrComputeQueue& queue,
+	template<typename PixelShader, typename PushConstType>
+	static inline void addFullScreenPass2(
+		graphics::GraphicsQueue& queue,
 		const std::string& name,
-		graphics::ComputePipelineRef pipe,
-		math::uvec3 dispatchParameter,
-		std::function<void(graphics::GraphicsOrComputeQueue& queue, graphics::ComputePipelineRef pipe, VkCommandBuffer cmd)>&& lambda
-	);
+		RenderTargets RTs,
+		const PushConstType& push)
+	{
+		addFullScreenPass<PixelShader>(queue, name, RTs, [&](graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)
+		{
+			pipe->pushConst(cmd, push);
+		});
+	}
 }

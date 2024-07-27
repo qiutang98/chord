@@ -33,6 +33,15 @@ namespace chord::graphics
 			}
 		}
 
+		void pushConst(VkCommandBuffer cmd, const void* data, VkDeviceSize size)
+		{
+			if (m_pushConstSize > 0)
+			{
+				check(size <= m_pushConstSize);
+				vkCmdPushConstants(cmd, m_pipelineLayout, m_shaderStageFlags, 0, size, data);
+			}
+		}
+
 	protected:
 		void initPipeline(VkPipeline pipeline);
 

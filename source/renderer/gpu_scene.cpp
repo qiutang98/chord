@@ -9,7 +9,7 @@
 
 #include <renderer/fullscreen.h>
 #include <application/application.h>
-
+#include <renderer/compute_pass.h>
 namespace chord
 {
 	using namespace graphics;
@@ -29,9 +29,12 @@ namespace chord
 	void chord::GPUSceneScatterUpload(
 		graphics::GraphicsOrComputeQueue& computeQueue,
 		graphics::PoolBufferGPUOnlyRef GPUSceneBuffer,
-		std::vector<math::uvec4>&& indexingData,
-		std::vector<math::uvec4>&& collectedData)
+		std::vector<math::uvec4>&& inIndexingData,
+		std::vector<math::uvec4>&& inCollectedData)
 	{
+		std::vector<math::uvec4> collectedData = inCollectedData;
+		std::vector<math::uvec4> indexingData = inIndexingData;
+
 		auto indexingDataBuffer = getContext().getBufferPool().createHostVisible(
 			"indexingDataBuffer", 
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
@@ -43,21 +46,18 @@ namespace chord
 			SizedBuffer(sizeof(math::uvec4) * collectedData.size(), (void*)collectedData.data()));
 
 		GPUSceneScatterUploadPushConsts pushConst { };
-		pushConst.indexingBufferId = asSRV(computeQueue, indexingDataBuffer->getRef());
-		pushConst.collectedUploadDataBufferId = asSRV(computeQueue, collectedDataBuffer->getRef());
+		pushConst.indexingBufferId = asSRV(computeQueue, indexingDataBuffer);
+		pushConst.collectedUploadDataBufferId = asSRV(computeQueue, collectedDataBuffer);
 		pushConst.uploadCount = indexingData.size();
-		pushConst.GPUSceneBufferId = asUAV(computeQueue, GPUSceneBuffer->get());
+		pushConst.GPUSceneBufferId = asUAV(computeQueue, GPUSceneBuffer);
 
 		math::uvec3 dispatchParameter = { divideRoundingUp(pushConst.uploadCount, uint32(kGPUSceneScatterUploadDimX)), 1, 1 };
 
 		auto computePipe = getContext().computePipe<GPUSceneScatterUploadCS>("GPUSceneScatterUploadCS");
-		addComputePass(computeQueue, "GPUSceneScatterUpload", computePipe, dispatchParameter, [&](GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)
-		{
-			pipe->pushConst(cmd, pushConst);
-		});
+		addComputePass2(computeQueue, "GPUSceneScatterUpload", computePipe, pushConst, dispatchParameter);
 
 		// Post update, change stage to SRV.
-		asSRV(computeQueue, GPUSceneBuffer->get());
+		asSRV(computeQueue, GPUSceneBuffer);
 	}
 
 	void chord::enqueueGPUSceneUpdate()
