@@ -6,14 +6,49 @@
 
 namespace chord
 {
+	struct GLTFSampler
+	{
+		ARCHIVE_DECLARE;
+
+		enum class EMinMagFilter
+		{
+			NEAREST = 9728,
+			LINEAR = 9729,
+			NEAREST_MIPMAP_NEAREST = 9984,
+			LINEAR_MIPMAP_NEAREST  = 9985,
+			NEAREST_MIPMAP_LINEAR  = 9986,
+			LINEAR_MIPMAP_LINEAR   = 9987,
+		};
+
+		enum class EWrap
+		{
+
+			REPEAT = 10497,
+			CLAMP_TO_EDGE   = 33071,
+			MIRRORED_REPEAT = 33648,
+		};
+
+		EMinMagFilter minFilter = EMinMagFilter::NEAREST;
+		EMinMagFilter magFilter = EMinMagFilter::NEAREST;
+		EWrap wrapS = EWrap::REPEAT;
+		EWrap wrapT = EWrap::REPEAT;
+
+		bool operator==(const GLTFSampler&) const = default;
+
+		uint32 getSampler() const;
+	};
+
 	struct GLTFTextureInfo
 	{
-		AssetSaveInfo image;
-		int32 textureCoord = 0;
+		ARCHIVE_DECLARE;
 
-		template<class Ar> void serialize(Ar& ar)
+		AssetSaveInfo image{ };
+		int32 textureCoord = 0;
+		GLTFSampler sampler { };
+
+		bool isValid() const
 		{
-			ar(image, textureCoord);
+			return !image.empty() && !image.isTemp();
 		}
 	};
 
@@ -23,6 +58,42 @@ namespace chord
 		Mask,
 		Blend,
 	};
+	class GLTFMaterialAsset;
+
+	class GLTFMaterialProxy
+	{
+	public:
+		explicit GLTFMaterialProxy(std::shared_ptr<GLTFMaterialAsset> material);
+		virtual ~GLTFMaterialProxy();
+
+		static void init(std::shared_ptr<GLTFMaterialProxy> proxy);
+
+		constexpr static uint32 kGPUSceneDataFloat4Count =
+			CHORD_DIVIDE_AND_ROUND_UP(sizeof(GLTFMaterialGPUData), sizeof(float) * 4);
+
+		graphics::GPUTextureAssetRef baseColorTexture = nullptr;
+		graphics::GPUTextureAssetRef metallicRoughnessTexture = nullptr;
+		graphics::GPUTextureAssetRef emissiveTexture = nullptr;
+		graphics::GPUTextureAssetRef normalTexture = nullptr;
+
+		std::shared_ptr<GLTFMaterialAsset> reference = nullptr;
+
+		uint32 getGPUSceneId() const
+		{
+			return m_gpuSceneGLTFMaterialAssetId;
+		}
+
+		void updateGPUScene(bool bForceUpload);
+
+	private:
+		void freeGPUScene();
+
+
+	private:
+		const uint64 m_proxyId = 0;
+		uint32 m_gpuSceneGLTFMaterialAssetId = -1;
+	};
+	using GLTFMaterialProxyRef = std::shared_ptr<GLTFMaterialProxy>;
 
 	class GLTFMaterialAsset : public IAsset
 	{
@@ -42,6 +113,8 @@ namespace chord
 		// 
 		explicit GLTFMaterialAsset(const AssetSaveInfo& saveInfo);
 
+		GLTFMaterialProxyRef getProxy();
+
 	protected:
 		// ~IAsset virtual function.
 		// Call back when call AssetManager::createAsset
@@ -50,6 +123,10 @@ namespace chord
 		virtual bool onSave() override;
 		virtual void onUnload() override;
 		// ~IAsset virtual function.
+
+	private:
+		// Weak ref here.
+		std::weak_ptr<GLTFMaterialProxy> m_proxy;
 
 	public:
 		math::vec4 baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -67,9 +144,11 @@ namespace chord
 
 		GLTFTextureInfo normalTexture;
 		float normalTextureScale = 1.0f;
-		GLTFTextureInfo occlusionTexture;
+		bool bExistOcclusion = false;
 		float occlusionTextureStrength = 1.0f;
 	};
+	using GLTFMaterialAssetRef = std::shared_ptr<GLTFMaterialAsset>;
+	using GLTFMaterialAssetWeak = std::weak_ptr<GLTFMaterialAsset>;
 
 	struct GLTFPrimitiveLOD
 	{
@@ -114,6 +193,9 @@ namespace chord
 		math::vec3 posMin;
 		math::vec3 posMax;
 		math::vec3 posAverage;
+
+		float lodBase = 10.0f;
+		float lodStep = 1.5f;
 	};
 
 	struct GLTFMesh
@@ -237,4 +319,10 @@ namespace chord
 	};
 	using GLTFAssetRef = std::shared_ptr<GLTFAsset>;
 	using GLTFAssetWeak = std::weak_ptr<GLTFAsset>;
+
+	extern GLTFMaterialAssetRef tryLoadGLTFMaterialAsset(const std::filesystem::path& path, bool bThreadSafe = true);
+	inline GLTFMaterialAssetRef tryLoadGLTFMaterialAsset(const AssetSaveInfo& info, bool bThreadSafe = true)
+	{
+		return tryLoadGLTFMaterialAsset(info.path(), bThreadSafe);
+	}
 }

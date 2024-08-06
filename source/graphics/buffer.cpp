@@ -4,6 +4,7 @@
 #include <graphics/bindless.h>
 #include <application/application.h>
 #include <utils/engine.h>
+#include <utils/cityhash.h>
 
 namespace chord::graphics
 {
@@ -93,7 +94,7 @@ namespace chord::graphics
 		};
 		Desc desc { .offset = offset, .range = range };
 
-		auto& view = m_views[crc::crc32(desc)];
+		auto& view = m_views[cityhash::cityhash64((const char*)(&desc), sizeof(desc))];
 		if (bUniform && (!view.uniform.isValid()))
 		{
 			view.uniform = getBindless().registerUniformBuffer(m_buffer, offset, range);

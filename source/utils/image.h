@@ -74,6 +74,7 @@ namespace chord
 		void fillChessboard(RGBA c0, RGBA c1, int32 width, int32 height, int32 blockDim);
 		bool fillFromFile(const std::string& path, int32 requiredComponent = 4);
 
+		virtual ~ImageLdr2D(){ }
 	public:
 		template<class Ar> void serialize(Ar& ar, uint32 ver)
 		{
@@ -85,7 +86,7 @@ namespace chord
 	{
 	public:
 		bool fillFromFile(const std::string& path, int32 requiredComponent = 4);
-
+		virtual ~ImageHalf2D() { }
 	public:
 		template<class Ar> void serialize(Ar& ar, uint32 ver)
 		{

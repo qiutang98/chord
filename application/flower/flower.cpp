@@ -194,6 +194,8 @@ void Flower::onProjectSetup()
 
     onceEventAfterTick.add([&](const chord::ApplicationTickData&)
     {
+		getContext().waitDeviceIdle();
+
         // Remove hub.
         check(m_widgetManager.removeWidget(m_hubHandle));
         m_hubHandle = nullptr;
@@ -267,6 +269,8 @@ void Flower::onProjectSetup()
 
 		{
 			const auto window = Application::get().getWindowData().window;
+
+
 
 			// Window resizable.
 			glfwSetWindowAttrib(window, GLFW_RESIZABLE, GL_TRUE);

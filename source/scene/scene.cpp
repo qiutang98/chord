@@ -50,7 +50,20 @@ namespace chord
 	void Scene::onPostConstruct()
 	{
 		// Construct root node post construct.
-		m_root = createNode(kRootId, u16str("Root"));
+		if (m_root == nullptr)
+		{
+			m_root = createNode(kRootId, u16str("Root"));
+		}
+
+	}
+
+	void Scene::postLoad()
+	{
+		// All node tick.
+		loopNodeTopToDown([](SceneNodeRef node)
+		{
+			node->postLoad();
+		}, m_root);
 	}
 
 	SceneNodeRef Scene::createNode(size_t id, const u16str& name)
@@ -82,11 +95,11 @@ namespace chord
 		}, m_root);
 	}
 
-	void Scene::perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView)
+	void Scene::perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera)
 	{
 		loopNodeTopToDown([&](SceneNodeRef node)
 		{
-			node->perviewPerframeCollect(collector, cameraView);
+			node->perviewPerframeCollect(collector, cameraView, camera);
 		}, m_root);
 	}
 

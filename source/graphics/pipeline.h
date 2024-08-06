@@ -11,7 +11,10 @@ namespace chord::graphics
 	class IPipeline : NonCopyable
 	{
 	public:
-		explicit IPipeline(const std::string& name, uint32 pushConstSize, VkShaderStageFlags shaderStageFlags);
+		explicit IPipeline(
+			const std::string& name, 
+			uint32 pushConstSize, 
+			VkShaderStageFlags shaderStageFlags);
 		virtual ~IPipeline();
 
 		virtual void bind(VkCommandBuffer cmd) const = 0;
@@ -42,6 +45,11 @@ namespace chord::graphics
 			}
 		}
 
+		VkPipelineLayout getLayout() const
+		{
+			return m_pipelineLayout;
+		}
+
 	protected:
 		void initPipeline(VkPipeline pipeline);
 
@@ -65,7 +73,7 @@ namespace chord::graphics
 	{
 	public:
 		explicit ComputePipeline(const std::string& name, const ComputePipelineCreateInfo& ci);
-		~ComputePipeline();
+		virtual ~ComputePipeline();
 
 		virtual void bind(VkCommandBuffer cmd) const override;
 	};
@@ -75,7 +83,7 @@ namespace chord::graphics
 	{
 	public:
 		explicit GraphicsPipeline(const std::string& name, const GraphicsPipelineCreateInfo& ci);
-		~GraphicsPipeline();
+		virtual ~GraphicsPipeline();
 
 		virtual void bind(VkCommandBuffer cmd) const override;
 	};

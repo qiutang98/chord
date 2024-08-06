@@ -64,6 +64,9 @@ namespace chord
 	class LogCacheSink : public spdlog::sinks::base_sink <Mutex>
 	{
 		friend LoggerSystem;
+	public:
+		virtual ~LogCacheSink() { }
+
 	private:
 		Events<LogCacheSink, const std::string&, ELogType> m_callbacks;
 

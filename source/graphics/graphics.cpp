@@ -52,7 +52,7 @@ namespace chord::graphics
 		EConsoleVarFlags::ReadOnly
 	);
 
-	static uint32 sPoolTextureFreeFrameCount = 5;
+	static uint32 sPoolTextureFreeFrameCount = 3;
 	static AutoCVarRef<uint32> cVarPoolTextureFreeFrameCount(
 		"r.graphics.texturepool.freeframecount",
 		sPoolTextureFreeFrameCount,
@@ -60,7 +60,7 @@ namespace chord::graphics
 		EConsoleVarFlags::ProjectIni
 	);
 
-	static uint32 sPoolBufferFreeFrameCount = 5;
+	static uint32 sPoolBufferFreeFrameCount = 3;
 	static AutoCVarRef<uint32> cVarPoolBufferFreeFrameCount(
 		"r.graphics.bufferpool.freeframecount",
 		sPoolBufferFreeFrameCount,
@@ -248,6 +248,11 @@ namespace chord::graphics
 	void Context::waitDeviceIdle() const
 	{
 		vkDeviceWaitIdle(m_device);
+	}
+
+	void Context::pushDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32 set, uint32 descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites)
+	{
+		vkCmdPushDescriptorSetKHR(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
 	}
 
 	bool Context::init(const InitConfig& inputConfig)
@@ -484,6 +489,7 @@ namespace chord::graphics
 				m_physicalDeviceFeatures.core10Features = deviceFeatures2.features;
 
 				// Bindless relative support state check.
+				checkGraphics(m_physicalDeviceFeatures.core12Features.shaderStorageImageArrayNonUniformIndexing);
 				checkGraphics(m_physicalDeviceFeatures.core12Features.shaderSampledImageArrayNonUniformIndexing);
 				checkGraphics(m_physicalDeviceFeatures.core12Features.descriptorBindingSampledImageUpdateAfterBind);
 				checkGraphics(m_physicalDeviceFeatures.core12Features.shaderUniformBufferArrayNonUniformIndexing);
@@ -605,6 +611,7 @@ namespace chord::graphics
 				enableIfExist(nullptr, VK_KHR_SPIRV_1_4_EXTENSION_NAME, "Spirv1_4", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_EXT_MESH_SHADER_EXTENSION_NAME, "MeshShader", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 				enableIfExist(nullptr, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME, "ShaderFloatControls", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
+				enableIfExist(nullptr, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, "timeline", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
 
 				// GLFW
 				enableIfExist(&m_initConfig.bGLFW, VK_KHR_SWAPCHAIN_EXTENSION_NAME, "GLFW", &VkExtensionProperties::extensionName, available, deviceExtensionNames);
@@ -659,6 +666,7 @@ namespace chord::graphics
 					FORCE_ENABLE(core12Features.descriptorBindingPartiallyBound);
 					FORCE_ENABLE(core12Features.descriptorBindingVariableDescriptorCount);
 					FORCE_ENABLE(core12Features.shaderSampledImageArrayNonUniformIndexing);
+					FORCE_ENABLE(core12Features.shaderStorageImageArrayNonUniformIndexing);
 					FORCE_ENABLE(core12Features.descriptorBindingUpdateUnusedWhilePending);
 					FORCE_ENABLE(core12Features.descriptorBindingSampledImageUpdateAfterBind);
 					FORCE_ENABLE(core12Features.descriptorBindingStorageBufferUpdateAfterBind);
@@ -679,6 +687,7 @@ namespace chord::graphics
 					FORCE_ENABLE(core13Features.dynamicRendering);
 					FORCE_ENABLE(core13Features.synchronization2);
 					FORCE_ENABLE(core13Features.maintenance4);
+					FORCE_ENABLE(core13Features.shaderDemoteToHelperInvocation);
 
 					// EXT dynamic state2.
 					FORCE_ENABLE(extendedDynamicState2Features.extendedDynamicState2LogicOp);
@@ -933,10 +942,6 @@ namespace chord::graphics
 	{
 		// 
 		m_shaderLibrary->tick(tickData);
-
-		// Update texture pool.
-		m_texturePool->tick(tickData);
-		m_bufferPool->tick(tickData);
 		m_asyncUploader->tick(tickData);
 
 		// Imgui new frame.
@@ -946,6 +951,10 @@ namespace chord::graphics
 
 		// ImGui prepare render data.
 		m_imguiManager->render(tickData);
+
+		// Update texture and buffer pool, do some garbage collect.
+		m_texturePool->garbageCollected(tickData);
+		m_bufferPool->garbageCollected(tickData);
 
 		return true;
 	}
@@ -969,6 +978,11 @@ namespace chord::graphics
 		vkDeviceWaitIdle(m_device);
 	}
 
+	DescriptorFactory Context::descriptorFactoryBegin()
+	{
+		return DescriptorFactory::begin(&m_descriptorLayoutCache, &m_descriptorAllocator);
+	}
+
 	void Context::release()
 	{
 		m_asyncUploader.reset();
@@ -990,6 +1004,10 @@ namespace chord::graphics
 		m_bindlessManager.reset();
 		m_pipelineLayoutManager.reset();
 		m_pipelineContainer.reset();
+
+		// Release descriptor allocator and layout cache.
+		m_descriptorAllocator.release();
+		m_descriptorLayoutCache.release();
 
 		// Clear VMA.
 		if (m_vmaAllocator != VK_NULL_HANDLE)
@@ -1021,8 +1039,10 @@ namespace chord::graphics
 
 	void Context::initBuiltinTextures()
 	{
-		auto imageCI1x1  = helper::buildBasicUploadImageCreateInfo(1, 1);
-		auto uploadVMACI = helper::buildVMAUploadImageAllocationCI();
+		auto imageCI1x1   = helper::buildBasicUploadImageCreateInfo(1, 1);
+		imageCI1x1.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+
+		auto uploadVMACI  = helper::buildVMAUploadImageAllocationCI();
 
 		// Sync upload builtin textures.
 		{

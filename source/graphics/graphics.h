@@ -7,6 +7,7 @@
 #include <graphics/pipeline.h>
 #include <graphics/rendertargetpool.h>
 #include <graphics/uploader.h>
+#include <graphics/descriptor.h>
 
 namespace chord::graphics
 {
@@ -194,7 +195,8 @@ namespace chord::graphics
 
 		inline ComputePipelineRef computePipe(
 			std::shared_ptr<ShaderModule> computeShader,
-			const std::string& name
+			const std::string& name,
+			const std::vector<VkDescriptorSetLayout>& additionalSetLayouts = {}
 		);
 
 		template<class ComputeShader>
@@ -203,6 +205,18 @@ namespace chord::graphics
 		void waitDeviceIdle() const;
 		GPUBufferRef getDummySSBO() const { return m_dummySSBO; }
 		GPUBufferRef getDummyUniform() const { return m_dummyUniform; }
+
+		DescriptorFactory descriptorFactoryBegin();
+		DescriptorLayoutCache& getDescriptorLayoutCache() { return m_descriptorLayoutCache; }
+		const DescriptorLayoutCache& getDescriptorLayoutCache() const { return m_descriptorLayoutCache; }
+
+		void pushDescriptorSet(
+			VkCommandBuffer commandBuffer,
+			VkPipelineBindPoint pipelineBindPoint,
+			VkPipelineLayout layout,
+			uint32 set,
+			uint32 descriptorWriteCount,
+			const VkWriteDescriptorSet* pDescriptorWrites);
 
 	public:
 		bool init(const InitConfig& config);
@@ -266,6 +280,10 @@ namespace chord::graphics
 		BuiltinTextures m_builtinTextures;
 		GPUBufferRef m_dummySSBO;
 		GPUBufferRef m_dummyUniform;
+
+		// Descriptor allocator and layout cache.
+		DescriptorAllocator m_descriptorAllocator;
+		DescriptorLayoutCache m_descriptorLayoutCache;
 
 		// Graphics family command pool with RESET bit flag.
 		std::unique_ptr<CommandPoolResetable> m_graphicsCommandPool;

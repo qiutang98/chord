@@ -76,6 +76,9 @@ namespace chord
 			return m_mipmapAlphaCutoff;
 		}
 
+		bool isGPUTextureStreamingReady() const;
+		graphics::GPUTextureAssetRef getGPUTexture(std::function<void(graphics::GPUTextureAssetRef)>&& afterLoadingCallback = nullptr);
+
 	private:
 		static AssetTypeMeta createTypeMeta();
 
@@ -92,6 +95,11 @@ namespace chord
 			m_dimension = dimension;
 			m_mipmapAlphaCutoff = alphaCutoff;
 		}
+
+	private:
+		// Reference host by material or component, asset only host weak pointer.
+		graphics::GPUTextureAssetWeak m_gpuTexture;
+
 
 	private:
 		// Current texture asset under which color space.
@@ -113,4 +121,10 @@ namespace chord
 		uint32 m_mipmapCount;
 	};
 	using TextureAssetRef = std::shared_ptr<TextureAsset>;
+
+	extern TextureAssetRef tryLoadTextureAsset(const std::filesystem::path& path, bool bThreadSafe = true);
+	inline TextureAssetRef tryLoadTextureAsset(const AssetSaveInfo& info, bool bThreadSafe = true)
+	{
+		return tryLoadTextureAsset(info.path(), bThreadSafe);
+	}
 }

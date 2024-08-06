@@ -7,6 +7,21 @@
 #include <scene/component.h>
 #include <scene/scene_node.h>
 #include <asset/gltf/gltf.h>
+#include <scene/component/gltf_mesh.h>
+#include <scene/component/gltf_material.h>
+
+registerPODClassMember(GLTFSampler)
+{
+	ARCHIVE_ENUM_CLASS(minFilter);
+	ARCHIVE_ENUM_CLASS(magFilter);
+	ARCHIVE_ENUM_CLASS(wrapS);
+	ARCHIVE_ENUM_CLASS(minFilter);
+}
+
+registerPODClassMember(GLTFTextureInfo)
+{
+	ar(image, textureCoord, sampler);
+}
 
 registerPODClassMember(GLTFPrimitiveLOD)
 {
@@ -29,6 +44,8 @@ registerPODClassMember(GLTFPrimitive)
 	ar(lods);
 	ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
 	ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
+
+	ar(lodBase, lodStep);
 }
 
 registerPODClassMember(GLTFMesh)
@@ -86,7 +103,7 @@ registerClassMemberInherit(GLTFMaterialAsset, IAsset)
 	ar(bDoubleSided);
 	ar(normalTexture);
 	ar(normalTextureScale);
-	ar(occlusionTexture);
+	ar(bExistOcclusion);
 	ar(occlusionTextureStrength);
 }}
 
@@ -105,6 +122,16 @@ registerClassMember(Component)
 registerClassMemberInherit(Transform, Component)
 {
 	ar(m_translation, m_rotation, m_scale);
+}}
+
+registerClassMemberInherit(GLTFMeshComponent, Component)
+{
+	ar(m_gltfMeshId, m_gltfAssetInfo);
+}}
+
+registerClassMemberInherit(GLTFMaterialComponent, Component)
+{
+	ar(m_gltfAssetInfos);
 }}
 
 registerClassMember(SceneNode)

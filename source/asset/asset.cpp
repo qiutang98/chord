@@ -111,7 +111,7 @@ namespace chord
 		else
 		{
 			const auto extension = path.extension().string();
-			// All asset extension start with .asset
+			// All asset extension start with .asset.
 			if (extension.starts_with(".asset"))
 			{
 				// When setup project, don't care thread safe.

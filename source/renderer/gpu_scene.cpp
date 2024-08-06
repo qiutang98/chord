@@ -79,6 +79,7 @@ namespace chord
 	GPUScene::GPUScene()
 		: m_gltfPrimitiveDataPool("GLTF.PrimitiveData")
 		, m_gltfPrimitiveDetailPool("GLTF.PrimitiveDetail")
+		, m_gltfMaterialPool("GLTF.Material")
 	{
 		
 	}
@@ -108,8 +109,10 @@ namespace chord
 		computeQueue.beginCommand({ computeQueue.getCurrentTimeline() });
 		{
 			// 
+			m_gltfMaterialPool.flushUpdateCommands(computeQueue);
 			m_gltfPrimitiveDataPool.flushUpdateCommands(computeQueue);
 			m_gltfPrimitiveDetailPool.flushUpdateCommands(computeQueue);
+
 		}
 		computeQueue.endCommand();
 	}

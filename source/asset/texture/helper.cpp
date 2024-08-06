@@ -20,10 +20,146 @@ namespace chord
 {
 	using namespace graphics;
 
+	// block compression functions.
+
+
 	namespace dxt
 	{
 		constexpr uint32 kBCBlockDim = 4U;
 		constexpr uint32 kBCBlockSize = kBCBlockDim * kBCBlockDim;
+
+		uint16_t uint8PackTo565(uint8_t* c)
+		{
+			uint16_t result = 0;
+			result |= ((uint16_t)math::floor(31.0f * c[2] / 255.0f) << 0);
+			result |= ((uint16_t)math::floor(63.0f * c[1] / 255.0f) << 5);
+			result |= ((uint16_t)math::floor(31.0f * c[0] / 255.0f) << 11);
+			return result;
+		}
+
+		// My simple implement.
+		static void compressBC3(uint8_t* dest, const uint8_t* src)
+		{
+			// Alpha pack.
+			{
+				uint8_t minAlpha = 255;
+				uint8_t maxAlpha = 0;
+
+				for (int i = 0; i < 16; i++)
+				{
+					uint8_t alpha = *(src + i * 4 + 3);
+					minAlpha = math::min(minAlpha, alpha);
+					maxAlpha = math::max(maxAlpha, alpha);
+				}
+
+				// Use six lerp point.
+				dest[0] = maxAlpha; // alpha 0
+				dest[1] = minAlpha; // alpha 1
+
+				if (maxAlpha > minAlpha)
+				{
+					uint64_t packAlphaBit = 0;
+
+					const float minAlphaFloat = float(minAlpha);
+					const float maxAlphaFloat = float(maxAlpha);
+
+					const float alphaRange = maxAlphaFloat - minAlphaFloat;
+					const float alphaMult = 7.0f / alphaRange;
+
+					for (int i = 0; i < 16; i++)
+					{
+						const uint8_t alpha = *(src + i * 4 + 3);
+						uint64_t index = uint64_t(math::round(float(alpha) - minAlphaFloat) * alphaMult);
+
+						if (index == 7) { index = 0; }
+						else { index++; }
+
+						packAlphaBit |= (index << (i * 3));
+					}
+
+					for (int i = 2; i < 8; i++)
+					{
+						dest[i] = (packAlphaBit >> ((i - 2) * 8)) & 0xff;
+					}
+				}
+				else
+				{
+					for (int i = 2; i < 8; i++)
+					{
+						dest[i] = 0; // All alpha value same.
+					}
+				}
+			}
+
+			// Color pack.
+			{
+				uint8_t minColor[3] = { 255, 255, 255 };
+				uint8_t maxColor[3] = { 0,   0,   0 };
+
+				for (int i = 0; i < 16; i++)
+				{
+					for (int j = 0; j < 3; j++)
+					{
+						uint8_t c = *(src + i * 4 + j);
+						minColor[j] = math::min(minColor[j], c);
+						maxColor[j] = math::max(maxColor[j], c);
+					}
+				}
+
+				uint16_t minColor565 = uint8PackTo565(minColor);
+				uint16_t maxColor565 = uint8PackTo565(maxColor);
+
+				// Fill max color 565 as color 0.
+				dest[8] = uint8_t((maxColor565 >> 0) & 0xff);
+				dest[9] = uint8_t((maxColor565 >> 8) & 0xff);
+
+				// Fill min color 565 as color 1.
+				dest[10] = uint8_t((minColor565 >> 0) & 0xff);
+				dest[11] = uint8_t((minColor565 >> 8) & 0xff);
+
+				if (maxColor565 > minColor565)
+				{
+					uint32_t packColorIndex = 0;
+
+					// TODO: Color error diffusion avoid too much block artifact.
+					vec3 minColorVec = math::vec3(minColor[0], minColor[1], minColor[2]);
+					vec3 maxColorVec = math::vec3(maxColor[0], maxColor[1], maxColor[2]);
+
+					// Color vector max -> min.
+					vec3 maxMinVec = maxColorVec - minColorVec;
+
+					// Color vector direction and length.
+					float lenInvert = 1.0f / math::length(maxMinVec);
+					vec3 colorDirVec = maxMinVec * lenInvert;
+
+					for (int i = 0; i < 16; i++)
+					{
+						vec3 computeVec =
+							math::vec3(*(src + i * 4 + 0), *(src + i * 4 + 1), *(src + i * 4 + 2)) - minColorVec;
+
+						// Project current color into color direction vector and scale to [0, 3]
+						uint32_t index = uint32_t(math::round(dot(computeVec, colorDirVec) * 3.0f * lenInvert));
+
+						if (index == 3) { index = 0; }
+						else { index++; }
+
+						packColorIndex |= (index << (i * 2));
+					}
+
+					for (int i = 12; i < 16; i++)
+					{
+						dest[i] = (packColorIndex >> ((i - 12) * 8)) & 0xff;
+					}
+				}
+				else
+				{
+					for (int i = 12; i < 16; i++)
+					{
+						dest[i] = 0; // All color value same.
+					}
+				}
+			}
+		}
 
 		template<size_t kComponentCount, size_t kCompressionRatio, size_t kPerBlockCompressedSize>
 		static void executeTaskForBC(
@@ -34,15 +170,20 @@ namespace chord
 			std::function<void(unsigned char* dest, const unsigned char* src)>&& functor)
 		{
 			compressMipData.resize(math::max(kPerBlockCompressedSize, srcMipData.size() / kCompressionRatio));
+
+			const uint mipBlockWidth = math::max(1u, mipWidth / kBCBlockDim);
+			const uint mipBlockHeight = math::max(1u, mipHeight / kBCBlockDim);
+
 			const auto buildBC = [&](const size_t loopStart, const size_t loopEnd)
 			{
+
+				std::array<uint8, kBCBlockSize* kComponentCount> block{ };
 				for (size_t taskIndex = loopStart; taskIndex < loopEnd; ++taskIndex)
 				{
-					const uint32 pixelPosX = (taskIndex * kBCBlockDim) % mipWidth;
-					const uint32 pixelPosY = kBCBlockDim * ((taskIndex * kBCBlockDim) / mipWidth);
-					const uint32 bufferOffset = taskIndex * kPerBlockCompressedSize;
+					const uint32 pixelPosX = (taskIndex % mipBlockWidth) * kBCBlockDim;
+					const uint32 pixelPosY = (taskIndex / mipBlockWidth) * kBCBlockDim;
 
-					std::array<uint8, kBCBlockSize* kComponentCount> block{ };
+					const uint32 bufferOffset = taskIndex * kPerBlockCompressedSize;
 					uint32 blockLocation = 0;
 
 					// Fill block for bc.
@@ -50,11 +191,17 @@ namespace chord
 					{
 						for (uint32 i = 0; i < kBCBlockDim; i++)
 						{
-							const uint32 dimX = pixelPosX + i;
-							const uint32 dimY = pixelPosY + j;
-							const uint32 pixelLocation = (dimX + dimY * mipWidth) * kComponentCount;
+							uint32 dimX = pixelPosX + i;
+							uint32 dimY = pixelPosY + j;
 
-							if (pixelLocation < srcMipData.size())
+							// BC compression require 4x4 block.
+							// It evaluate a lookup curve to fit the pixel value.
+							// So if no enough pixel to fill the block, just keep repeat one, auto fit by hardware decode.
+							if (dimX >= mipWidth)  { dimX %= mipWidth;  }
+							if (dimY >= mipHeight) { dimY %= mipHeight; }
+
+							const uint32 pixelLocation = (dimX + dimY * mipWidth) * kComponentCount;
+							check(pixelLocation < srcMipData.size());
 							{
 								const uint8* src = srcMipData.data() + pixelLocation;
 								uint8* dest = block.data() + blockLocation;
@@ -64,17 +211,15 @@ namespace chord
 							}
 						}
 					}
-
 					functor(&compressMipData[bufferOffset], block.data());
 				}
 			};
-			Application::get().getThreadPool().parallelizeLoop(0, math::max(1U, mipWidth * mipHeight / kBCBlockSize), buildBC).wait();
+			Application::get().getThreadPool().parallelizeLoop(0, mipBlockWidth * mipBlockHeight, buildBC).wait();
 		}
 
 		void mipmapCompressBC3(
 			std::vector<uint8>& compressMipData,
 			const std::vector<uint8>& srcMipData,
-			const TextureAsset& meta,
 			uint32 mipWidth,
 			uint32 mipHeight)
 		{
@@ -87,7 +232,11 @@ namespace chord
 			executeTaskForBC<kComponentCount, kCompressionRatio, kPerBlockCompressedSize>(
 				mipWidth, mipHeight, compressMipData, srcMipData, [](unsigned char* dest, const unsigned char* src)
 				{
+				#if 1
 					stb_compress_dxt_block(dest, src, 1, STB_DXT_HIGHQUAL);
+				#else
+					compressBC3(dest, src);
+				#endif
 				});
 		}
 
@@ -166,7 +315,7 @@ namespace chord
 
 				if (meta.getFormat() == VK_FORMAT_BC3_SRGB_BLOCK || meta.getFormat() == VK_FORMAT_BC3_UNORM_BLOCK)
 				{
-					mipmapCompressBC3(compressMipData, srcMipData, meta, mipWidth, mipHeight);
+					mipmapCompressBC3(compressMipData, srcMipData, mipWidth, mipHeight);
 				}
 				else if (meta.getFormat() == VK_FORMAT_BC5_UNORM_BLOCK)
 				{
@@ -308,7 +457,8 @@ namespace chord
 				{
 					if (channelCount == 4)
 					{
-						memcpy(pDestData, srcPixels, destMipData.size());
+						// Source data copy.
+						memcpy((void*)pDestData, srcPixels, destMipData.size() * sizeof(destMipData[0]));
 					}
 					else
 					{
@@ -517,8 +667,14 @@ namespace chord
 		constexpr auto kMaxSnapshotDim = 128u;
 		constexpr auto kPerSnapshotSize = kMaxSnapshotDim * kMaxSnapshotDim * 4 * 4;
 
+		constexpr VkFormat kFormat = VK_FORMAT_BC3_SRGB_BLOCK;
+
 		static void quantifyDim(uint32& widthSnapShot, uint32& heightSnapShot, uint32 texWidth, uint32 texHeight)
 		{
+			// For bc.
+			texWidth  = math::max(texWidth,  4u);
+			texHeight = math::max(texHeight, 4u);
+
 			if (texWidth >= kMaxSnapshotDim || texHeight >= kMaxSnapshotDim)
 			{
 				if (texWidth > texHeight)
@@ -544,7 +700,7 @@ namespace chord
 			}
 		}
 
-		void build8bit(const TextureAsset& meta, std::vector<uint8>& data, unsigned char* pixels, int numChannel, math::uvec2& dim)
+		void build8bit(const TextureAsset& meta, std::vector<uint8>& outData, const unsigned char* pixels, int numChannel, math::uvec2& dim)
 		{
 			const auto& dimension = meta.getDimension();
 
@@ -555,7 +711,7 @@ namespace chord
 			dim.x = widthSnapShot;
 			dim.y = heightSnapShot;
 
-			data.resize(widthSnapShot * heightSnapShot * numChannel);
+			std::vector<uint8> data(widthSnapShot * heightSnapShot * numChannel);
 
 			// if (meta.isSRGB())
 			{
@@ -574,6 +730,9 @@ namespace chord
 					STBIR_FLAG_ALPHA_PREMULTIPLIED,
 					STBIR_EDGE_CLAMP
 				);
+
+				// BC compression.
+				dxt::mipmapCompressBC3(outData, data, dim.x, dim.y);
 			}
 			/*
 			else
@@ -627,14 +786,17 @@ namespace chord
 			);
 
 			// Remap to 255.0f. maybe need tonemaper.
-			ldrDatas.resize(snapshotData.size());
-			for (size_t i = 0; i < ldrDatas.size(); i += 4)
+			std::vector<uint8> ldrDatasRaw(snapshotData.size());
+			for (size_t i = 0; i < ldrDatasRaw.size(); i += 4)
 			{
-				ldrDatas[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
-				ldrDatas[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
-				ldrDatas[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
-				ldrDatas[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
+				ldrDatasRaw[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
+				ldrDatasRaw[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
+				ldrDatasRaw[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
+				ldrDatasRaw[i] = uint8(float(snapshotData[i]) / 65535.0f * 255.0f);
 			}
+
+			// BC compression.
+			dxt::mipmapCompressBC3(ldrDatas, ldrDatasRaw, dim.x, dim.y);
 		}
 	}
 
@@ -667,7 +829,7 @@ namespace chord
 		auto imageCI = helper::buildBasicUploadImageCreateInfo(
 			m_snapshotDimension.x, 
 			m_snapshotDimension.y,
-			VK_FORMAT_R8G8B8A8_SRGB); // All snapshot is srgb encode.
+			snapshot::kFormat);
 		
 		auto uploadVMACI = helper::buildVMAUploadImageAllocationCI();
 
@@ -837,7 +999,7 @@ namespace chord
 				std::vector<uint8> data{};
 
 				// NOTE: we current only use srgb for snapshot texture.
-				snapshot::build8bit(*texturePtr, data, (unsigned char*)pixels, 4, dimSnapshot);
+				snapshot::build8bit(*texturePtr, data, (const unsigned char*)pixels, 4, dimSnapshot);
 
 				texturePtr->saveSnapShot(dimSnapshot, data);
 			}
@@ -861,6 +1023,7 @@ namespace chord
 				case VK_FORMAT_R8G8B8A8_UNORM:
 				case VK_FORMAT_R8G8B8A8_SRGB:
 				case VK_FORMAT_R8G8_UNORM:
+				case VK_FORMAT_R8_UNORM:
 				{
 					// Do nothing.
 				}
@@ -999,15 +1162,13 @@ namespace chord
 			texturePtr->m_rawAssetPath = buildRelativePath(projectPaths.assetPath.u16(), copyDestPath);
 		}
 
-		
-		
 		LOG_TRACE("Import texture [size:({0},{1},{2}), mipmap:{6}] from '{3}' to '{4}' with format '{5}'.",
 			texturePtr->m_dimension.x,
 			texturePtr->m_dimension.y,
 			texturePtr->m_dimension.z,
 			texturePtr->m_rawAssetPath.u8(),
 			utf8::utf16to8(texturePtr->m_saveInfo.relativeAssetStorePath().u16string()),
-			std::string(nameof::nameof_enum(texturePtr->m_format)),
+			nameof::nameof_enum(texturePtr->m_format),
 			texturePtr->m_mipmapCount);
 		return texturePtr->save();
 	}

@@ -4,7 +4,13 @@
 
 namespace chord::graphics::helper
 {
-	
+	static inline void enableDepthTestDepthWrite(VkCommandBuffer cmd)
+	{
+		// Depth test and depth write enable.
+		vkCmdSetDepthTestEnable(cmd, VK_TRUE);
+		vkCmdSetDepthWriteEnable(cmd, VK_TRUE);
+		vkCmdSetDepthCompareOp(cmd, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	}
 
 	static inline VkImageSubresourceRange buildBasicImageSubresource(VkImageAspectFlags flags = VK_IMAGE_ASPECT_COLOR_BIT)
 	{
@@ -15,6 +21,11 @@ namespace chord::graphics::helper
 		range.baseArrayLayer = 0;
 		range.layerCount = VK_REMAINING_ARRAY_LAYERS;
 		return range;
+	}
+
+	static inline VkImageSubresourceRange buildDepthImageSubresource()
+	{
+		return buildBasicImageSubresource(VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
 	static inline VkImageCreateInfo buildBasicUploadImageCreateInfo(uint32 texWidth, uint32 texHeight, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM)
@@ -268,14 +279,22 @@ namespace chord::graphics::helper
 		return ext;
 	}
 
-	static inline void setViewport(VkCommandBuffer cmd, int32 width, int32 height)
+	static inline void setViewport(VkCommandBuffer cmd, int32 width, int32 height, bool bFlip = false)
 	{
 		VkViewport viewport;
 		viewport.x = 0;
-		viewport.y = 0;
+		viewport.width = (float)width;
 
-		viewport.width  = (float)width;
-		viewport.height = (float)height;
+		if (bFlip)
+		{
+			viewport.y = (float)height;
+			viewport.height = -(float)height;
+		}
+		else
+		{
+			viewport.y = 0;
+			viewport.height = (float)height;
+		}
 
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;

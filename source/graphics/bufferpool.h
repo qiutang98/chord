@@ -16,6 +16,7 @@ namespace chord::graphics
 	class GPUBufferPool : NonCopyable
 	{
 	public:
+
 		class PoolBuffer : public IResource
 		{
 			friend GPUBufferPool;
@@ -46,7 +47,7 @@ namespace chord::graphics
 
 		virtual ~GPUBufferPool();
 
-		void tick(const ApplicationTickData& tickData);
+		void garbageCollected(const ApplicationTickData& tickData);
 
 		// Generic buffer.
 		std::shared_ptr<PoolBuffer> create(
@@ -61,6 +62,8 @@ namespace chord::graphics
 				: PoolBuffer(inBuffer, hashId, pool)
 			{
 			}
+
+			virtual ~GPUOnlyPoolBuffer() { }
 		};
 
 		std::shared_ptr<GPUOnlyPoolBuffer> createGPUOnly(
@@ -78,6 +81,8 @@ namespace chord::graphics
 			{
 			}
 
+			virtual ~HostVisiblePoolBuffer() { }
+
 			const HostVisibleGPUBuffer& get() const { return *((HostVisibleGPUBuffer*)m_buffer.get()); }
 			HostVisibleGPUBuffer& get() { return *((HostVisibleGPUBuffer*)m_buffer.get()); }
 		};
@@ -89,6 +94,14 @@ namespace chord::graphics
 			VkBufferCreateFlags flags = 0);
 
 	private:
+		struct FreePoolBuffer
+		{
+			GPUBufferRef buffer;
+			uint64 freeFrame = 0;
+		};
+
+		void recentUsedUpdate(std::vector<FreePoolBuffer>& buffers) const;
+
 		friend PoolBuffer;
 
 		// Free frame count.
@@ -96,12 +109,6 @@ namespace chord::graphics
 
 		// Counter inner.
 		uint64 m_frameCounter = 0;
-
-		struct FreePoolBuffer
-		{
-			GPUBufferRef buffer;
-			uint64 freeFrame = 0;
-		};
 		std::map<uint64, std::vector<FreePoolBuffer>> m_buffers;
 	};
 	using GPUBufferPoolRef = std::shared_ptr<GPUBufferPool>;

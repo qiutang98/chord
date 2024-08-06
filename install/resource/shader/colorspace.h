@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COLORSPACE_H
+#define COLORSPACE_H
 
 #include "base.h"
 
@@ -24,3 +25,5 @@ namespace chord
         return lerp(12.92f * linearRec709, 1.055f * pow(linearRec709, 0.41666f) - 0.055f, step(0.0031308f, linearRec709));
     }
 }
+
+#endif // !COLORSPACE_H

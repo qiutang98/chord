@@ -58,6 +58,11 @@ namespace chord::graphics
 			checkVkResult(vkCreatePipelineLayout(getDevice(), &ci, getAllocationCallbacks(), &layout));
 
 			m_layouts[hash] = layout;
+
+			if (m_layouts.size() % 1000 == 0)
+			{
+				LOG_TRACE("Pipeline layouts increment already reach {}...", m_layouts.size());
+			}
 		}
 
 		return m_layouts[hash].get();

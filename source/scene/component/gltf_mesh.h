@@ -1,6 +1,6 @@
 #pragma once
-#include <scene/component.h>
 
+#include <scene/component.h>
 #include <asset/gltf/gltf.h>
 
 namespace chord
@@ -16,14 +16,18 @@ namespace chord
 		GLTFMeshComponent() = default;
 		GLTFMeshComponent(SceneNodeRef sceneNode) : Component(sceneNode) { }
 
-		virtual void onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const override;
+		virtual void onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const override;
 
 		virtual ~GLTFMeshComponent() = default;
 
 		bool setGLTFMesh(const AssetSaveInfo& asset, int32 meshId);
 
+		virtual void postLoad() override;
+
 	private:
 		static UIComponentDrawDetails createComponentUIDrawDetails();
+
+		void reloadResource();
 
 	private:
 		// Using GLTF primtive GPU Asset.

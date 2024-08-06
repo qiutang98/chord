@@ -37,7 +37,7 @@ public:
 	double m_lastY = 0.0f;
 
 	// Cache matrix.
-	chord::math::dmat4 m_viewMatrix { 1.0 };
+	chord::math::mat4 m_relativeCameraViewMatrix { 1.0f };
 	chord::math::mat4 m_projectMatrix { 1.0f };
 
 	bool isControlingCamera() const 
@@ -59,9 +59,9 @@ private:
 
 public:
 	// return camera view matrix.
-	virtual const chord::math::dmat4& getViewMatrix() const override
+	virtual const chord::math::mat4& getRelativeCameraViewMatrix() const override
 	{
-		return m_viewMatrix;
+		return m_relativeCameraViewMatrix;
 	}
 
 	// return camera project matrix.

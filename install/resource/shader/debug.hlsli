@@ -1,4 +1,5 @@
-#pragma once 
+#ifndef DEBUG_HLSLI
+#define DEBUG_HLSLI
 
 namespace debug 
 {
@@ -29,3 +30,5 @@ namespace debug
         if (bSeparate) printf("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
     }
 }
+
+#endif // !DEBUG_HLSLI

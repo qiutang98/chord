@@ -30,21 +30,46 @@ namespace chord
         }
     }
 
-    void SceneNode::perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const
+    void SceneNode::perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const
     {
         for (auto& comp : m_components)
         {
-            comp.second->onPerViewPerframeCollect(collector, cameraView);
+            comp.second->onPerViewPerframeCollect(collector, cameraView, camera);
         }
     }
 
-    GPUObjectBasicData SceneNode::getObjectBasicData(const PerframeCameraView& cameraView) const
+    GPUObjectBasicData SceneNode::getObjectBasicData(const PerframeCameraView& cameraView, const ICamera* camera) const
     {
         GPUObjectBasicData data { };
 
-        // TODO: Relative camera transform.
-        data.localToWorld = math::mat4(getTransform()->getWorldMatrix());
-        data.lastFrameLocalToWorld = math::mat4(getTransform()->getPrevWorldMatrix());
+
+
+        // Local2TranslatedWorld
+        {
+            const dvec3& cameraWorldPos = camera->getPosition();
+            math::dmat4 localToWorld = getTransform()->getWorldMatrix();
+
+            // Apply camera offset.
+            localToWorld[3][0] -= cameraWorldPos.x;
+            localToWorld[3][1] -= cameraWorldPos.y;
+            localToWorld[3][2] -= cameraWorldPos.z;
+
+            data.localToTranslatedWorld = math::mat4(localToWorld);
+            data.translatedWorldToLocal = math::inverse(data.localToTranslatedWorld);
+        }
+
+        // Local2TranslatedWorld last frame.
+        {
+            const dvec3& cameraWorldPosLast = camera->getLastPosition();
+            math::dmat4 localToWorldLast = getTransform()->getPrevWorldMatrix();
+
+            // Apply camera offset.
+            localToWorldLast[3][0] -= cameraWorldPosLast.x;
+            localToWorldLast[3][1] -= cameraWorldPosLast.y;
+            localToWorldLast[3][2] -= cameraWorldPosLast.z;
+
+            data.localToTranslatedWorldLastFrame = math::mat4(localToWorldLast);
+        }
 
         return data;
     }
@@ -115,6 +140,14 @@ namespace chord
             }
 
             markDirty();
+        }
+    }
+
+    void SceneNode::postLoad()
+    {
+        for (auto& comp : m_components)
+        {
+            comp.second->postLoad();
         }
     }
 

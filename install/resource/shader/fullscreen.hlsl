@@ -13,9 +13,19 @@ struct FullScreenVS2PS
 
 void fullScreenVS(uint vertexId : SV_VertexID, out FullScreenVS2PS output)
 {
+#if 0
+    // vulkan
     // vertex uv #0: (0.0, 0.0)
     //           #1: (2.0, 0.0)
     //           #2: (0.0, 2.0)
 	output.uv  = float2((vertexId << 1) & 2, vertexId & 2);
     output.pos = float4(output.uv * float2(2, -2) + float2(-1, 1), 0, 1);
+#else
+    // opengl
+    // vertex uv #0: (0.0, 0.0)
+    //           #1: (0.0, 2.0)
+    //           #2: (2.0, 0.0)
+	output.uv  = float2(vertexId & 2, (vertexId & 1) << 1);
+    output.pos = float4(output.uv * float2(2, -2) + float2(-1, 1), 0, 1);
+#endif
 }

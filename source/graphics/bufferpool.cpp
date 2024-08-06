@@ -13,7 +13,7 @@ namespace chord::graphics
 		m_buffers.clear();
 	}
 
-	void GPUBufferPool::tick(const ApplicationTickData& tickData)
+	void GPUBufferPool::garbageCollected(const ApplicationTickData& tickData)
 	{
 		// Update inner counter.
 		m_frameCounter = tickData.tickCount;
@@ -25,10 +25,13 @@ namespace chord::graphics
 			const auto& key = buffersPair.first;
 			auto& buffers  = buffersPair.second;
 
-			buffers.erase(std::remove_if(buffers.begin(), buffers.end(), [&](const auto& t)
+			if (!buffers.empty())
 			{
-				return m_frameCounter - t.freeFrame > m_freeFrameCount;
-			}), buffers.end());
+				buffers.erase(std::remove_if(buffers.begin(), buffers.end(), [&](const auto& t)
+				{
+					return m_frameCounter - t.freeFrame > m_freeFrameCount;
+				}), buffers.end());
+			}
 
 			if (buffers.empty())
 			{
@@ -42,16 +45,27 @@ namespace chord::graphics
 		}
 	}
 
+	void GPUBufferPool::recentUsedUpdate(std::vector<FreePoolBuffer>& buffers) const
+	{
+		if (!buffers.empty())
+		{
+			for (auto& buffer : buffers)
+			{
+				buffer.freeFrame = math::max(buffer.freeFrame, getFrameCounter() - m_freeFrameCount + 1);
+			}
+		}
+	}
+
 	PoolBufferRef GPUBufferPool::create(const std::string& name, const PoolBufferCreateInfo& inputInfo)
 	{
 		auto info = inputInfo;
 		info.size = divideRoundingUp(info.size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
 
 		const uint64 hashId = cityhash::cityhash64((const char*)&info, sizeof(info));
-		auto& list = m_buffers[hashId];
+		auto& freeBuffers = m_buffers[hashId];
 
 		GPUBufferRef buffer = nullptr;
-		if (list.empty())
+		if (freeBuffers.empty())
 		{
 			VkBufferCreateInfo ci{};
 			ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -68,9 +82,13 @@ namespace chord::graphics
 		}
 		else
 		{
-			buffer = list.back().buffer;
+			std::swap(freeBuffers.front(), freeBuffers.back()); // Use the oldest gay.
+
+			buffer = freeBuffers.back().buffer;
 			buffer->rename(name);
-			list.pop_back();
+			freeBuffers.pop_back();
+
+			recentUsedUpdate(freeBuffers);
 		}
 
 		return std::make_shared<GPUBufferPool::PoolBuffer>(buffer, hashId, *this);
@@ -89,10 +107,10 @@ namespace chord::graphics
 		poolInfo.vmaCreateFlag = getGPUOnlyBufferVMACI().flags;
 
 		const uint64 hashId = cityhash::cityhash64((const char*)&poolInfo, sizeof(poolInfo));
-		auto& list = m_buffers[hashId];
+		auto& freeBuffers = m_buffers[hashId];
 
 		GPUOnlyBufferRef buffer = nullptr;
-		if (list.empty())
+		if (freeBuffers.empty())
 		{
 			VkBufferCreateInfo ci{};
 			ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -105,9 +123,13 @@ namespace chord::graphics
 		}
 		else
 		{
-			buffer = std::dynamic_pointer_cast<GPUOnlyBuffer>(list.back().buffer);
+			std::swap(freeBuffers.front(), freeBuffers.back()); // Use the oldest gay.
+
+			buffer = std::dynamic_pointer_cast<GPUOnlyBuffer>(freeBuffers.back().buffer);
 			buffer->rename(name);
-			list.pop_back();
+			freeBuffers.pop_back();
+
+			recentUsedUpdate(freeBuffers);
 		}
 
 		return std::make_shared<GPUBufferPool::GPUOnlyPoolBuffer>(buffer, hashId, *this);
@@ -128,10 +150,10 @@ namespace chord::graphics
 		poolInfo.vmaCreateFlag = getHostVisibleGPUBufferVMACI().flags;
 
 		const uint64 hashId = cityhash::cityhash64((const char*)&poolInfo, sizeof(poolInfo));
-		auto& list = m_buffers[hashId];
+		auto& freeBuffers = m_buffers[hashId];
 
 		HostVisibleGPUBufferRef buffer = nullptr;
-		if (list.empty())
+		if (freeBuffers.empty())
 		{
 			VkBufferCreateInfo ci{};
 			ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -144,21 +166,19 @@ namespace chord::graphics
 		}
 		else
 		{
-			buffer = std::dynamic_pointer_cast<HostVisibleGPUBuffer>(list.back().buffer);
+			std::swap(freeBuffers.front(), freeBuffers.back()); // Use the oldest gay.
 
-			if (name == "indexingDataBuffer" || buffer->getName() == "indexingDataBuffer")
-			{
-				LOG_TRACE("Buffer '{0}' reuse to '{1}'.", buffer->getName(), name);
-			}
+			buffer = std::dynamic_pointer_cast<HostVisibleGPUBuffer>(freeBuffers.back().buffer);
 
 			buffer->rename(name);
-
 			if (data.isValid())
 			{
 				buffer->copyTo(data.ptr, data.size);
 			}
 
-			list.pop_back();
+			freeBuffers.pop_back();
+
+			recentUsedUpdate(freeBuffers);
 		}
 
 		return std::make_shared<GPUBufferPool::HostVisiblePoolBuffer>(buffer, hashId, *this);
@@ -171,6 +191,12 @@ namespace chord::graphics
 		freeBuffer.freeFrame = m_pool.m_frameCounter;
 
 		m_pool.m_buffers[m_hashId].push_back(freeBuffer);
+
+		const auto freeCount = m_pool.m_buffers[m_hashId].size();
+		if (freeCount % 1000 == 0)
+		{
+			LOG_TRACE("Poolbuffer freeCount increment already reach {0}...", freeCount);
+		}
 	}
 }
 

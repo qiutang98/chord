@@ -8,6 +8,8 @@ namespace chord::graphics
 	constexpr uint32 kAsyncStaticUploaderNum  = 2;
 	constexpr uint32 kAsyncDynamicUploaderNum = 1;
 
+	constexpr uint32 kUploadMemoryAlign = 16; // For BC.
+
 	static inline std::string getTransferBufferUniqueId()
 	{
 		static std::atomic<size_t> counter = 0;
@@ -181,6 +183,8 @@ namespace chord::graphics
 			// Do copy action here.
 			startRecordAsync();
 
+
+
 			
 			m_stageBuffer->map();
 			{
@@ -189,7 +193,7 @@ namespace chord::graphics
 				uint8* mapped = (uint8*)m_stageBuffer->getMapped();
 				for (auto i = 0; i < m_processingTasks.size(); i++)
 				{
-					const auto taskSize = m_processingTasks[i]->size;
+					const auto taskSize = ((m_processingTasks[i]->size + kUploadMemoryAlign - 1) / kUploadMemoryAlign) * kUploadMemoryAlign;
 					m_processingTasks[i]->task(totalSize, m_manager.getQueueFamily(), mapped, m_commandBufferAsync, *m_stageBuffer);
 
 					totalSize += taskSize;

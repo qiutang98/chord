@@ -4,13 +4,28 @@
 
 namespace chord
 {
+	struct Frustum
+	{
+		std::array<math::vec4, 6> planes;
+		enum ESide
+		{
+			eLeft,
+			eDown,
+			eRight,
+			eTop,
+			eFront,
+			eBack
+		};
+	};
+
+
 	// UNIT: Meter.
 	// 
 	class ICamera
 	{
 	public:
 		// return camera view matrix.
-		virtual const math::dmat4& getViewMatrix() const = 0;
+		virtual const math::mat4& getRelativeCameraViewMatrix() const = 0;
 
 		// return camera project matrix.
 		virtual const math::mat4& getProjectMatrix() const = 0;
@@ -59,11 +74,20 @@ namespace chord
 			return m_position; 
 		}
 
+		// Get last frame position.
+		inline const math::dvec3& getLastPosition() const
+		{
+			return m_positionLast;
+		}
+
 		void fillViewUniformParameter(PerframeCameraView& view) const;
+
+		Frustum computeRelativeWorldFrustum() const;
 
 	protected:
 		// world space position.
 		math::dvec3 m_position = { 25.0f, 25.0f, 25.0f };
+		math::dvec3 m_positionLast = { 25.0f, 25.0f, 25.0f };
 
 		// fov y.
 		float m_fovy = math::radians(45.0f);
@@ -71,8 +95,8 @@ namespace chord
 		// z near.
 		double m_zNear = 0.01; // 1 CM.
 
-		// z far, 0.0 meaning infinite z far.
-		double m_zFar = 0.0;
+		// z far, use for frustum culling, when rendering, we use infinite z.
+		double m_zFar = 39000.0; // 39 KM.
 
 		// render width.
 		size_t m_width;
@@ -81,7 +105,7 @@ namespace chord
 		size_t m_height;
 
 		// camera front direction.
-		math::dvec3 m_front = { -0.5f, -0.6f, 0.6f };
+		math::dvec3 m_front = { -0.5, -0.6, 0.6 };
 
 		// camera up direction.
 		math::dvec3 m_up;

@@ -1,6 +1,7 @@
 #include <graphics/resource.h>
 #include <graphics/graphics.h>
 #include <graphics/bindless.h>
+#include <utils/cityhash.h>
 
 namespace chord::graphics
 {
@@ -30,7 +31,7 @@ namespace chord::graphics
 	GPUSamplerManager::Sampler GPUSamplerManager::getSampler(SamplerCreateInfo info)
 	{
 		// Add or load sampler.
-		auto& sampler = m_samplers[crc::crc32(info)];
+		auto& sampler = m_samplers[cityhash::cityhash64((const char*)(&info), sizeof(info))];
 
 		// Create new sampler if not exist yet.
 		if (!sampler.index.isValid())
@@ -61,36 +62,19 @@ namespace chord::graphics
 
 			// Register in bindless.
 			sampler.index = getBindless().registerSampler(sampler.handle);
+
+			if (m_samplers.size() % 1000 == 0)
+			{
+				LOG_TRACE("Sampler cache count increment already reach {0}...", m_samplers.size());
+			}
 		}
 
 		return sampler;
 	}
 
-	static inline SamplerCreateInfo buildBasic()
-	{
-		SamplerCreateInfo info { };
-		info.magFilter  = VK_FILTER_NEAREST;
-		info.minFilter  = VK_FILTER_NEAREST;
-		info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-
-		info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-
-		info.minLod     = -10000.0f;
-		info.maxLod     = 10000.0f;
-		info.mipLodBias = 0.0f;
-
-		info.anisotropyEnable        = VK_FALSE;
-		info.compareEnable           = VK_FALSE;
-		info.unnormalizedCoordinates = VK_FALSE;
-
-		return info;
-	}
-
 	GPUSamplerManager::Sampler GPUSamplerManager::pointClampEdge()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter = VK_FILTER_NEAREST;
 		info.minFilter = VK_FILTER_NEAREST;
@@ -105,7 +89,7 @@ namespace chord::graphics
 
 	GPUSamplerManager::Sampler GPUSamplerManager::pointClampBorder0000()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter  = VK_FILTER_NEAREST;
 		info.minFilter  = VK_FILTER_NEAREST;
@@ -122,7 +106,7 @@ namespace chord::graphics
 
 	GPUSamplerManager::Sampler GPUSamplerManager::pointClampBorder1111()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter  = VK_FILTER_NEAREST;
 		info.minFilter  = VK_FILTER_NEAREST;
@@ -138,7 +122,7 @@ namespace chord::graphics
 
 	GPUSamplerManager::Sampler GPUSamplerManager::pointRepeat()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter  = VK_FILTER_NEAREST;
 		info.minFilter  = VK_FILTER_NEAREST;
@@ -153,7 +137,7 @@ namespace chord::graphics
 
 	GPUSamplerManager::Sampler GPUSamplerManager::linearClampEdgeMipPoint()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter = VK_FILTER_LINEAR;
 		info.minFilter = VK_FILTER_LINEAR;
@@ -169,7 +153,7 @@ namespace chord::graphics
 
 	GPUSamplerManager::Sampler GPUSamplerManager::linearClampBorder0000MipPoint()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter  = VK_FILTER_LINEAR;
 		info.minFilter  = VK_FILTER_LINEAR;
@@ -186,7 +170,7 @@ namespace chord::graphics
 
 	GPUSamplerManager::Sampler GPUSamplerManager::linearClampBorder1111MipPoint()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter = VK_FILTER_LINEAR;
 		info.minFilter = VK_FILTER_LINEAR;
@@ -202,7 +186,7 @@ namespace chord::graphics
 
 	GPUSamplerManager::Sampler GPUSamplerManager::linearRepeatMipPoint()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter = VK_FILTER_LINEAR;
 		info.minFilter = VK_FILTER_LINEAR;
@@ -217,7 +201,7 @@ namespace chord::graphics
 
 	GPUSamplerManager::Sampler GPUSamplerManager::linearClampEdge()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter  = VK_FILTER_LINEAR;
 		info.minFilter  = VK_FILTER_LINEAR;
@@ -232,7 +216,7 @@ namespace chord::graphics
 
 	GPUSamplerManager::Sampler GPUSamplerManager::linearRepeat()
 	{
-		SamplerCreateInfo info = buildBasic();
+		SamplerCreateInfo info = buildBasicSamplerCreateInfo();
 
 		info.magFilter = VK_FILTER_LINEAR;
 		info.minFilter = VK_FILTER_LINEAR;

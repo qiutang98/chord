@@ -7,6 +7,8 @@
 
 namespace chord::graphics
 {
+
+	// TODO: cache perframe free require only update once perframe.
 	BindlessManager::BindlessManager()
 	{
 		const auto& indexingProps = getContext().getPhysicalDeviceDescriptorIndexingProperties();
@@ -319,16 +321,13 @@ namespace chord::graphics
 		const auto& typeIndex = static_cast<uint32>(type);
 		const auto& config = m_bindingConfigs[typeIndex];
 
-		// We only reuse when free number is large enough.
-		const auto minStartFreeSize = config.count / 4;
-
 		// Final index.
 		uint32 index = 0;
 
 		// Reuse or increment new one.
 		auto& freeCounts = m_freeCount[typeIndex];
 		auto& usedCount  = m_usedCount[typeIndex];
-		if (freeCounts.size() < minStartFreeSize)
+		if (freeCounts.empty())
 		{
 			index = usedCount;
 			usedCount++;
@@ -340,6 +339,11 @@ namespace chord::graphics
 
 				LOG_GRAPHICS_ERROR("We reset bindless set count now, maybe cause some render error after this.");
 				usedCount = 0;
+			}
+
+			if (usedCount % 1000 == 0)
+			{
+				LOG_TRACE("Bindless {1} index increment already reach {0}...", usedCount, std::string(nameof::nameof_enum(type)));
 			}
 		}
 		else

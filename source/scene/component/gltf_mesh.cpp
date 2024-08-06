@@ -1,6 +1,7 @@
 #include <scene/component/gltf_mesh.h>
 #include <ui/ui_helper.h>
 #include <scene/scene_node.h>
+#include <scene/component/gltf_material.h>
 
 namespace chord
 {
@@ -34,9 +35,16 @@ namespace chord
 		return result;
 	}
 
-	void GLTFMeshComponent::onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const
+	void GLTFMeshComponent::reloadResource()
 	{
-		Super::onPerViewPerframeCollect(collector, cameraView);
+		m_gltfAsset = Application::get().getAssetManager().getOrLoadAsset<GLTFAsset>(m_gltfAssetInfo.path(), true);
+		m_gltfGPU = m_gltfAsset->getGPUPrimitives();
+	}
+
+	void GLTFMeshComponent::onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const
+	{
+		Super::onPerViewPerframeCollect(collector, cameraView, camera);
+		auto materialComp = getNode()->getComponent<GLTFMaterialComponent>();
 
 		if (m_gltfGPU == nullptr || m_gltfAsset == nullptr || m_gltfMeshId < 0)
 		{
@@ -49,14 +57,17 @@ namespace chord
 		}
 
 		GPUObjectGLTFPrimitive templatePrimitive { };
-		templatePrimitive.basicData = getNode()->getObjectBasicData(cameraView);
+		templatePrimitive.basicData = getNode()->getObjectBasicData(cameraView, camera);
 
 		const auto& meshes = m_gltfAsset->getMeshes().at(m_gltfMeshId);
 
 		uint meshletCount = 0;
 		for (uint32 primitiveId = 0; primitiveId < meshes.primitives.size(); primitiveId++)
 		{
+			auto materialProxy = materialComp->getProxy(primitiveId);
+
 			templatePrimitive.GLTFPrimitiveDetail = m_gltfGPU->getGPUScenePrimitiveDetailId(m_gltfMeshId, primitiveId);
+			templatePrimitive.GLTFMaterialData = materialProxy->getGPUSceneId();
 
 			meshletCount += meshes.primitives[primitiveId].lods[0].data.meshletCount;
 			collector.gltfPrimitives.push_back(templatePrimitive);
@@ -74,16 +85,20 @@ namespace chord
 			if (asset != m_gltfAssetInfo)
 			{
 				m_gltfAssetInfo = asset;
-
-				// Reload asset.
-				m_gltfAsset = Application::get().getAssetManager().getOrLoadAsset<GLTFAsset>(asset.path(), true);
-				m_gltfGPU = m_gltfAsset->getGPUPrimitives();
+				reloadResource();
 			}
 
 			markDirty();
-
 			return true;
 		}
 		return false;
+	}
+
+	void GLTFMeshComponent::postLoad()
+	{
+		if (!m_gltfAssetInfo.empty())
+		{
+			reloadResource();
+		}
 	}
 }

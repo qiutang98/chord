@@ -138,7 +138,7 @@ namespace chord::graphics
 		submitInfo.pCommandBuffers = &m_activeCmdCtx.command->commandBuffer;
 		submitInfo.pWaitDstStageMask = &kUiWaitFlags;
 
-		vkQueueSubmit(m_queue, 1, &submitInfo, VK_NULL_HANDLE);
+		vkQueueSubmit(m_queue, 1, &submitInfo, NULL);
 
 		m_usingCommands.push_back(m_activeCmdCtx.command);
 		m_activeCmdCtx = {};
@@ -148,9 +148,10 @@ namespace chord::graphics
 
 	void Queue::sync(uint32 freeFrameCount)
 	{
-		if (m_usingCommands.size() > 100)
+		constexpr size_t kCommandCountCheckPoint = 1000;
+		if (m_usingCommands.size() > kCommandCountCheckPoint)
 		{
-			LOG_ERROR("SS");
+			LOG_ERROR("Current exist {} command in queue, generally no need so much, maybe exist some leak.", m_usingCommands.size());
 		}
 		
 		// Free command when finish.
@@ -160,13 +161,23 @@ namespace chord::graphics
 			vkGetSemaphoreCounterValue(getDevice(), m_timelineSemaphore, &currentValue);
 
 			auto usingCmd = m_usingCommands.begin();
-			uint64 usingTimelineValue = (*usingCmd)->signalValue;
-			while (usingCmd != m_usingCommands.end() && (usingTimelineValue + freeFrameCount) <= currentValue)
-			{
-				(*usingCmd)->pendingResources.clear();
 
-				m_commandsPool.push_back(*usingCmd);
-				usingCmd = m_usingCommands.erase(usingCmd);
+			while (usingCmd != m_usingCommands.end())
+			{
+				uint64 usingTimelineValue = (*usingCmd)->signalValue;
+
+				if ((usingTimelineValue + freeFrameCount) <= currentValue)
+				{
+					// Empty unused resources.
+					(*usingCmd)->pendingResources.clear();
+
+					m_commandsPool.push_back(*usingCmd);
+					usingCmd = m_usingCommands.erase(usingCmd);
+				}
+				else
+				{
+					break;
+				}
 			}
 		}
 	}
@@ -300,6 +311,20 @@ namespace chord::graphics
 		GPUTextureSyncBarrierMasks mask;
 		mask.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		mask.barrierMasks.accesMask = VK_ACCESS_SHADER_READ_BIT;
+		mask.barrierMasks.queueFamilyIndex = getFamily();
+
+		image->get().transition(cmd->commandBuffer, mask, range);
+	}
+
+	void GraphicsOrComputeQueue::transitionUAV(PoolTextureRef image, VkImageSubresourceRange range)
+	{
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(image);
+
+		GPUTextureSyncBarrierMasks mask;
+		mask.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+		mask.barrierMasks.accesMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
 		mask.barrierMasks.queueFamilyIndex = getFamily();
 
 		image->get().transition(cmd->commandBuffer, mask, range);

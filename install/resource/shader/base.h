@@ -90,22 +90,29 @@
 
 struct GPUBasicData
 {
-    uint frameCounter;
+    uint frameCounter; // 32 bit-framecounter, easy overflow. todo:
     uint frameCounterMod8;
-
-    uint GLTFPrimitiveDetailBuffer;
-    uint GLTFPrimitiveDataBuffer;
-
-    uint GLTFObjectCount;
-    uint GLTFObjectBuffer;
-    uint pad0;
-    uint pad1;
+    uint GLTFPrimitiveDetailBuffer; // gpu scene: gltf primitive detail buffer index.
+    uint GLTFPrimitiveDataBuffer; // gpu scene: gltf primitive datas buffer index.
+    
+    uint GLTFMaterialBuffer; 
+    uint GLTFObjectCount; // scene: total gltf object count.
+    uint GLTFObjectBuffer; // scene: gltf object buffer index.
+    uint debuglineVertices; // debugline store vertices buffer index.
+    
+    uint debuglineCount; // current debug line use count buffer index.
+    uint debuglineMaxCount; // maximum of debug line can use.
+    uint pointClampEdgeSampler; // All point clamp edge sampler. 
+    uint pad2;
 };
+
+    
 
 struct PerframeCameraView
 {
     GPUBasicData basicData;
 
+    // float4x4 localToClip = mul(mul(viewToClip, translatedWorldToView), localToTranslatedWorld);
     float4x4 translatedWorldToView;
     float4x4 viewToTranslatedWorld;
 
@@ -114,23 +121,79 @@ struct PerframeCameraView
 
     float4x4 translatedWorldToClip;
     float4x4 clipToTranslatedWorld;
+
+    float4 frustumPlane[6]; // World space frustum plane.
+
+    float4x4 translatedWorldToClipLastFrame;
+    float4 frustumPlaneLastFrame[6];
 };
 CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);
 
 // Per-object descriptor in GPU, collected every frame.
 struct GPUObjectBasicData
 {
-    float4x4 localToWorld;
-    float4x4 lastFrameLocalToWorld;
+    float4x4 localToTranslatedWorld;
+    float4x4 translatedWorldToLocal; // inverse of localToTranslatedWorld
+
+    float4x4 localToTranslatedWorldLastFrame;
 };
 
 struct GPUObjectGLTFPrimitive
 {
     GPUObjectBasicData basicData;
     uint GLTFPrimitiveDetail;
-    uint pad0;
+    uint GLTFMaterialData;
     uint pad1;
     uint pad2;
 };
+
+inline uint shaderSetFlag(uint flags, uint bit)
+{
+    return flags | (1U << bit);
+}
+
+inline bool shaderHasFlag(uint flags, uint bit)
+{
+    return (flags & (1U << bit)) != 0U;
+}
+
+struct LineDrawVertex
+{
+    float3 translatedWorldPos;
+    uint color; // 8 bit per component, .rgba
+};
+
+inline uint shaderPackColor(uint R, uint G, uint B, uint A)
+{
+    uint color = 0;
+    color |= (R & 0xFF) <<  0;
+    color |= (G & 0xFF) <<  8;
+    color |= (B & 0xFF) << 16;
+    color |= (A & 0xFF) << 24;
+    return color;
+}
+
+inline float4 shaderUnpackColor(uint packData)
+{
+    float4 color;
+    color.r = float((packData >>  0) & 0xFF) / 255.0;
+    color.g = float((packData >>  8) & 0xFF) / 255.0;
+    color.b = float((packData >> 16) & 0xFF) / 255.0;
+    color.a = float((packData >> 24) & 0xFF) / 255.0;
+
+    return color;
+}
+
+// HZB mipmap count max 12, meaning from 4096 - 1.
+#define kHZBMaxMipmapCount 12
+#define kMaxObjectCount 0xFFFFFF
+#define kMaxObjectType  0xFF
+
+// ObjectType list, max is 255.
+#define OBJECT_TYPE_GLTF 0
+
+
+
+
 
 #endif // !SHADER_BASE_H

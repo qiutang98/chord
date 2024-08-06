@@ -219,6 +219,12 @@ bool chord::decomposeTransform(const math::dmat4& transform, math::dvec3& transl
 	return true;
 }
 
+chord::uint64 chord::requireUniqueId()
+{
+	static uint64 id = 0;
+	return id ++;
+}
+
 chord::math::mat4 chord::infiniteInvertZPerspectiveRH_ZO(float aspect, float fovy, float zNear)
 {
 	check(abs(aspect - std::numeric_limits<float>::epsilon()) > 0.0f);
@@ -239,8 +245,20 @@ static chord::uint64 requireResourceId()
 	return sId ++;
 }
 
+static chord::uint64 sResourceAliveCounter = 0;
+
 chord::IResource::IResource()
 	: m_id(requireResourceId())
 {
-	
+	sResourceAliveCounter ++;
+
+	if (sResourceAliveCounter % 1000 == 0)
+	{
+		LOG_TRACE("Live resource count already reach {}.", sResourceAliveCounter);
+	}
+}
+
+chord::IResource::~IResource()
+{
+	sResourceAliveCounter --;
 }

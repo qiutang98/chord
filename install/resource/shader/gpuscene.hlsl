@@ -31,9 +31,9 @@ CHORD_PUSHCONST(GPUSceneScatterUploadPushConsts, pushConsts);
 
 // Scatter upload shader.
 [numthreads(kGPUSceneScatterUploadDimX, 1, 1)] 
-void mainCS(uint lane : SV_DispatchThreadID)
+void mainCS(uint threadId : SV_DispatchThreadID)
 {
-    if (lane >= pushConsts.uploadCount)
+    if (threadId >= pushConsts.uploadCount)
     {
         return;
     } 
@@ -42,7 +42,7 @@ void mainCS(uint lane : SV_DispatchThreadID)
         uint4 indexingDataBuffer[];
         uint4 CollectUploadDataBin[];
     **/
-    const uint4 indexingInfo = BATL(uint4, pushConsts.indexingBufferId, lane);
+    const uint4 indexingInfo = BATL(uint4, pushConsts.indexingBufferId, threadId);
 
     RWByteAddressBuffer gpuSceneBuffer = RWByteAddressBindless(pushConsts.GPUSceneBufferId);
     ByteAddressBuffer collectedDataBuffer = ByteAddressBindless(pushConsts.collectedUploadDataBufferId); 
@@ -54,8 +54,11 @@ void mainCS(uint lane : SV_DispatchThreadID)
     // Fill data in GPU scene.
     for (uint i = 0; i < uint4Count; i ++)
     {
-        const uint4 loadData = collectedDataBuffer.TypeLoad(uint4, scatterBase + i);
-        gpuSceneBuffer.TypeStore(uint4, bufferOffset + i, loadData);
+        const uint loadPosition = scatterBase + i;
+        const uint storePosition = bufferOffset + i;
+        
+        const uint4 loadData = collectedDataBuffer.TypeLoad(uint4, loadPosition);
+        gpuSceneBuffer.TypeStore(uint4, storePosition, loadData);
     }
 }
 

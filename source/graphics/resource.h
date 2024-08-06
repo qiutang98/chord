@@ -35,7 +35,7 @@ namespace chord::graphics
 		Sampler linearRepeat();
 
 	private:
-		std::unordered_map<uint32, Sampler> m_samplers;
+		std::unordered_map<uint64, Sampler> m_samplers;
 	};
 
 	class GPUResource : public IResource
@@ -65,6 +65,7 @@ namespace chord::graphics
 		// Name of resource.
 		std::string m_flattenName = {};
 		std::set<std::string> m_names;
+		uint64 m_setNameFrame = 0;
 	};
 	using GPUResourceRef = std::shared_ptr<GPUResource>;
 

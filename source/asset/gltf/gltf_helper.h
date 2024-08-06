@@ -9,33 +9,36 @@ namespace chord
 	struct GLTFAssetImportConfig : public IAssetImportConfig
 	{
 		bool bGenerateSmoothNormal = false;
+		bool bGenerateLOD = true;
+		float lodBase = 10.0f;
+		float lodStep = 1.5f;
 	};
 	using GLTFAssetImportConfigRef = std::shared_ptr<GLTFAssetImportConfig>;
 	class GLTFAsset;
 
-	// Mesh primitive asset upload to gpu.
-	// Remap to GLTFPrimitiveDatasBuffer.
+	struct ComponentBuffer
+	{
+		explicit ComponentBuffer(
+			const std::string& name,
+			VkBufferUsageFlags flags,
+			VmaAllocationCreateFlags vmaFlags,
+			uint32 stripe,
+			uint32 num);
+
+		~ComponentBuffer();
+
+		graphics::GPUBufferRef buffer = nullptr;
+		graphics::BindlessIndex bindless;
+
+		VkDeviceSize stripe = ~0U;
+		uint32 elementNum = ~0U;
+	};
+
+	// Mesh primitive asset upload to gpu. Remap to GLTFPrimitiveDatasBuffer.
+	// GPU proxy of gltf primitive.
 	class GPUGLTFPrimitiveAsset : public graphics::IUploadAsset
 	{
 	public:
-		struct ComponentBuffer
-		{
-			explicit ComponentBuffer(
-				const std::string& name, 
-				VkBufferUsageFlags flags, 
-				VmaAllocationCreateFlags vmaFlags, 
-				uint32 stripe,
-				uint32 num);
-
-			~ComponentBuffer();
-
-			graphics::GPUBufferRef buffer = nullptr;
-			graphics::BindlessIndex bindless;
-
-			VkDeviceSize stripe = ~0U;
-			uint32 elementNum   = ~0U;
-		};
-
 		constexpr static uint32 kGPUSceneDataFloat4Count = CHORD_DIVIDE_AND_ROUND_UP(sizeof(GLTFPrimitiveDatasBuffer), sizeof(float) * 4);
 		constexpr static uint32 kGPUSceneDetailFloat4Count = CHORD_DIVIDE_AND_ROUND_UP(sizeof(GLTFPrimitiveBuffer), sizeof(float) * 4);
 
@@ -68,11 +71,11 @@ namespace chord
 
 		uint32 getGPUSceneId() const;
 		uint32 getGPUScenePrimitiveDetailId(uint32 meshId, uint32 primitiveId) const;
+
 	private:		
 		uint32 m_gpuSceneGLTFPrimitiveAssetId = -1;
 		std::vector<std::vector<uint32>> m_gpuSceneGLTFPrimitiveDetailAssetId = {};
 		std::weak_ptr<GLTFAsset> m_gltfAssetWeak = {};
-
 		std::string m_name;
 	};
 	using GPUGLTFPrimitiveAssetWeak = std::weak_ptr<GPUGLTFPrimitiveAsset>;

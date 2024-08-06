@@ -3,6 +3,7 @@
 #include <project.h>
 #include <scene/component/gltf_mesh.h>
 #include <scene/component/transform.h>
+#include <scene/component/gltf_material.h>
 
 namespace chord
 {
@@ -17,7 +18,7 @@ namespace chord
 
 		registerAsset(Transform::kComponentUIDrawDetails, typeid(Transform).name());
 		registerAsset(GLTFMeshComponent::kComponentUIDrawDetails, typeid(GLTFMeshComponent).name());
-
+		registerAsset(GLTFMaterialComponent::kComponentUIDrawDetails, typeid(GLTFMaterialComponent).name());
 	}
 
 	bool SceneManager::onInit()
@@ -87,6 +88,8 @@ namespace chord
 		if (auto newScene = Application::get().getAssetManager().getOrLoadAsset<Scene>(loadPath, true))
 		{
 			m_scene = newScene;
+
+			newScene->postLoad();
 			onSceneLoad.broadcast(newScene);
 
 			return true;

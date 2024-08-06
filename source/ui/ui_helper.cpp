@@ -174,7 +174,7 @@ namespace chord::ui
 
 	void inspectAssetSaveInfo(const AssetSaveInfo& info)
 	{
-		if (!info.empty())
+		if (info.empty())
 		{
 			ImGui::TextDisabled("Empty asset save info!");
 		}

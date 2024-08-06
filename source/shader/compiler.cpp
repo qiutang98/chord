@@ -25,14 +25,13 @@ namespace chord::graphics
 
 	}
 
+	constexpr const char* kDebugSourceArg = "-fspv-debug=vulkan-with-source";
+
 	void ShaderCompileEnvironment::buildArgs(ShaderCompileArguments& out) const
 	{
 		// Spv.
 		out.push_back("-spirv");
-		out.push_back("-fvk-allow-rwstructuredbuffer-arrays");
-	#ifdef CHORD_DEBUG
-	//  out.push_back("-fspv-debug=vulkan-with-source");
-	#endif
+	//	out.push_back("-fvk-allow-rwstructuredbuffer-arrays");
 
 		// Included path.
 		out.push_back("-I"); out.push_back("resource/shader");
@@ -95,6 +94,13 @@ namespace chord::graphics
 		}
 	}
 
+	void ShaderCompileEnvironment::enableDebugSource()
+	{
+	#ifdef CHORD_DEBUG
+		m_instructions.add(kDebugSourceArg);
+	#endif
+	}
+
 #ifdef _WIN32
 	class Win32DxcShaderCompiler final : public IPlatformShaderCompiler
 	{
@@ -116,7 +122,7 @@ namespace chord::graphics
 			checkGraphics(!FAILED(::DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcompiler))));
 		}
 
-		~Win32DxcShaderCompiler()
+		virtual ~Win32DxcShaderCompiler()
 		{
 
 		}
@@ -135,6 +141,19 @@ namespace chord::graphics
 				.Size = shaderData.size,
 				.Encoding = 0u,
 			};
+
+			bool bDebugSource = false;
+		#ifdef CHORD_DEBUG
+			for (const auto& arg : args)
+			{
+				if (arg == kDebugSourceArg)
+				{
+					bDebugSource = true;
+					break;
+				}
+			}
+		#endif // CHORD_DEBUG
+
 
 			Microsoft::WRL::ComPtr<IDxcResult> compiledShaderBuffer{};
 
@@ -183,7 +202,14 @@ namespace chord::graphics
 
 				// Copy error msg if exist error.
 				result.errorMsg = errorMessage;
-				result.bSuccess = false;
+
+				if (!bDebugSource)
+				{
+					// A dxc bug here: 
+					// warning: Member functions will not be linked to their class in the debug information. 
+					// See https://github.com/KhronosGroup/SPIRV-Registry/issues/203
+					result.bSuccess = false;
+				}
 			}
 
 			// Shader compile success, copy output to result.

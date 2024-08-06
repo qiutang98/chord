@@ -6,19 +6,50 @@
 #include <renderer/fullscreen.h>
 #include <renderer/render_textures.h>
 #include <scene/scene_common.h>
+#include <renderer/postprocessing/postprocessing.h>
 
 namespace chord
 {
-	struct GLTFRenderDescriptor
+	struct GLTFRenderContext
 	{
+		struct PostBasicCulling
+		{
+			// Visible meshlet count buffer id.
+			graphics::PoolBufferGPUOnlyRef meshletCountBuffer;
+
+			// Visible meshlet draw cmd buffer id.
+			graphics::PoolBufferGPUOnlyRef meshletCmdBuffer;
+		} postBasicCullingCtx;
+
 		const PerframeCollected* perframeCollect;
-		uint gltfObjectCount;
-		uint gltfBufferId;
+		const uint gltfObjectCount;
+		const uint gltfBufferId;
+		const uint cameraView;
+
+		graphics::GraphicsQueue& queue;
+		GBufferTextures& gbuffers;
+		const DeferredRendererHistory& history;
+
+		GLTFRenderContext(
+			const PerframeCollected* inPerframeCollected,
+			const uint inGLTFObjectCount,
+			const uint inGLTFBufferId,
+			const uint inCameraViewId,
+			graphics::GraphicsQueue& inQueue,
+			GBufferTextures& inGBuffers,
+			const DeferredRendererHistory& inHistory)
+			: perframeCollect(inPerframeCollected)
+			, gltfObjectCount(inGLTFObjectCount)
+			, gltfBufferId(inGLTFBufferId)
+			, cameraView(inCameraViewId)
+			, queue(inQueue)
+			, gbuffers(inGBuffers)
+			, history(inHistory)
+		{
+
+		}
 	};
 
-	extern void gltfBasePassRendering(
-		graphics::GraphicsQueue& queue, 
-		GBufferTextures& gbuffers, 
-		uint32 cameraView,
-		const GLTFRenderDescriptor& gltfRenderDescriptor);
+	extern void gltfPrePassRendering(GLTFRenderContext& renderCtx);
+	extern void gltfBasePassRendering(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx);
 }

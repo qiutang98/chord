@@ -2,6 +2,7 @@
 
 #include <scene/scene_common.h>
 #include <scene/component/transform.h>
+#include <utils/camera.h>
 
 namespace chord
 {
@@ -17,9 +18,9 @@ namespace chord
 
         static SceneNodeRef create(const size_t id, const u16str& name, SceneRef scene);
         void tick(const ApplicationTickData& tickData);
-        void perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const;
+        void perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const;
 
-        GPUObjectBasicData getObjectBasicData(const PerframeCameraView& cameraView) const;
+        GPUObjectBasicData getObjectBasicData(const PerframeCameraView& cameraView, const ICamera* camera) const;
 
     public:
         const auto& getId() const { return m_id; }
@@ -92,6 +93,8 @@ namespace chord
 
         // Set node static state.
         void setStaticImpl(bool bState, bool bForce);
+
+        void postLoad();
 
     private:
         // This node visibility state.

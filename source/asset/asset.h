@@ -40,6 +40,8 @@ namespace chord
 		// ~IAsset virtual function.
 		virtual bool onSave() = 0;
 		virtual void onUnload() = 0;
+
+
 		// ~IAsset virtual function.
 
 	public:
@@ -61,6 +63,7 @@ namespace chord
 
 	protected:
 		// ~IAsset virtual function.
+
 		// Call back when call AssetManager::createAsset
 		virtual void onPostConstruct() = 0; 
 		// ~IAsset virtual function.

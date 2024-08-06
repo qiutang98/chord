@@ -43,7 +43,10 @@ namespace chord::graphics
 		COMMON_GRAPHICS_PIPELINE_DYNAMIC_STATES
 	};
 
-	IPipeline::IPipeline(const std::string& name, uint32 pushConstSize, VkShaderStageFlags shaderStageFlags)
+	IPipeline::IPipeline(
+		const std::string& name, 
+		uint32 pushConstSize, 
+		VkShaderStageFlags shaderStageFlags)
 		: m_name(name)
 		, m_pushConstSize(pushConstSize)
 		, m_shaderStageFlags(shaderStageFlags)
@@ -80,7 +83,14 @@ namespace chord::graphics
 			pushConstCount = 1;
 		}
 
-		m_pipelineLayout = getContext().getPipelineLayoutManager().getLayout(1, &getContext().getBindlessManger().getSetLayout(), pushConstCount, &pushConstantRange);
+		std::vector<VkDescriptorSetLayout> descriptorSetLayouts { };
+		descriptorSetLayouts.push_back(getContext().getBindlessManger().getSetLayout());
+		for (const auto& setLayout : ci.additionalDescriptorSetLayouts)
+		{
+			descriptorSetLayouts.push_back(setLayout);
+		}
+
+		m_pipelineLayout = getContext().getPipelineLayoutManager().getLayout(descriptorSetLayouts.size(), descriptorSetLayouts.data(), pushConstCount, &pushConstantRange);
 
 		VkPipelineShaderStageCreateInfo shaderStageCI{};
 		shaderStageCI.module = ci.shaderModule;

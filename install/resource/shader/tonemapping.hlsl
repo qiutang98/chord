@@ -29,7 +29,7 @@ void mainPS(
 
 
 
-
+    sampleColor.xyz = pow(sampleColor.xyz, 2.2);
 
 
 

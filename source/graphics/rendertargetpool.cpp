@@ -44,7 +44,7 @@ namespace chord::graphics
 		m_rendertargets.clear();
 	}
 
-	void GPUTexturePool::tick(const ApplicationTickData& tickData)
+	void GPUTexturePool::garbageCollected(const ApplicationTickData& tickData)
 	{
 		// Update inner counter.
 		m_frameCounter = tickData.tickCount;
@@ -56,10 +56,18 @@ namespace chord::graphics
 			const auto& key = texturesPair.first;
 			auto& textures = texturesPair.second;
 
-			textures.erase(std::remove_if(textures.begin(), textures.end(),[&](const auto& t)
-			{ 
-				return m_frameCounter - t.freeFrame > m_freeFrameCount;
-			}), textures.end());
+			if (!textures.empty())
+			{
+				textures.erase(std::remove_if(textures.begin(), textures.end(), [&](const auto& t)
+				{
+					if (m_frameCounter - t.freeFrame > m_freeFrameCount)
+					{
+						LOG_TRACE("Remove texture {2}: ({0}x{1}).", t.texture->getExtent().width, t.texture->getExtent().height, t.texture->getName());
+					}
+					return m_frameCounter - t.freeFrame > m_freeFrameCount;
+				}), textures.end());
+			}
+
 
 			if (textures.empty())
 			{
@@ -107,9 +115,21 @@ namespace chord::graphics
 		}
 		else
 		{
+			std::swap(freeTextures.front(), freeTextures.back()); // Use the oldest gay.
+
 			texture = freeTextures.back().texture;
 			texture->rename(name);
 			freeTextures.pop_back();
+
+			// Current type texture use this frame, may exist a lot of chance reuse later.
+			// Step increment free frame.
+			if (!freeTextures.empty())
+			{
+				for (auto& texture : freeTextures)
+				{
+					texture.freeFrame = math::max(texture.freeFrame, getFrameCounter() - m_freeFrameCount + 1);
+				}
+			}
 		}
 
 		return std::make_shared<GPUTexturePool::PoolTexture>(texture, hashId, *this);

@@ -1,4 +1,5 @@
-#pragma once 
+#ifndef SHADER_GLTF_H
+#define SHADER_GLTF_H
 
 #include "base.h"
 
@@ -29,7 +30,7 @@ struct GPUGLTFMeshlet
     uint triangleCount;
 
     float3 posAverage;
-    uint pad0;
+    float pad0;
 };
 
 // Store in GPU scene.
@@ -49,7 +50,12 @@ struct GLTFPrimitiveBuffer
     uint color0Offset; 
     uint smoothNormalOffset; 
     uint textureCoord1Offset;
-    uint materialBufferId;
+    uint lodCount;
+
+    float lodBase;
+    float loadStep;
+    uint pad2;
+    uint pad3;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveBuffer);
 
@@ -72,3 +78,34 @@ struct GLTFPrimitiveDatasBuffer
     uint pad2;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveDatasBuffer);
+
+struct GLTFMaterialGPUData
+{
+    uint alphaMode;
+    float alphaCutOff;
+    uint bTwoSided;
+    uint baseColorId;
+
+    float4 baseColorFactor;
+
+    uint emissiveTexture;
+    float3 emissiveFactor;
+
+    float metallicFactor;
+    float roughnessFactor;
+    uint metallicRoughnessTexture;
+    uint normalTexture;
+
+    uint baseColorSampler;
+    uint emissiveSampler;
+    uint normalSampler;
+    uint metallicRoughnessSampler;
+    
+    float normalFactorScale;
+    uint bExistOcclusion;
+    float occlusionTextureStrength;
+    float pad0;
+};
+CHORD_CHECK_SIZE_GPU_SAFE(GLTFMaterialGPUData);
+
+#endif // !SHADER_GLTF_H

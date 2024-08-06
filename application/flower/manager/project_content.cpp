@@ -7,19 +7,13 @@
 using namespace chord;
 using namespace chord::graphics;
 
-static uint64 requireProjectContentEntryId()
-{
-	static uint64 uniqueId = 0;
-	return uniqueId++;
-}
-
 ProjectContentEntry::ProjectContentEntry(
 	const chord::u16str& name,
 	bool bFolder, 
 	const std::filesystem::path& path, 
 	std::shared_ptr<ProjectContentEntry> parent,
 	ProjectContentEntryTree& tree)
-	: m_hashId(requireProjectContentEntryId())
+	: m_hashId(requireUniqueId())
 	, m_name(name)
 	, m_bFolder(bFolder)
 	, m_path(path.u16string())

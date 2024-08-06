@@ -128,6 +128,11 @@ namespace chord::graphics
 			auto ftime = std::format("{}", std::filesystem::last_write_time(shaderFilePath));
 			m_shaderFileHash = cityhash::ctyhash64WithSeed(ftime.data(), ftime.size(), uint64(stage));
 
+		#if CHORD_DEBUG
+			// Debug hash no same with release hash.
+			m_shaderFileHash = hashCombine(0x47F6c39, m_shaderFileHash);
+		#endif
+
 			// Shader file name.
 			m_shaderFileHash = cityhash::ctyhash64WithSeed(shaderFilePath.data(), shaderFilePath.size(), m_shaderFileHash);
 
@@ -169,6 +174,8 @@ namespace chord::graphics
 
 		const GlobalShaderRegisteredInfo& getMetaInfo() const { return m_metaInfo; }
 		void buildArgs(ShaderCompileArguments& out) const;
+
+		void enableDebugSource();
 
 	private:
 		const GlobalShaderRegisteredInfo& m_metaInfo;

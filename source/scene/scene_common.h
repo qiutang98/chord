@@ -9,6 +9,7 @@ namespace chord
     class Scene;
     class SceneNode;
     class Component;
+    struct DebugLineCtx;
 
     using SceneNodeRef  = std::shared_ptr<SceneNode>;
     using SceneNodeWeak = std::weak_ptr<SceneNode>;
@@ -21,6 +22,8 @@ namespace chord
     {
         std::atomic_uint32_t gltfLod0MeshletCount = 0;
         std::vector<GPUObjectGLTFPrimitive> gltfPrimitives;
+
+        DebugLineCtx* debugLineCtx = nullptr;
     };
 
     class UIComponentDrawDetails

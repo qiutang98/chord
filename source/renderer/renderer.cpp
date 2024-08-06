@@ -10,6 +10,7 @@
 #include <application/application.h>
 #include <renderer/gpu_scene.h>
 #include <scene/scene_manager.h>
+#include <renderer/postprocessing/postprocessing.h>
 
 namespace chord
 {
@@ -133,34 +134,52 @@ namespace chord
 
 		// Update camera info first.
 		{
-			m_perframeCameraView.basicData = getGPUBasicData();
-			camera->fillViewUniformParameter(m_perframeCameraView);
+			auto lastFrame = m_perframeCameraView;
+			auto& currentFrame = m_perframeCameraView;
+
+			currentFrame.basicData = getGPUBasicData();
+			camera->fillViewUniformParameter(currentFrame);
+
+			// Update last frame infos.
+			currentFrame.translatedWorldToClipLastFrame = lastFrame.translatedWorldToClip;
+			for (uint i = 0; i < 6; i++) { currentFrame.frustumPlaneLastFrame[i] = lastFrame.frustumPlane[i]; }
 		}
+
+		DebugLineCtx debugLineCtx = allocateDebugLineCtx();
 
 		// Now collect perframe camera.
 		PerframeCollected perframe { };
-		GLTFRenderDescriptor gltfRenderDescritptor{};
+		uint gltfBufferId = ~0;
+		uint gltfObjectCount = 0;
 		{
+			perframe.debugLineCtx = &debugLineCtx;
+
 			// Collected.
-			scene->perviewPerframeCollect(perframe, m_perframeCameraView);
+			scene->perviewPerframeCollect(perframe, m_perframeCameraView, camera);
 
-			gltfRenderDescritptor.gltfObjectCount = perframe.gltfPrimitives.size();
-			gltfRenderDescritptor.perframeCollect = &perframe;
+			// Update gltf object count.
+			gltfObjectCount = perframe.gltfPrimitives.size();
 
-			if (gltfRenderDescritptor.gltfObjectCount > 0)
+			uint gltfBufferId = ~0;
+			if (gltfObjectCount > 0)
 			{
-				gltfRenderDescritptor.gltfBufferId =
-					uploadBufferToGPU(cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfRenderDescritptor.gltfObjectCount);
-			}
-			else
-			{
-				gltfRenderDescritptor.gltfBufferId = ~0;
+				gltfBufferId =
+					uploadBufferToGPU(cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfObjectCount);
 			}
 
-			m_perframeCameraView.basicData.GLTFObjectCount = gltfRenderDescritptor.gltfObjectCount;
-			m_perframeCameraView.basicData.GLTFObjectBuffer = gltfRenderDescritptor.gltfBufferId;
+			// GLTF object.
+			{
+				m_perframeCameraView.basicData.GLTFObjectCount = gltfObjectCount;
+				m_perframeCameraView.basicData.GLTFObjectBuffer = gltfBufferId;
+			}
+
+			// debugline ctx.
+			{
+				m_perframeCameraView.basicData.debuglineMaxCount = debugLineCtx.gpuMaxCount;
+				m_perframeCameraView.basicData.debuglineCount = debugLineCtx.gpuCountBuffer->get().requireView(true, false).storage.get();
+				m_perframeCameraView.basicData.debuglineVertices = debugLineCtx.gpuVertices->get().requireView(true, false).storage.get();
+			}
 		}
-
 
 		const uint32 currentRenderWidth = m_dimensionConfig.getRenderWidth();
 		const uint32 currentRenderHeight = m_dimensionConfig.getRenderHeight();
@@ -172,30 +191,58 @@ namespace chord
 
 		// Allocate view gpu uniform buffer.
 		uint32 viewGPUId = uploadBufferToGPU(cmd, "PerViewCamera-" + m_name, &m_perframeCameraView);
+
+		// update debugline gpu.
+		{
+			debugLineCtx.cameraViewBufferId = viewGPUId;
+		}
+
+
 		
 		// 
 		auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
+
+		GLTFRenderContext gltfRenderCtx(
+			&perframe,
+			gltfObjectCount,
+			gltfBufferId,
+			viewGPUId,
+			graphics,
+			gbuffers,
+			m_rendererHistory);
+
 		auto frameStartTimeline = graphics.getCurrentTimeline();
 
+		HZBContext hzbCtx { };
 		graphics.beginCommand({ frameStartTimeline });
 		{
+			debugLineCtx.prepareForRender(graphics);
+
 			// Clear all gbuffer textures.
 			addClearGbufferPass(graphics, gbuffers);
 
-			// Render GLTF
-			gltfBasePassRendering(graphics, gbuffers, viewGPUId, gltfRenderDescritptor);
 
+			gltfPrePassRendering(gltfRenderCtx);
+
+			hzbCtx = buildHZB(graphics, gbuffers.depthStencil);
+
+			// Render GLTF
+			gltfBasePassRendering(gltfRenderCtx, hzbCtx);
+
+			check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
+			check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);
+			tonemapping(graphics, gbuffers.color, finalOutput);
+
+			check(finalOutput->get().getExtent().width == gbuffers.depthStencil->get().getExtent().width);
+			check(finalOutput->get().getExtent().height == gbuffers.depthStencil->get().getExtent().height);
+			debugLine(graphics, debugLineCtx, gbuffers.depthStencil, finalOutput);
+
+			graphics.transitionPresent(finalOutput);
 		}
 		auto gbufferPassTimeline = graphics.endCommand();
 
 
-		graphics.beginCommand({ gbufferPassTimeline} );
-		{
-			tonemapping(graphics, gbuffers.color, finalOutput);
-
-			graphics.transitionPresent(finalOutput);
-		}
-		graphics.endCommand();
+		m_rendererHistory.hzbCtx = hzbCtx;
 	}
 
 	GPUBasicData getGPUBasicData()
@@ -205,12 +252,14 @@ namespace chord
 		const auto& GPUScene = Application::get().getGPUScene();
 
 		// Basic data collect.
-		result.frameCounter = getFrameCounter();
+		result.frameCounter = getFrameCounter() % uint64(UINT32_MAX);
 		result.frameCounterMod8 = getFrameCounter() % 8;
 		
 		// GPU scene.
-		result.GLTFPrimitiveDataBuffer = GPUScene.getGLTFPrimitiveDataPool().getBindlessSRVId();
-		result.GLTFPrimitiveDetailBuffer = GPUScene.getGLTFPrimitiveDetailPool().getBindlessSRVId();
+		GPUScene.fillGPUBasicData(result);
+
+
+		result.pointClampEdgeSampler = getContext().getSamplerManager().pointClampEdge().index.get();
 
 		return result;
 	}

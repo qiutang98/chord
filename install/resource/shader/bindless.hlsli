@@ -132,20 +132,37 @@ BINDLESS_DECLARE(SamplerComparisonState, (int)chord::EBindingType::BindlessSampl
 // Helper macro to load all template type.
 #define TBindless(Type, DataType, Index) T_BINDLESS_NAMED_RESOURCE(Type, DataType)[NonUniformResourceIndex(Index)]
 #define  Bindless(Type, Index) BINDLESS_NAMED_RESOURCE(Type)[NonUniformResourceIndex(Index)]
+
 #define ByteAddressBindless(Index) Bindless(ByteAddressBuffer, Index)
 #define RWByteAddressBindless(Index) Bindless(RWByteAddressBuffer, Index)
+
 
 // Usage:
 //
 // TBindless(ConstantBuffer, ...)
 // ByteAddressBindless()
 
-#define TypeLoad(Type, ElementId) Load<Type>(ElementId * sizeof(Type))
-#define TypeStore(Type, ElementId, Value) Store<Type>(ElementId * sizeof(Type), Value)
+#define TypeLoad(Type, ElementId) Load<Type>((ElementId) * sizeof(Type))
+#define TypeStore(Type, ElementId, Value) Store<Type>((ElementId) * sizeof(Type), Value)
 
 #define BATL(Type, BufferId, ElementId) ByteAddressBindless(BufferId).TypeLoad(Type, ElementId)
 #define BATS(Type, BufferId, ElementId, Value) RWByteAddressBindless(BufferId).TypeStore(Type, ElementId, Value)
  
 #define LoadCameraView(Index) BATL(PerframeCameraView, Index, 0)
+
+
+uint interlockedAddUint(uint bufferId, uint count = 1)
+{
+    uint index;
+    RWByteAddressBuffer bufferAcess = RWByteAddressBindless(bufferId);
+    bufferAcess.InterlockedAdd(0, count, index);
+    return index;
+}
+
+SamplerState getPointClampEdgeSampler(PerframeCameraView perView)
+{
+    SamplerState pointClampSampler = Bindless(SamplerState, perView.basicData.pointClampEdgeSampler);
+    return pointClampSampler;
+}
 
 #endif // !SHADER_BINDLESS_HLSLI

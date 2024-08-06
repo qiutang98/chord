@@ -4,6 +4,7 @@
 #include <graphics/bindless.h>
 #include <application/application.h>
 #include <utils/engine.h>
+#include <utils/cityhash.h>
 
 namespace chord::graphics
 {
@@ -66,7 +67,7 @@ namespace chord::graphics
 		}
 		sTotalGPUTextureDeviceSize -= getSize();
 
-		ImageView fallbackView = bAppReleasing ? ImageView { } :
+		ImageView fallbackView = bAppReleasing ? ImageView{ } :
 			getContext().getBuiltinTextures().white->getOwnHandle()->requireView(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D, false, false);
 
 		// Destroy cached image views.
@@ -108,7 +109,7 @@ namespace chord::graphics
 	//       This is a general safe access flags compute function, no for best performance.
 	// 
 	CHORD_DEPRECATED("Performance poor function, don't use it.")
-	static void getVkAccessFlagsByLayout(VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags& srcMask, VkAccessFlags& dstMask)
+		static void getVkAccessFlagsByLayout(VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags& srcMask, VkAccessFlags& dstMask)
 	{
 		switch (oldLayout)
 		{
@@ -145,11 +146,19 @@ namespace chord::graphics
 	}
 
 	// Generic pipeline state, so don't call this in render pipe, just for queue transfer purpose.
-	void GPUTexture::transition(VkCommandBuffer cb, const GPUTextureSyncBarrierMasks& newState, const VkImageSubresourceRange& range)
+	void GPUTexture::transition(VkCommandBuffer cb, const GPUTextureSyncBarrierMasks& newState, const VkImageSubresourceRange& inRange)
 	{
 		std::vector<VkImageMemoryBarrier> barriers;
 
-		VkDependencyFlags dependencyFlags { };
+		VkDependencyFlags dependencyFlags{ };
+		auto range = inRange;
+
+		// 
+		if (hasFlag(range.aspectMask, VK_IMAGE_ASPECT_DEPTH_BIT) || hasFlag(range.aspectMask, VK_IMAGE_ASPECT_STENCIL_BIT))
+		{
+			range.aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+			range.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+		}
 
 		// Generic pipeline state, so don't call this in render pipe, just for queue transfer purpose.
 		VkPipelineStageFlags srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -241,10 +250,11 @@ namespace chord::graphics
 		info.subresourceRange = range;
 
 		// Create image view if no init.
-		auto& view = m_views[crc::crc32(info)];
+		auto& view = m_views[cityhash::cityhash64((const char*)(&info), sizeof(info))];
 		if (!view.handle.isValid())
 		{
 			view.handle = helper::createImageView(info);
+			setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64)view.handle.get(), getName().c_str());
 		}
 
 		// Create SRV if require.

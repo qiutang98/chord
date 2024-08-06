@@ -429,10 +429,21 @@ void WidgetOutliner::acceptDragdrop(bool bRoot)
 									// 
 									if (activeGLTFNode.mesh > -1)
 									{
-										auto gltfMeshComp = std::dynamic_pointer_cast<GLTFMeshComponent>(GLTFMeshComponent::kComponentUIDrawDetails.factory());
+										auto gltfMeshComp = 
+											std::dynamic_pointer_cast<GLTFMeshComponent>(GLTFMeshComponent::kComponentUIDrawDetails.factory());
 										activeScene->addComponent<GLTFMeshComponent>(gltfMeshComp, newSceneNode);
-
 										gltfMeshComp->setGLTFMesh(gltfRef->getSaveInfo(), activeGLTFNode.mesh);
+
+										auto gltfMaterialComp = 
+											std::dynamic_pointer_cast<GLTFMaterialComponent>(GLTFMaterialComponent::kComponentUIDrawDetails.factory());
+										activeScene->addComponent<GLTFMaterialComponent>(gltfMaterialComp, newSceneNode);
+
+										std::vector<AssetSaveInfo> materials{};
+										for (auto& primitive : gltfMeshes[activeGLTFNode.mesh].primitives)
+										{
+											materials.push_back(primitive.material);
+										}
+										gltfMaterialComp->setGLTFMaterial(materials);
 									}
 									
 

@@ -205,6 +205,12 @@ void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* windo
 		return;
 	}
 
+	// Update position of last frame.
+	{
+		m_positionLast = m_position;
+	}
+
+
 	size_t renderWidth  = size_t(m_viewport->getRenderWidth());
 	size_t renderHeight = size_t(m_viewport->getRenderHeight());
 	const double dt = tickData.dt;
@@ -294,10 +300,9 @@ void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* windo
 // We use reverse z projection.
 void ViewportCamera::updateMatrixMisc()
 {
-	// update view matrix.
-	m_viewMatrix = math::lookAt(m_position, m_position + m_front, m_up);
+	// update view matrix, relative camera view.
+	m_relativeCameraViewMatrix = math::lookAt(vec3(0.0f), vec3(m_front), vec3(m_up));
 
 	// Reset z far to zero ensure we use infinite invert z.
-	m_zFar = 0.0f;
 	m_projectMatrix = chord::infiniteInvertZPerspectiveRH_ZO(getAspect(), m_fovy, m_zNear);
 }

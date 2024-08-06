@@ -93,8 +93,10 @@ namespace chord::graphics
 	{
 	public:
 		explicit GraphicsOrComputeQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
+		virtual ~GraphicsOrComputeQueue() { }
 
 		void transitionSRV(PoolTextureRef image, VkImageSubresourceRange range);
+		void transitionUAV(PoolTextureRef image, VkImageSubresourceRange range);
 		void transitionUAV(PoolBufferRef buffer);
 		void transitionSRV(PoolBufferRef buffer);
 		void transition(PoolBufferRef buffer, VkAccessFlags flag);
@@ -106,7 +108,7 @@ namespace chord::graphics
 	{
 	public:
 		explicit GraphicsQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
-
+		virtual ~GraphicsQueue() { }
 		
 		void clearDepthStencil(
 			PoolTextureRef image,

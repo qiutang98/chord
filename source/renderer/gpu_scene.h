@@ -17,7 +17,7 @@ namespace chord
 		std::vector<math::uvec4>&& indexingData,
 		std::vector<math::uvec4>&& collectedData);
 
-	template<typename T, uint32 kFloat4Count>
+	template<uint32 kFloat4Count>
 	class GPUScenePool
 	{
 	public:
@@ -159,9 +159,10 @@ namespace chord
 		graphics::PoolBufferGPUOnlyRef m_currentGPUBuffer = nullptr;
 	};
 
-	using GPUSceneGLTFPrimitiveAssetPool  = GPUScenePool<GPUGLTFPrimitiveAsset, GPUGLTFPrimitiveAsset::kGPUSceneDataFloat4Count>;
-	using GPUSceneGLTFPrimitiveDetailPool = GPUScenePool<GPUGLTFPrimitiveAsset, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count>;
-
+	using GPUSceneGLTFPrimitiveAssetPool  = GPUScenePool<GPUGLTFPrimitiveAsset::kGPUSceneDataFloat4Count>;
+	using GPUSceneGLTFPrimitiveDetailPool = GPUScenePool<GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count>;
+	using GPUSceneGLTFMaterialPool = GPUScenePool<GLTFMaterialProxy::kGPUSceneDataFloat4Count>;
+	
 	class GPUScene : NonCopyable
 	{
 	public:
@@ -174,11 +175,22 @@ namespace chord
 		auto& getGLTFPrimitiveDetailPool() { return m_gltfPrimitiveDetailPool; }
 		const auto& getGLTFPrimitiveDetailPool() const { return m_gltfPrimitiveDetailPool; }
 
+		auto& getGLTFMaterialPool() { return m_gltfMaterialPool; }
+		const auto& getGLTFMaterialPool() const { return m_gltfMaterialPool; }
+
 		bool shouldFlush() const
 		{
 			return
 				m_gltfPrimitiveDataPool.shouldFlush() ||
-				m_gltfPrimitiveDetailPool.shouldFlush();
+				m_gltfPrimitiveDetailPool.shouldFlush() ||
+				m_gltfMaterialPool.shouldFlush();
+		}
+
+		void fillGPUBasicData(GPUBasicData& data) const
+		{
+			data.GLTFPrimitiveDataBuffer = getGLTFPrimitiveDataPool().getBindlessSRVId();
+			data.GLTFPrimitiveDetailBuffer = getGLTFPrimitiveDetailPool().getBindlessSRVId();
+			data.GLTFMaterialBuffer = getGLTFMaterialPool().getBindlessSRVId();
 		}
 
 	private:
@@ -190,6 +202,7 @@ namespace chord
 
 		GPUSceneGLTFPrimitiveAssetPool m_gltfPrimitiveDataPool;
 		GPUSceneGLTFPrimitiveDetailPool m_gltfPrimitiveDetailPool;
+		GPUSceneGLTFMaterialPool m_gltfMaterialPool;
 	};
 
 	void enqueueGPUSceneUpdate();

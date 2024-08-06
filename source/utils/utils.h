@@ -370,7 +370,7 @@ namespace chord
 			return m_id;
 		}
 
-		virtual ~IResource() { }
+		virtual ~IResource();
 	};
 	using ResourceRef = std::shared_ptr<IResource>;
 
@@ -531,6 +531,8 @@ namespace chord
 		v++;
 		return v;
 	}
+
+	extern uint64 requireUniqueId();
 
 	extern math::mat4 infiniteInvertZPerspectiveRH_ZO(float aspect, float fovy, float zNear);
 }

@@ -7,15 +7,10 @@
 #include <shader/base.h>
 #include <utils/camera.h>
 #include <graphics/bufferpool.h>
+#include <renderer/postprocessing/postprocessing.h>
 
 namespace chord
 {
-
-	struct DeferredRendererHistory
-	{
-
-	};
-
 	extern GPUBasicData getGPUBasicData();
 
 	class DeferredRenderer : NonCopyable

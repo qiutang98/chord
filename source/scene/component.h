@@ -1,6 +1,7 @@
 #pragma once
 
 #include <scene/scene_common.h>
+#include <utils/camera.h>
 
 namespace chord
 {
@@ -22,8 +23,11 @@ namespace chord
 		virtual void tick(const ApplicationTickData& tickData) {}
 		virtual void release() { }
 
+		// Post component load.
+		virtual void postLoad() { }
+
 		// Perview collect.
-		virtual void onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView) const { }
+		virtual void onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const { }
 		// ~Component Interface.
 		
 		// Change owner node.

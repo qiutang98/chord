@@ -64,6 +64,26 @@ namespace chord
 		vkCmdDispatchIndirect(cmd, dispatchBuffer->get(), offset);
 	}
 
+	void addDrawPass(
+		graphics::GraphicsQueue& queue, 
+		const std::string& name, 
+		graphics::GraphicsPipelineRef pipe, 
+		RenderTargets& RTs, 
+		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
+	{
+		queue.checkRecording();
+		auto& cmd = queue.getActiveCmd()->commandBuffer;
+
+		pipe->bind(cmd);
+
+		RTs.beginRendering(queue);
+		{
+			vkCmdSetVertexInputEXT(cmd, 0, nullptr, 0, nullptr);
+			lambda(queue, pipe, cmd);
+		}
+		RTs.endRendering(queue);
+	}
+
 	void addIndirectDrawPass(
 		graphics::GraphicsQueue& queue, 
 		const std::string& name, 

@@ -252,6 +252,28 @@ namespace chord::graphics
 		VkBool32             unnormalizedCoordinates;
 	};
 
+	static inline SamplerCreateInfo buildBasicSamplerCreateInfo()
+	{
+		SamplerCreateInfo info { };
+		info.magFilter  = VK_FILTER_NEAREST;
+		info.minFilter  = VK_FILTER_NEAREST;
+		info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+		info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+		info.minLod     = -10000.0f;
+		info.maxLod     = 10000.0f;
+		info.mipLodBias = 0.0f;
+
+		info.anisotropyEnable        = VK_FALSE;
+		info.compareEnable           = VK_FALSE;
+		info.unnormalizedCoordinates = VK_FALSE;
+
+		return info;
+	}
+
 	class PipelineLayoutManager : NonCopyable
 	{
 	public:

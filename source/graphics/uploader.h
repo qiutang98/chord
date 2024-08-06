@@ -86,6 +86,8 @@ namespace chord::graphics
 
 		}
 
+		virtual ~DynamicAsyncUploader() { }
+
 		virtual void onFinished() override;
 	};
 
@@ -103,6 +105,7 @@ namespace chord::graphics
 			: IAsyncUploader(name, in)
 		{
 		}
+		virtual ~StaticAsyncUploader() { }
 
 		virtual void onFinished() override;
 	};
@@ -200,6 +203,8 @@ namespace chord::graphics
 			}
 		}
 
+		virtual ~IUploadAsset() { }
+
 		// Is this asset still loading or ready.
 		bool isLoading() const { return  m_bLoading; }
 		bool isReady()   const { return !m_bLoading; }
@@ -234,8 +239,6 @@ namespace chord::graphics
 		// Fallback asset when the asset is still loading.
 		IUploadAsset* m_fallback = nullptr;
 	};
-
-
 
 	class GPUTextureAsset : public IUploadAsset
 	{

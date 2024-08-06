@@ -21,6 +21,8 @@ namespace chord
 		virtual ~Scene() = default;
 
 		static const AssetTypeMeta kAssetTypeMeta;
+
+		void postLoad();
 	protected:
 		// ~IAsset virtual function.
 		// Call back when call AssetManager::createAsset
@@ -34,7 +36,7 @@ namespace chord
 		void tick(const ApplicationTickData& tickData);
 
 		// Perview perframe collect.
-		void perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView);
+		void perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera);
 
 		// Get root node.
 		SceneNodeRef getRootNode() const

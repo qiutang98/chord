@@ -281,8 +281,11 @@ namespace chord
         // Broadcast release event.
         onRelease.broadcast();
 
-        m_gpuScene.reset();
         m_engine.reset();
+
+        // GPU post engine clear.
+        m_gpuScene.reset();
+
         m_assetManager.release();
         m_context.release();
 

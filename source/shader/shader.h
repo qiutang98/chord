@@ -349,10 +349,12 @@ namespace chord::graphics
 		explicit ComputePipelineCreateInfo(
 			uint32 inPushConstSize, 
 			VkShaderModule inShaderModule,
-			const std::string& inShaderEntryName)
+			const std::string& inShaderEntryName,
+			const std::vector<VkDescriptorSetLayout> inAdditionalDescriptorSetLayouts)
 			: pushConstantSize(inPushConstSize)
 			, shaderModule(inShaderModule)
 			, shaderEntryName(inShaderEntryName)
+			, additionalDescriptorSetLayouts(inAdditionalDescriptorSetLayouts)
 		{
 
 		}
@@ -361,12 +363,19 @@ namespace chord::graphics
 		{
 			uint64 hash = hashCombine(pushConstantSize, uint64(shaderModule));
 
+			hash = cityhash::ctyhash64WithSeed(
+				(const char*)additionalDescriptorSetLayouts.data(),
+				sizeof(VkDescriptorSetLayout) * additionalDescriptorSetLayouts.size(),
+				hash);
+
 			return hash;
 		}
 
 		const VkShaderModule shaderModule;
 		const uint32 pushConstantSize;
 		const std::string shaderEntryName;
+
+		std::vector<VkDescriptorSetLayout> additionalDescriptorSetLayouts;
 	};
 
 	class GraphicsPipelineCreateInfo
@@ -501,12 +510,13 @@ namespace chord::graphics
 
 	ComputePipelineRef Context::computePipe(
 		std::shared_ptr<ShaderModule> computeShader,
-		const std::string& name)
+		const std::string& name,
+		const std::vector<VkDescriptorSetLayout>& additionalSetLayouts)
 	{
 		uint32 pushConstSize = computeShader->getPushConstSize();
 		auto pipelineCI = computeShader->getShaderStageCreateInfo();
 
-		const auto computeCI = ComputePipelineCreateInfo(pushConstSize, pipelineCI.module, pipelineCI.pName);
+		const auto computeCI = ComputePipelineCreateInfo(pushConstSize, pipelineCI.module, pipelineCI.pName, additionalSetLayouts);
 		return getPipelineContainer().compute(name, computeCI);
 	}
 

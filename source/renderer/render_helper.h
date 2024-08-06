@@ -43,6 +43,52 @@ namespace chord
 		VkClearValue clearValue;
 	};
 
+	enum class EBlendMode
+	{
+		Translucency,
+		Additive,
+
+		MAX,
+	};
+	inline VkColorBlendEquationEXT getBlendMode(EBlendMode blendMode)
+	{
+		VkColorBlendEquationEXT result{};
+
+		// Src:  shader compute color result.
+		// Dest: Render target already exist color.
+		switch (blendMode)
+		{
+		case chord::EBlendMode::Translucency:
+		{
+			// color.rgb = src.rgb * src.a + dest.rgb * (1 - src.a);
+			// color.a = src.a;
+			result.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+			result.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+			result.colorBlendOp = VK_BLEND_OP_ADD;
+			result.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			result.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			result.alphaBlendOp = VK_BLEND_OP_ADD;
+		}
+		break;
+		case chord::EBlendMode::Additive:
+		{
+			// color.rgb = src.rgb * src.a + dest.rgb;
+			// color.a = src.a;
+			result.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+			result.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+			result.colorBlendOp = VK_BLEND_OP_ADD;
+			result.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			result.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			result.alphaBlendOp = VK_BLEND_OP_ADD;
+		}
+		break;
+		default:
+			checkEntry();
+			break;
+		}
+		return result;
+	}
+
 	class RenderTargets
 	{
 	public:
@@ -61,12 +107,21 @@ namespace chord
 				ext.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 				ext.alphaBlendOp = VK_BLEND_OP_ADD;
 			}
+
+			for (auto& mask : colorComponentMasks)
+			{
+				mask =
+					VK_COLOR_COMPONENT_R_BIT |
+					VK_COLOR_COMPONENT_G_BIT |
+					VK_COLOR_COMPONENT_B_BIT |
+					VK_COLOR_COMPONENT_A_BIT;
+			}
 		}
 
 		RenderTargetRT RTs[graphics::kMaxRenderTargets];
 		VkBool32 bEnableBlends[graphics::kMaxRenderTargets];
 		VkColorBlendEquationEXT colorBlendEquations[graphics::kMaxRenderTargets];
-
+		VkColorComponentFlags colorComponentMasks[graphics::kMaxRenderTargets];
 		DepthStencilRT depthStencil;
 
 		std::vector<VkFormat> getRTsFormats() const
@@ -151,10 +206,27 @@ namespace chord
 			{
 				vkCmdSetColorBlendEnableEXT(cmd, 0, RTCount, bEnableBlends);
 				vkCmdSetColorBlendEquationEXT(cmd, 0, RTCount, colorBlendEquations);
+
+				vkCmdSetColorWriteMaskEXT(cmd, 0, RTCount, colorComponentMasks);
+			}
+			else
+			{
+				static const VkBool32 bEnable = VK_FALSE;
+				vkCmdSetColorBlendEnableEXT(cmd, 0, 1, &bEnable);
+
+				static const VkColorBlendEquationEXT blendEquation = {};
+				vkCmdSetColorBlendEquationEXT(cmd, 0, 1, &blendEquation);
+
+				static const VkColorComponentFlags fullMask =
+					VK_COLOR_COMPONENT_R_BIT |
+					VK_COLOR_COMPONENT_G_BIT |
+					VK_COLOR_COMPONENT_B_BIT |
+					VK_COLOR_COMPONENT_A_BIT;
+				vkCmdSetColorWriteMaskEXT(cmd, 0, 1, &fullMask);
 			}
 
 			helper::setScissor(cmd, { 0, 0 }, { width, height });
-			helper::setViewport(cmd, width, height);
+			helper::setViewport(cmd, width, height, true);
 
 			// Depth test cast.
 			vkCmdSetDepthWriteEnable(cmd, hasFlag(depthStencil.depthStencilOp, EDepthStencilOp::DepthWrite) ? VK_TRUE : VK_FALSE);
@@ -201,6 +273,18 @@ namespace chord
 
 	inline static uint32 asUAV(
 		graphics::GraphicsOrComputeQueue& queue,
+		graphics::PoolTextureRef texture,
+		const VkImageSubresourceRange& range = graphics::helper::buildBasicImageSubresource(),
+		VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D)
+	{
+		check(hasFlag(texture->get().getInfo().usage, VK_IMAGE_USAGE_STORAGE_BIT));
+
+		queue.transitionUAV(texture, range);
+		return texture->get().requireView(range, viewType, false, true).UAV.get();
+	}
+
+	inline static uint32 asUAV(
+		graphics::GraphicsOrComputeQueue& queue,
 		graphics::PoolBufferRef buffer
 	)
 	{
@@ -219,4 +303,89 @@ namespace chord
 		return buffer->get().requireView(true, false).storage.get();
 	}
 
+	class PushSetBuilder
+	{
+	public:
+		PushSetBuilder(graphics::GraphicsOrComputeQueue& queue, VkCommandBuffer cmd) :
+			m_queue(queue),
+			m_cmd(cmd) { }
+
+		PushSetBuilder& addSRV(graphics::PoolBufferRef buffer);
+		PushSetBuilder& addUAV(graphics::PoolBufferRef buffer);
+
+		PushSetBuilder& addSRV(
+			graphics::PoolTextureRef image,
+			const VkImageSubresourceRange& range = graphics::helper::buildBasicImageSubresource(),
+			VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
+
+		PushSetBuilder& addUAV(
+			graphics::PoolTextureRef image,
+			const VkImageSubresourceRange& range = graphics::helper::buildBasicImageSubresource(),
+			VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
+
+		void push(graphics::ComputePipelineRef pipe, uint32 set);
+
+	private:
+		struct CacheBindingBuilder
+		{
+			enum class EType
+			{
+				BufferSRV,
+				BufferUAV,
+				TextureSRV,
+				TextureUAV,
+			} type;
+
+			graphics::PoolTextureRef image;
+			VkImageSubresourceRange imageRange;
+			VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
+
+			VkBuffer buffer;
+			VkDescriptorType descriptorType;
+			VkDescriptorBufferInfo bufferInfo;
+		};
+		graphics::GraphicsOrComputeQueue& m_queue;
+		VkCommandBuffer m_cmd;
+		std::vector<CacheBindingBuilder> m_cacheBindingBuilder;
+	};
+
+	struct HZBContext
+	{
+		graphics::PoolTextureRef minHZB = nullptr;
+		graphics::PoolTextureRef maxHZB = nullptr;
+
+		math::uvec2 dimension; // Texture extent.
+		uint32 mipmapLevelCount;
+
+		math::uvec2 mip0ValidArea;
+		math::vec2  validUv;
+
+		HZBContext() {};
+		HZBContext(
+			graphics::PoolTextureRef minHzb, 
+			graphics::PoolTextureRef maxHzb,
+			math::uvec2 dimension,
+			uint32 mipmapLevelCount,
+			math::uvec2 mip0ValidArea,
+			math::vec2  validUv)
+			: minHZB(minHzb)
+			, maxHZB(maxHzb)
+			, dimension(dimension)
+			, mipmapLevelCount(mipmapLevelCount)
+			, mip0ValidArea(mip0ValidArea)
+			, validUv(validUv)
+		{
+
+		}
+
+		bool isValid() const
+		{
+			return minHZB != nullptr;
+		}
+	};
+
+	struct DeferredRendererHistory
+	{
+		HZBContext hzbCtx;
+	};
 }

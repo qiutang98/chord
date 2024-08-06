@@ -51,7 +51,7 @@ namespace chord::graphics
 
 		virtual ~GPUTexturePool();
 
-		void tick(const ApplicationTickData& tickData);
+		void garbageCollected(const ApplicationTickData& tickData);
 
 		// Create pool texture by create info.
 		std::shared_ptr<PoolTexture> create(

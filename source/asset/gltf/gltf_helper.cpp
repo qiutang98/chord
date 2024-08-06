@@ -2,6 +2,7 @@
 
 #include <stb/stb_image.h>
 #include <stb/stb_image_write.h>
+#include <stb/stb_image_resize.h>
 #define TINYGLTF_IMPLEMENTATION
 #define TINYGLTF_NO_INCLUDE_STB_IMAGE_WRITE
 #define TINYGLTF_USE_CPP14
@@ -37,6 +38,7 @@
 
 namespace chord
 {
+	// TODO: import configable.
 	constexpr float  kMeshletConeWeight = 0.5f;
 	constexpr double kGLTFLODStepReduceFactor = 0.75;
 	constexpr float  kGLTFLODTargetError = 1e-2f;
@@ -98,7 +100,12 @@ namespace chord
 
 	void uiDrawImportConfig(GLTFAssetImportConfigRef config)
 	{
-		ImGui::Checkbox("Smooth Normal", &config->bGenerateSmoothNormal);
+		ImGui::Checkbox("##SmoothNormal", &config->bGenerateSmoothNormal); ImGui::SameLine(); ImGui::Text("Generate Smooth Normal");
+
+		ImGui::Separator();
+		ImGui::Checkbox("##GenerateLOD", &config->bGenerateLOD); ImGui::SameLine(); ImGui::Text("Generate LOD");
+		ImGui::DragFloat("LOD Base", &config->lodBase, 1.0f, 1.0f, 20.0f);
+		ImGui::DragFloat("LOD Step", &config->lodStep, 0.1f, 1.0f, 2.0f);
 	}
 
 	bool importFromConfig(GLTFAssetImportConfigRef config)
@@ -109,6 +116,7 @@ namespace chord
 		auto& assetManager = Application::get().getAssetManager();
 		const auto& meta = GLTFAsset::kAssetTypeMeta;
 		const auto srcBaseDir = srcPath.parent_path();
+		
 
 		tinygltf::Model model;
 		{
@@ -160,17 +168,17 @@ namespace chord
 		}
 
 		// Import all images in gltf.
-		std::unordered_map<int32, AssetSaveInfo> importedTextures;
+		std::unordered_map<int32, AssetSaveInfo> importedImages;
 		{
 			const auto imageFolderPath = savePath / "images";
 			std::filesystem::create_directory(imageFolderPath);
 
 			// Collected srgb by material usage.
-			std::set<int32> srgbTexturesMap;
-			std::map<int32, float> alphaCoverageMap;
+			std::set<int32> srgbImagesMap;
+			std::map<int32, float> alphaCoverageImagesMap;
 
-			// Collect all material textures channel usage state.
-			struct TextureChannelUsage
+			// Collect all material image channel usage state.
+			struct ImageChannelUsage
 			{
 				bool bCompression = true; // When some material required no compression, we set it false.
 				                          // Combine with operator &&
@@ -219,45 +227,56 @@ namespace chord
 					return ETextureFormat::MAX;
 				}
 			};
-			std::map<int32, TextureChannelUsage> textureChannelUsageMap;
 
+			std::map<int32, ImageChannelUsage> imageChannelUsageMap;
 			for (auto& material : model.materials)
 			{
-				int32 baseColorTexture = material.pbrMetallicRoughness.baseColorTexture.index;
-				srgbTexturesMap.insert(baseColorTexture);
-				if (material.alphaMode != "OPAQUE")
+				if (material.pbrMetallicRoughness.baseColorTexture.index != -1)
 				{
-					alphaCoverageMap[baseColorTexture] = material.alphaCutoff;
+					int32 baseColorImageIndex = model.textures.at(material.pbrMetallicRoughness.baseColorTexture.index).source;
+					srgbImagesMap.insert(baseColorImageIndex);
+					if (material.alphaMode != "OPAQUE")
+					{
+						alphaCoverageImagesMap[baseColorImageIndex] = material.alphaCutoff;
+					}
+					// Base color .rgba channel all used.
+					imageChannelUsageMap[baseColorImageIndex].rgba = { true, true, true, true };
 				}
-				// Base color .rgba channel all used.
-				textureChannelUsageMap[baseColorTexture].rgba = { true, true, true, true };
 
-				int32 emissiveTexture = material.emissiveTexture.index;
-				srgbTexturesMap.insert(emissiveTexture);
 
-				// Emissive texture use .rgb.
-				textureChannelUsageMap[emissiveTexture].rgba.r = true;
-				textureChannelUsageMap[emissiveTexture].rgba.g = true;
-				textureChannelUsageMap[emissiveTexture].rgba.b = true;
-
-				int32 normalTexture = material.normalTexture.index;
-
-				// Normal texture use .rg.
-				textureChannelUsageMap[normalTexture].rgba.r = true;
-				textureChannelUsageMap[normalTexture].rgba.g = true;
-
-				// Occlusion texture use .r channel.
-				int32 occlusionTexture = material.occlusionTexture.index;
-				textureChannelUsageMap[occlusionTexture].rgba.r = true;
-
-				// Metallic roughness texture use .gb channel.
-				int32 metallicRoughnessTexture = material.pbrMetallicRoughness.metallicRoughnessTexture.index;
-				textureChannelUsageMap[metallicRoughnessTexture].rgba.g = true;
-				textureChannelUsageMap[metallicRoughnessTexture].rgba.b = true;
-
-				if (metallicRoughnessTexture != occlusionTexture)
+				if (material.emissiveTexture.index != -1)
 				{
-					LOG_WARN("Generally metallicRoughnessTexture same with occlusionTexture for best performance.");
+					int32 emissiveImageIndex = model.textures.at(material.emissiveTexture.index).source;
+					srgbImagesMap.insert(emissiveImageIndex);
+
+					// Emissive image use .rgb.
+					imageChannelUsageMap[emissiveImageIndex].rgba.r = true;
+					imageChannelUsageMap[emissiveImageIndex].rgba.g = true;
+					imageChannelUsageMap[emissiveImageIndex].rgba.b = true;
+				}
+
+				if (material.normalTexture.index != -1)
+				{
+					int32 normalImageIndex = model.textures.at(material.normalTexture.index).source;
+
+					// Normal image use .rg.
+					imageChannelUsageMap[normalImageIndex].rgba.r = true;
+					imageChannelUsageMap[normalImageIndex].rgba.g = true;
+				}
+
+				if (material.occlusionTexture.index != -1)
+				{
+					// Occlusion image use .r channel.
+					int32 occlusionImageIndex = model.textures.at(material.occlusionTexture.index).source;
+					imageChannelUsageMap[occlusionImageIndex].rgba.r = true;
+				}
+
+				if (material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
+				{
+					// Metallic roughness image use .gb channel.
+					int32 metallicRoughnessImageIndex = model.textures.at(material.pbrMetallicRoughness.metallicRoughnessTexture.index).source;
+					imageChannelUsageMap[metallicRoughnessImageIndex].rgba.g = true;
+					imageChannelUsageMap[metallicRoughnessImageIndex].rgba.b = true;
 				}
 
 				if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialSpecular)))
@@ -270,17 +289,20 @@ namespace chord
 					getTexId(ext, "specularColorTexture", specularColorTexture);
 					getTexId(ext, "specularTexture", specularTexture);
 
-					srgbTexturesMap.insert(specularColorTexture);
+					int32 specularColorImage = model.textures.at(specularColorTexture).source;
+					int32 specularImage = model.textures.at(specularTexture).source;
+
+					srgbImagesMap.insert(specularColorImage);
 
 					// Specular color texture use rgb.
-					textureChannelUsageMap[specularColorTexture].rgba.r = true;
-					textureChannelUsageMap[specularColorTexture].rgba.g = true;
-					textureChannelUsageMap[specularColorTexture].rgba.b = true;
+					imageChannelUsageMap[specularColorImage].rgba.r = true;
+					imageChannelUsageMap[specularColorImage].rgba.g = true;
+					imageChannelUsageMap[specularColorImage].rgba.b = true;
 
 					// specular texture use a.
-					textureChannelUsageMap[specularTexture].rgba.a = true;
+					imageChannelUsageMap[specularImage].rgba.a = true;
 
-					if (specularTexture != specularColorTexture)
+					if (specularImage != specularColorImage)
 					{
 						LOG_WARN("Generally specularTexture same with specularColorTexture for best performance.");
 					}
@@ -292,31 +314,39 @@ namespace chord
 					int32 texture;
 					getTexId(ext, "anisotropyTexture", texture);
 
+					int32 imageIndex = model.textures.at(texture).source;
+
 					// Red and green channels represent the anisotropy direction in [-1, 1] tangent, bitangent space, to be rotated by anisotropyRotation. 
 					// The blue channel contains strength as [0, 1] to be multiplied by anisotropyStrength.
 					// Anisotropy texture use rgb.
-					textureChannelUsageMap[texture].rgba.r = true;
-					textureChannelUsageMap[texture].rgba.g = true;
-					textureChannelUsageMap[texture].rgba.b = true;
+					imageChannelUsageMap[imageIndex].rgba.r = true;
+					imageChannelUsageMap[imageIndex].rgba.g = true;
+					imageChannelUsageMap[imageIndex].rgba.b = true;
 				}
 
 				if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialClearCoat)))
 				{
 					const auto& ext = material.extensions[getGLTFExtension(EKHRGLTFExtension::MaterialClearCoat)];
+
 					int32 clearcoatTexture;
 					int32 clearcoatRoughnessTexture;
 					int32 clearcoatNormalTexture;
+
 					getTexId(ext, "clearcoatTexture", clearcoatTexture);
 					getTexId(ext, "clearcoatRoughnessTexture", clearcoatRoughnessTexture);
 					getTexId(ext, "clearcoatNormalTexture", clearcoatNormalTexture);
 
-					textureChannelUsageMap[clearcoatTexture].rgba.r = true;
-					textureChannelUsageMap[clearcoatRoughnessTexture].rgba.g = true;
+					int32 clearcoatImage = model.textures.at(clearcoatTexture).source;
+					int32 clearcoatRoughnessImage = model.textures.at(clearcoatRoughnessTexture).source;
+					int32 clearcoatNormalImage = model.textures.at(clearcoatNormalTexture).source;
 
-					textureChannelUsageMap[clearcoatNormalTexture].rgba.r = true;
-					textureChannelUsageMap[clearcoatNormalTexture].rgba.g = true;
+					imageChannelUsageMap[clearcoatImage].rgba.r = true;
+					imageChannelUsageMap[clearcoatRoughnessImage].rgba.g = true;
 
-					if (clearcoatTexture == clearcoatNormalTexture || clearcoatRoughnessTexture == clearcoatNormalTexture)
+					imageChannelUsageMap[clearcoatNormalImage].rgba.r = true;
+					imageChannelUsageMap[clearcoatNormalImage].rgba.g = true;
+
+					if (clearcoatImage == clearcoatNormalImage || clearcoatRoughnessImage == clearcoatNormalImage)
 					{
 						LOG_ERROR("Repeated texture used in clear coat material '{}', will cause some shading error here.", material.name);
 					}
@@ -331,14 +361,17 @@ namespace chord
 					getTexId(ext, "sheenColorTexture", colorTexture);
 					getTexId(ext, "sheenRoughnessTexture", roughnessTexture);
 
-					srgbTexturesMap.insert(colorTexture);
+					int32 colorImage = model.textures.at(colorTexture).source;
+					int32 roughnessImage = model.textures.at(roughnessTexture).source;
 
-					textureChannelUsageMap[colorTexture].rgba.r = true;
-					textureChannelUsageMap[colorTexture].rgba.g = true;
-					textureChannelUsageMap[colorTexture].rgba.b = true;
+					srgbImagesMap.insert(colorImage);
 
-					textureChannelUsageMap[roughnessTexture].rgba.a = true;
-					if (roughnessTexture != colorTexture)
+					imageChannelUsageMap[colorImage].rgba.r = true;
+					imageChannelUsageMap[colorImage].rgba.g = true;
+					imageChannelUsageMap[colorImage].rgba.b = true;
+
+					imageChannelUsageMap[roughnessImage].rgba.a = true;
+					if (roughnessImage != colorImage)
 					{
 						LOG_WARN("Generally sheenColorTexture same with sheenRoughnessTexture for best performance.");
 					}
@@ -349,8 +382,9 @@ namespace chord
 					const auto& ext = material.extensions[getGLTFExtension(EKHRGLTFExtension::MaterialTransmission)];
 					int32 texture;
 					getTexId(ext, "transmissionTexture", texture);
+					int32 imageIndex = model.textures.at(texture).source;
 
-					textureChannelUsageMap[texture].rgba.r = true;
+					imageChannelUsageMap[imageIndex].rgba.r = true;
 				}
 
 				if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialVolume)))
@@ -358,42 +392,210 @@ namespace chord
 					const auto& ext = material.extensions[getGLTFExtension(EKHRGLTFExtension::MaterialVolume)];
 					int32 texture;
 					getTexId(ext, "thicknessTexture", texture);
+					int32 imageIndex = model.textures.at(texture).source;
 
-					textureChannelUsageMap[texture].rgba.g = true;
+					imageChannelUsageMap[imageIndex].rgba.g = true;
 				}
+			}
+
+			struct CompositeDetailed
+			{
+				int32 srcImage;
+				int32 srcImageChannel; // 0 is R, 1 is G, 2 is B, 3 is A.
+				int32 destImageChannel;
+			};
+			std::map<int32, std::vector<CompositeDetailed>> pendingCompositeImages;
+			std::map<int32, int32> skipLoadImage; // The image already composite in other image, use this map to indexing.
+			for (auto& material : model.materials)
+			{
+				if (material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 && material.occlusionTexture.index != -1)
+				{
+					tinygltf::Texture metallicRoughnessTexture = model.textures.at(material.pbrMetallicRoughness.metallicRoughnessTexture.index);
+					tinygltf::Texture occlusionTexture = model.textures.at(material.occlusionTexture.index);
+
+					if (!skipLoadImage.contains(occlusionTexture.source))
+					{
+						if (metallicRoughnessTexture.source != occlusionTexture.source)
+						{
+							{
+								auto sourceSwitch = metallicRoughnessTexture;
+								sourceSwitch.source = occlusionTexture.source;
+								checkMsgf(sourceSwitch == occlusionTexture, 
+									"Try to compositing metallicRoughnessTexture and occlusionTexture for '{}', but it's sampler or other state no same!", material.name);
+							}
+
+							if (imageChannelUsageMap[metallicRoughnessTexture.source].rgba.r)
+							{
+								LOG_ERROR("Try to composite occlusionTexture in metallicRoughnessTexture.r, but it already used, this is a logic error.");
+							}
+							else
+							{
+								LOG_TRACE("Composing occlusionTexture in metallicRoughnessTexture .r channel for best performance...");
+
+								// Occlusion texture skip load, it use metallicRoughnessTexture.r
+								skipLoadImage[occlusionTexture.source] = metallicRoughnessTexture.source;
+
+								CompositeDetailed detail{ };
+								detail.srcImage = occlusionTexture.source;
+								detail.srcImageChannel  = 0;
+								detail.destImageChannel = 0;
+								pendingCompositeImages[metallicRoughnessTexture.source].push_back(detail);
+
+								imageChannelUsageMap[metallicRoughnessTexture.source].rgba.r = true;
+							}
+						}
+					}
+				}
+			}
+
+			// Composition.
+			std::unordered_map<int32, std::filesystem::path> compositedSaveImage;
+			for (int32 i = 0; i < model.images.size(); i++)
+			{
+				if (!pendingCompositeImages.contains(i))
+				{
+					continue;
+				}
+
+				const auto& pendingCompositions = pendingCompositeImages[i];
+				const auto& destImage = model.images[i];
+
+				std::vector<uint8> compositeMemory{ };
+				compositeMemory.resize(destImage.width * destImage.height * 4);
+				std::filesystem::path destUri;
+				{
+					std::string uriDecoded;
+					tinygltf::URIDecode(destImage.uri, &uriDecoded, nullptr);
+					destUri = std::filesystem::path(uriDecoded);
+					std::string extension = destUri.extension().string();
+
+					if (extension.empty())
+					{
+						memcpy(compositeMemory.data(), destImage.image.data(), compositeMemory.size());
+					}
+					else
+					{
+						ImageLdr2D ldr { };
+						std::filesystem::path imgUri = srcBaseDir / destUri;
+						ldr.fillFromFile(imgUri.string());
+
+						memcpy(compositeMemory.data(), ldr.getPixels(), compositeMemory.size());
+					}
+				}
+				std::string imgName = destUri.filename().string();
+
+				for (const auto& detail : pendingCompositions)
+				{
+					const auto& srcImage = model.images[detail.srcImage];
+					check(detail.destImageChannel <= 3 && detail.destImageChannel >= 0);
+					check(detail.srcImageChannel  <= 3 && detail.srcImageChannel  >= 0);
+
+					if (srcImage.bits != 8 && srcImage.bits != -1) { unimplemented(); }
+					if (srgbImagesMap.contains(detail.srcImage)) { unimplemented(); }
+
+					std::string uriDecoded;
+					tinygltf::URIDecode(srcImage.uri, &uriDecoded, nullptr);
+					std::filesystem::path uri = std::filesystem::path(uriDecoded);
+					std::string extension = uri.extension().string();
+
+
+					std::unique_ptr<ImageLdr2D> imagePtr = nullptr;
+					const uint8* srcData = nullptr;
+					if (extension.empty())
+					{
+						// Load from glb.
+						srcData = srcImage.image.data();
+					}
+					else
+					{
+						imagePtr = std::make_unique<ImageLdr2D>();
+						std::filesystem::path imgUri = srcBaseDir / uri;
+
+						imagePtr->fillFromFile(imgUri.string());
+						srcData = imagePtr->getPixels();
+					}
+
+					std::vector<uint8> sizeFitData { };
+					if (srcImage.width != destImage.width || srcImage.height != destImage.height)
+					{
+						sizeFitData.resize(destImage.width* destImage.height * 4);
+						stbir_resize_uint8(
+							srcData, srcImage.width, srcImage.height, 0,
+							sizeFitData.data(), destImage.width, destImage.height, 0, 4);
+
+						srcData = sizeFitData.data();
+					}
+					
+					for (uint i = 0; i < compositeMemory.size(); i += 4)
+					{
+						compositeMemory[i + detail.destImageChannel] = srcData[i + detail.srcImageChannel];
+					}
+
+					imgName += uri.filename().string();
+				}
+
+				if (imgName.empty())
+				{
+					imgName += generateUUID();
+				}
+				imgName += ".png";
+
+				std::filesystem::path tempSavedTexturesPath = std::filesystem::path(projectPaths.cachePath.u16()) / imgName;
+
+				stbi_write_png(tempSavedTexturesPath.string().c_str(), destImage.width, destImage.height,
+					4, compositeMemory.data(), destImage.width * 4);
+
+				compositedSaveImage[i] = tempSavedTexturesPath;
 			}
 
 			// Now load all images.
 			for (int32 imageIndex = 0; imageIndex < model.images.size(); imageIndex++)
 			{
-				const auto& gltfImage = model.images[imageIndex];
-				const bool bSrgb = srgbTexturesMap.contains(imageIndex);
-				const bool bAlphaCoverage = alphaCoverageMap.contains(imageIndex);
+				if (skipLoadImage.contains(imageIndex))
+				{
+					// Current pass skip image which composite to other image.
+					continue; 
+				}
 
-				const bool bExistChannelCollect = textureChannelUsageMap.contains(imageIndex);
+				const auto& gltfImage = model.images[imageIndex];
+
+				// This texture is srgb encode or not.
+				const bool bSrgb = srgbImagesMap.contains(imageIndex);
+
+				// This texture should be alpha coverage or not.
+				const bool bAlphaCoverage = alphaCoverageImagesMap.contains(imageIndex);
+
+				// Check it's channel collect.
+				const bool bExistChannelCollect = imageChannelUsageMap.contains(imageIndex);
 				if (!bExistChannelCollect)
 				{
-					LOG_WARN("Texture '{}' no exist channel collect, may cause error format select, we skip it.", gltfImage.name);
+					LOG_ERROR("Texture '{}' no exist channel collect, may cause error format select, we skip it.", gltfImage.name);
+					continue;
 				}
 
 				std::string uriDecoded;
 				tinygltf::URIDecode(gltfImage.uri, &uriDecoded, nullptr);
-
 				std::filesystem::path uri = std::filesystem::path(uriDecoded);
 				std::string extension = uri.extension().string();
 				std::string imgName = uri.filename().string();
 
 				std::filesystem::path imgUri = srcBaseDir / uri;
-
 				AssetSaveInfo saveInfo;
-				if (extension.empty())
+
+				const bool bCompositedSaved = compositedSaveImage.contains(imageIndex);
+				if (bCompositedSaved)
+				{
+					imgUri = compositedSaveImage[imageIndex];
+				}
+
+				if (extension.empty() && (!bCompositedSaved))
 				{
 					// Loaded from glb, first extract to png.
 					if (imgName.empty())
 					{
 						imgName = generateUUID() + ".png";
 					}
-					std::filesystem::path tempSavedTexturesPath = srcBaseDir / imgName;
+					std::filesystem::path tempSavedTexturesPath = std::filesystem::path(projectPaths.cachePath.u16()) / imgName;
 
 					int32 channelNum = gltfImage.component == -1 ? 4 : gltfImage.component;
 					if (gltfImage.bits != 8 && gltfImage.bits != -1)
@@ -404,15 +606,14 @@ namespace chord
 						channelNum, gltfImage.image.data(), gltfImage.width * channelNum);
 
 					const bool b16Bit = (gltfImage.bits == 16);
-
 					auto textureAssetImportConfig = std::make_shared<TextureAssetImportConfig>();
 
 					textureAssetImportConfig->importFilePath = tempSavedTexturesPath;
 					textureAssetImportConfig->storeFilePath = imageFolderPath / std::filesystem::path(imgName).replace_extension();
 					textureAssetImportConfig->bSRGB = bSrgb;
 					textureAssetImportConfig->bGenerateMipmap = true;
-					textureAssetImportConfig->alphaMipmapCutoff = bAlphaCoverage ? alphaCoverageMap[imageIndex] : 1.0f;
-					textureAssetImportConfig->format = textureChannelUsageMap[imageIndex].getFormat(b16Bit);
+					textureAssetImportConfig->alphaMipmapCutoff = bAlphaCoverage ? alphaCoverageImagesMap[imageIndex] : 1.0f;
+					textureAssetImportConfig->format = imageChannelUsageMap[imageIndex].getFormat(b16Bit);
 
 					if (!TextureAsset::kAssetTypeMeta.importConfig.importAssetFromConfig(textureAssetImportConfig))
 					{
@@ -434,11 +635,11 @@ namespace chord
 					auto textureAssetImportConfig = std::make_shared<TextureAssetImportConfig>();
 
 					textureAssetImportConfig->importFilePath = imgUri;
-					textureAssetImportConfig->storeFilePath = imageFolderPath / uri.filename().replace_extension();
+					textureAssetImportConfig->storeFilePath = imageFolderPath / imgUri.filename().replace_extension();
 					textureAssetImportConfig->bSRGB = bSrgb;
 					textureAssetImportConfig->bGenerateMipmap = true;
-					textureAssetImportConfig->alphaMipmapCutoff = bAlphaCoverage ? alphaCoverageMap[imageIndex] : 1.0f;
-					textureAssetImportConfig->format = textureChannelUsageMap[imageIndex].getFormat(b16Bit);
+					textureAssetImportConfig->alphaMipmapCutoff = bAlphaCoverage ? alphaCoverageImagesMap[imageIndex] : 1.0f;
+					textureAssetImportConfig->format = imageChannelUsageMap[imageIndex].getFormat(b16Bit);
 
 					if (!TextureAsset::kAssetTypeMeta.importConfig.importAssetFromConfig(textureAssetImportConfig))
 					{
@@ -453,7 +654,21 @@ namespace chord
 				// Cache import texture save infos.
 				if (!saveInfo.empty())
 				{
-					importedTextures[imageIndex] = saveInfo;
+					importedImages[imageIndex] = saveInfo;
+				}
+			}
+
+			for (auto& compositionTempPath : compositedSaveImage)
+			{
+				std::filesystem::remove(compositionTempPath.second);
+			}
+
+			// Skip image use it's composite image save info.
+			for (int32 imageIndex = 0; imageIndex < model.images.size(); imageIndex++)
+			{
+				if (skipLoadImage.contains(imageIndex))
+				{
+					importedImages[imageIndex] = importedImages[skipLoadImage.at(imageIndex)];
 				}
 			}
 		}
@@ -470,19 +685,33 @@ namespace chord
 			{
 				const auto& material = model.materials[index];
 
-				const auto name = utf8::utf8to16(material.name) + utf8::utf8to16(meta.suffix);
+				const std::string materialName =
+					material.name.empty() ? std::format("Default_{}", index) : material.name;
+
+				const auto name = utf8::utf8to16(materialName) + utf8::utf8to16(meta.suffix);
 
 				AssetSaveInfo saveInfo(name, materialStoreRelativePath);
 				auto materialPtr = assetManager.createAsset<GLTFMaterialAsset>(saveInfo, true);
 				materialPtr->markDirty();
 
+
+
 				auto assignGLTFTexture = [&](GLTFTextureInfo& info, auto& b)
 				{
-					if (b.index >= 0 && b.index < model.images.size())
-					{
-						info.image = importedTextures.at(b.index);
-						info.textureCoord = b.texCoord;
-					}
+					if (b.index == -1) { return; }
+
+					tinygltf::Texture texture = model.textures.at(b.index);
+					tinygltf::Sampler sampler = model.samplers.at(texture.sampler);
+
+					info.image = importedImages.at(texture.source);
+
+					info.textureCoord = b.texCoord;
+
+
+					info.sampler.minFilter = (sampler.minFilter == -1) ? GLTFSampler::EMinMagFilter::NEAREST : GLTFSampler::EMinMagFilter(info.sampler.minFilter);
+					info.sampler.magFilter = (sampler.magFilter == -1) ? GLTFSampler::EMinMagFilter::NEAREST : GLTFSampler::EMinMagFilter(info.sampler.magFilter);
+					info.sampler.wrapS = (sampler.wrapS == -1) ? GLTFSampler::EWrap::REPEAT : GLTFSampler::EWrap(info.sampler.wrapS);
+					info.sampler.wrapT = (sampler.wrapT == -1) ? GLTFSampler::EWrap::REPEAT : GLTFSampler::EWrap(info.sampler.wrapT);
 				};
 
 				auto& pbr = material.pbrMetallicRoughness;
@@ -513,7 +742,12 @@ namespace chord
 				assignGLTFTexture(materialPtr->normalTexture, material.normalTexture);
 				materialPtr->normalTextureScale = (float)material.normalTexture.scale;
 
-				assignGLTFTexture(materialPtr->occlusionTexture, material.occlusionTexture);
+				
+				materialPtr->bExistOcclusion = material.occlusionTexture.index != -1;
+				if (materialPtr->bExistOcclusion && pbr.metallicRoughnessTexture.index > -1)
+				{
+					check(importedImages.at(material.occlusionTexture.index) == importedImages.at(pbr.metallicRoughnessTexture.index));
+				}
 				materialPtr->occlusionTextureStrength = (float)material.occlusionTexture.strength;
 
 				if (!materialPtr->save())
@@ -635,6 +869,9 @@ namespace chord
 						LOG_ERROR("GLTF file is unvalid: a primitive without POSITION attribute, skip...");
 						return;
 					}
+
+					primitiveMesh.lodStep = config->lodStep;
+					primitiveMesh.lodBase = config->lodBase;
 
 					std::vector<uint32> tempIndices;
 					std::vector<math::vec3> tempPositions;
@@ -835,6 +1072,27 @@ namespace chord
 					// Mesh lod and meshlet generation.
 					uint32 lod0FirstIndex = gltfBin.primitiveData.indices.size();
 					uint32 lod0IndexCount = tempIndices.size();
+
+					#if 0
+					{
+						primitiveMesh.lods.push_back({});
+						GLTFPrimitiveLOD& lod = primitiveMesh.lods.back();
+						lod.data.firstIndex = gltfBin.primitiveData.indices.size();
+						lod.data.indexCount = static_cast<uint32>(tempIndices.size());
+						lod.data.firstMeshlet = gltfBin.primitiveData.meshlets.size();
+						for (uint32 i = 0; i < tempIndices.size(); i += 126 * 3)
+						{
+							GLTFMeshlet m = { };
+
+							m.data.triangleCount = tempIndices.size() - i >= 126 * 3 ? 126 : (tempIndices.size() - i) / 3;
+							m.data.firstIndex = i;
+
+							gltfBin.primitiveData.meshlets.push_back(m);
+						}
+						lod.data.meshletCount = gltfBin.primitiveData.meshlets.size() - lod.data.firstMeshlet;
+						gltfBin.primitiveData.indices.insert(gltfBin.primitiveData.indices.end(), tempIndices.begin(), tempIndices.end());
+					}
+					#else
 					{
 						meshopt_optimizeVertexCache(tempIndices.data(), tempIndices.data(), tempIndices.size(), tempPositions.size());
 						
@@ -939,6 +1197,7 @@ namespace chord
 							}
 						}
 					}
+					#endif
 
 					// Get vertex offset.
 					primitiveMesh.vertexOffset = gltfBin.primitiveData.positions.size();
@@ -1017,7 +1276,7 @@ namespace chord
 						ctx.m_pInterface->m_getPosition = [](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) -> void
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert];
+							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lods[0].data.firstIndex] + ctx->mesh->vertexOffset;
 							fvPosOut[0] = ctx->data->positions[id].x;
 							fvPosOut[1] = ctx->data->positions[id].y;
 							fvPosOut[2] = ctx->data->positions[id].z;
@@ -1025,7 +1284,7 @@ namespace chord
 						ctx.m_pInterface->m_getNormal = [](const SMikkTSpaceContext* pContext, float fvNormOut[], const int iFace, const int iVert) -> void
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert];
+							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lods[0].data.firstIndex] + ctx->mesh->vertexOffset;
 
 							fvNormOut[0] = ctx->data->normals[id].x;
 							fvNormOut[1] = ctx->data->normals[id].y;
@@ -1034,7 +1293,7 @@ namespace chord
 						ctx.m_pInterface->m_getTexCoord = [](const SMikkTSpaceContext* pContext, float fvTexcOut[], const int iFace, const int iVert) -> void
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert];
+							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lods[0].data.firstIndex] + ctx->mesh->vertexOffset;
 
 							fvTexcOut[0] = ctx->data->texcoords0[id].x;
 							fvTexcOut[1] = ctx->data->texcoords0[id].y;
@@ -1042,7 +1301,7 @@ namespace chord
 						ctx.m_pInterface->m_setTSpaceBasic = [](const SMikkTSpaceContext* pContext, const float fvTangent[], const float fSign, const int iFace, const int iVert)
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert];
+							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lods[0].data.firstIndex];
 
 							ctx->tangents[id].x = fvTangent[0];
 							ctx->tangents[id].y = fvTangent[1];
@@ -1150,6 +1409,11 @@ namespace chord
 		return gltfPtr->save();
 	}
 
+	GLTFMaterialAssetRef tryLoadGLTFMaterialAsset(const std::filesystem::path& path, bool bThreadSafe)
+	{
+		return Application::get().getAssetManager().getOrLoadAsset<GLTFMaterialAsset>(path, bThreadSafe);
+	}
+
 	AssetTypeMeta GLTFAsset::createTypeMeta()
 	{
 		AssetTypeMeta result;
@@ -1208,7 +1472,7 @@ namespace chord
 		freeGPUScene();
 	}
 
-	GPUGLTFPrimitiveAsset::ComponentBuffer::ComponentBuffer(
+	ComponentBuffer::ComponentBuffer(
 		const std::string& name, 
 		VkBufferUsageFlags flags, 
 		VmaAllocationCreateFlags vmaFlags,
@@ -1235,7 +1499,7 @@ namespace chord
 		this->bindless = graphics::getContext().getBindlessManger().registerStorageBuffer(*this->buffer, 0, this->buffer->getSize());
 	}
 
-	GPUGLTFPrimitiveAsset::ComponentBuffer::~ComponentBuffer()
+	ComponentBuffer::~ComponentBuffer()
 	{
 		if (bindless.isValid())
 		{
@@ -1346,7 +1610,9 @@ namespace chord
 					primitiveBufferData.color0Offset = primitiveInfo.colors0Offset;
 					primitiveBufferData.smoothNormalOffset = primitiveInfo.smoothNormalOffset;
 					primitiveBufferData.textureCoord1Offset = primitiveInfo.textureCoord1Offset;
-					primitiveBufferData.materialBufferId = asfloat(~0); // TODO: Material id.
+					primitiveBufferData.lodCount = primitiveInfo.lods.size();
+					primitiveBufferData.lodBase = 1.0f / primitiveInfo.lodBase;
+					primitiveBufferData.loadStep = 1.0f / math::log2(primitiveInfo.lodStep);
 				}
 
 				std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};
@@ -1396,5 +1662,4 @@ namespace chord
 	{
 		return m_gpuSceneGLTFPrimitiveDetailAssetId.at(meshId).at(primitiveId);
 	}
-
 }
