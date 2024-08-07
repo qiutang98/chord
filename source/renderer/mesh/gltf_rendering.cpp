@@ -182,7 +182,7 @@ namespace chord
         ctx.postBasicCullingCtx.meshletCountBuffer = drawMeshletCountBuffer;
     }
 
-    class GLTFPrePassDepthOnlyVS : public GlobalShader
+    class GLTFVisibilityVS : public GlobalShader
     {
     public:
         DECLARE_SUPER_TYPE(GlobalShader);
@@ -190,24 +190,22 @@ namespace chord
         class SV_bMaskedMaterial : SHADER_VARIANT_BOOL("DIM_MASKED_MATERIAL");
         using Permutation = TShaderVariantVector<SV_bMaskedMaterial>;
     };
-    IMPLEMENT_GLOBAL_SHADER(GLTFPrePassDepthOnlyVS, "resource/shader/gltf_rendering.hlsl", "depthOnlyVS", EShaderStage::Vertex);
+    IMPLEMENT_GLOBAL_SHADER(GLTFVisibilityVS, "resource/shader/gltf_rendering.hlsl", "visibilityPassVS", EShaderStage::Vertex);
 
-    class GLTFPrePassDepthOnlyPS : public GlobalShader
+    class GLTFVisibilityPS : public GlobalShader
     {
     public:
         DECLARE_SUPER_TYPE(GlobalShader);
 
-        static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId)
-        {
-            o.setDefine("DIM_MASKED_MATERIAL", true);
-        }
+        class SV_bMaskedMaterial : SHADER_VARIANT_BOOL("DIM_MASKED_MATERIAL");
+        using Permutation = TShaderVariantVector<SV_bMaskedMaterial>;
     };
-    IMPLEMENT_GLOBAL_SHADER(GLTFPrePassDepthOnlyPS, "resource/shader/gltf_rendering.hlsl", "depthOnlyPS", EShaderStage::Pixel);
+    IMPLEMENT_GLOBAL_SHADER(GLTFVisibilityPS, "resource/shader/gltf_rendering.hlsl", "visibilityPassPS", EShaderStage::Pixel);
 
     PRIVATE_GLOBAL_SHADER(GLTFRenderingFillHZBCullCmdCS, "resource/shader/gltf_rendering.hlsl", "fillHZBCullParamCS", EShaderStage::Compute);
     PRIVATE_GLOBAL_SHADER(GLTFRenderingFillPipelineDrawParamCS, "resource/shader/gltf_rendering.hlsl", "fillPipelineDrawParamCS", EShaderStage::Compute);
 
-    class GLTFPrePassHZBCullCS : public GlobalShader
+    class GLTFHZBCullCS : public GlobalShader
     {
     public:
         DECLARE_SUPER_TYPE(GlobalShader);
@@ -221,7 +219,7 @@ namespace chord
             o.enableDebugSource();
         }
     };
-    IMPLEMENT_GLOBAL_SHADER(GLTFPrePassHZBCullCS, "resource/shader/gltf_rendering.hlsl", "HZBCullingCS", EShaderStage::Compute);
+    IMPLEMENT_GLOBAL_SHADER(GLTFHZBCullCS, "resource/shader/gltf_rendering.hlsl", "HZBCullingCS", EShaderStage::Compute);
 
     static inline auto fillIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, PoolBufferGPUOnlyRef countBuffer)
     {
@@ -256,7 +254,7 @@ namespace chord
         push.hzbMip0Height = inHzb.dimension.y;
     };
 
-    static inline void gltfRenderDepthPipe(GLTFRenderContext& renderCtx, bool bMaskedMaterial, VkCullModeFlags cullMode, PoolBufferGPUOnlyRef cmdBuffer, PoolBufferGPUOnlyRef countBuffer)
+    static inline void gltfRenderVisibilityPipe(GLTFRenderContext& renderCtx, bool bMaskedMaterial, VkCullModeFlags cullMode, PoolBufferGPUOnlyRef cmdBuffer, PoolBufferGPUOnlyRef countBuffer)
     {
         auto& gbuffers = renderCtx.gbuffers;
         auto& queue = renderCtx.queue;
@@ -269,26 +267,30 @@ namespace chord
         push.drawedMeshletCmdId = asSRV(queue, cmdBuffer);
 
         RenderTargets RTs{ };
+        RTs.RTs[0] = RenderTargetRT(gbuffers.visibility, ERenderTargetLoadStoreOp::Load_Store);
         RTs.depthStencil = DepthStencilRT(
             renderCtx.gbuffers.depthStencil,
             EDepthStencilOp::DepthWrite_StencilWrite,
             ERenderTargetLoadStoreOp::Load_Store); // Already clear.
 
-        GLTFPrePassDepthOnlyVS::Permutation VSPermutation;
-        VSPermutation.set<GLTFPrePassDepthOnlyVS::SV_bMaskedMaterial>(bMaskedMaterial);
-        auto vertexShader = getContext().getShaderLibrary().getShader<GLTFPrePassDepthOnlyVS>(VSPermutation);
-        auto pixelShader = bMaskedMaterial ? getContext().getShaderLibrary().getShader<GLTFPrePassDepthOnlyPS>() : nullptr;
+        GLTFVisibilityVS::Permutation VSPermutation;
+        VSPermutation.set<GLTFVisibilityVS::SV_bMaskedMaterial>(bMaskedMaterial);
+        auto vertexShader = getContext().getShaderLibrary().getShader<GLTFVisibilityVS>(VSPermutation);
+
+        GLTFVisibilityPS::Permutation PSPermutation;
+        PSPermutation.set<GLTFVisibilityPS::SV_bMaskedMaterial>(bMaskedMaterial);
+        auto pixelShader = getContext().getShaderLibrary().getShader<GLTFVisibilityPS>(PSPermutation);
 
         GraphicsPipelineRef pipeline = getContext().graphicsPipe(
             vertexShader, pixelShader,
-            bMaskedMaterial ? "GLTF DepthOnly - Masked" : "GLTF DepthOnly",
+            bMaskedMaterial ? "GLTF Visibility - Masked" : "GLTF Visibility",
             std::move(RTs.getRTsFormats()),
             RTs.getDepthStencilFormat(),
             RTs.getDepthStencilFormat());
 
         addIndirectDrawPass(
             queue,
-            "GLTF Basepass: Raster",
+            "GLTF Visibility: Raster",
             pipeline,
             RTs,
             cmdBuffer, 0, countBuffer, 0,
@@ -297,12 +299,13 @@ namespace chord
             {
                 vkCmdSetCullMode(cmd, cullMode);
                 pipe->pushConst(cmd, push);
-                // Depth pass enable depth write and depth test.
+
+                // Visibility pass enable depth write and depth test.
                 helper::enableDepthTestDepthWrite(cmd);
             });
     }
 
-    static inline void gltfRenderDepth(GLTFRenderContext& renderCtx, PoolBufferGPUOnlyRef cmdBuffer, PoolBufferGPUOnlyRef countBuffer)
+    static inline void gltfRenderVisibility(GLTFRenderContext& renderCtx, PoolBufferGPUOnlyRef cmdBuffer, PoolBufferGPUOnlyRef countBuffer)
     {
         auto& gbuffers = renderCtx.gbuffers;
         auto& queue = renderCtx.queue;
@@ -342,12 +345,12 @@ namespace chord
                 const bool bMasked = alphaMode == 1;
                 VkCullModeFlags cullMode = bTwoside ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT;
 
-                gltfRenderDepthPipe(renderCtx, bMasked, cullMode, cmdBufferStage1, countBufferStage1);
+                gltfRenderVisibilityPipe(renderCtx, bMasked, cullMode, cmdBufferStage1, countBufferStage1);
             }
         }
     }
 
-    bool gltfPrePassRenderingStage0(GLTFRenderContext& renderCtx)
+    bool chord::gltfVisibilityRenderingStage0(GLTFRenderContext& renderCtx)
     {
         bool bShouldInvokeStage1 = false;
         if (!shouldRenderGLTF(renderCtx))
@@ -403,10 +406,10 @@ namespace chord
                 pushCullTemplate.drawedMeshletCountId_2 = asUAV(queue, countBufferStage1);
                 pushCullTemplate.drawedMeshletCmdId_2 = asUAV(queue, cmdBufferStage1);
 
-                GLTFPrePassHZBCullCS::Permutation permutation;
-                permutation.set<GLTFPrePassHZBCullCS::SV_bFirstStage>(true);
-                permutation.set<GLTFPrePassHZBCullCS::SV_bPrintDebugBox>(false);
-                auto computeShader = getContext().getShaderLibrary().getShader<GLTFPrePassHZBCullCS>(permutation);
+                GLTFHZBCullCS::Permutation permutation;
+                permutation.set<GLTFHZBCullCS::SV_bFirstStage>(true);
+                permutation.set<GLTFHZBCullCS::SV_bPrintDebugBox>(shouldPrintDebugBox());
+                auto computeShader = getContext().getShaderLibrary().getShader<GLTFHZBCullCS>(permutation);  
 
                 addIndirectComputePass2(queue,
                     "GLTFBasePass: MeshletLevelCulling",
@@ -414,21 +417,21 @@ namespace chord
                     pushCullTemplate,
                     meshletCullCmdBuffer);
 
-                gltfRenderDepth(renderCtx, drawMeshletCmdBuffer, countBuffer);
+                gltfRenderVisibility(renderCtx, drawMeshletCmdBuffer, countBuffer);
             }
 
             renderCtx.postBasicCullingCtx.meshletCmdBufferStage = cmdBufferStage1;
             renderCtx.postBasicCullingCtx.meshletCountBufferStage = countBufferStage1;
         }
-        else
+        else  
         {
-            gltfRenderDepth(renderCtx, renderCtx.postBasicCullingCtx.meshletCmdBuffer, renderCtx.postBasicCullingCtx.meshletCountBuffer);
+            gltfRenderVisibility(renderCtx, renderCtx.postBasicCullingCtx.meshletCmdBuffer, renderCtx.postBasicCullingCtx.meshletCountBuffer);
         }
 
         return bShouldInvokeStage1;
     }
 
-    void gltfPrePassRenderingStage1(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx)
+    void chord::gltfVisibilityRenderingStage1(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx)
     {
         auto countBufferStage1 = renderCtx.postBasicCullingCtx.meshletCountBufferStage;
         auto cmdBufferStage1 = renderCtx.postBasicCullingCtx.meshletCmdBufferStage;
@@ -460,10 +463,10 @@ namespace chord
         push.drawedMeshletCountId_1 = asUAV(queue, countBuffer);
         push.drawedMeshletCmdId_1 = asUAV(queue, drawMeshletCmdBuffer);
 
-        GLTFPrePassHZBCullCS::Permutation permutation;
-        permutation.set<GLTFPrePassHZBCullCS::SV_bFirstStage>(false);
-        permutation.set<GLTFPrePassHZBCullCS::SV_bPrintDebugBox>(false);
-        auto computeShader = getContext().getShaderLibrary().getShader<GLTFPrePassHZBCullCS>(permutation);
+        GLTFHZBCullCS::Permutation permutation;
+        permutation.set<GLTFHZBCullCS::SV_bFirstStage>(false);
+        permutation.set<GLTFHZBCullCS::SV_bPrintDebugBox>(shouldPrintDebugBox());
+        auto computeShader = getContext().getShaderLibrary().getShader<GLTFHZBCullCS>(permutation);
 
         addIndirectComputePass2(queue,
             "GLTFBasePass: MeshletLevelCulling2",
@@ -471,144 +474,6 @@ namespace chord
             push,
             meshletCullCmdBuffer);
 
-        gltfRenderDepth(renderCtx, drawMeshletCmdBuffer, countBuffer);
-    }
-
-    PRIVATE_GLOBAL_SHADER(GLTFVisibilityRenderingVS, "resource/shader/gltf_rendering.hlsl", "visibilityPassVS", EShaderStage::Vertex);
-    PRIVATE_GLOBAL_SHADER(GLTFVisibilityRenderingPS, "resource/shader/gltf_rendering.hlsl", "visibilityPassPS", EShaderStage::Pixel);
-
-    void chord::gltfVisibilityRendering(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx)
-    {
-        if (!shouldRenderGLTF(renderCtx)) { return; }
-
-        auto& queue = renderCtx.queue;
-        auto& gbuffers = renderCtx.gbuffers;
-        const auto& postCullCtx = renderCtx.postBasicCullingCtx;
-
-        ScopePerframeMarker marker(queue, "GLTF Visibility");
-
-        const uint kMaxMeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
-        check(kMaxMeshletCount > 0);
-        queue.checkRecording();
-
-        // Culling for base pass.
-        auto meshletCullCmdBuffer = fillIndirectDispatchCmd(renderCtx, "meshletCullCmdBuffer visibility", renderCtx.postBasicCullingCtx.meshletCountBuffer);
-
-        auto countBuffer = getContext().getBufferPool().createGPUOnly(
-            "visibility drawCount",
-            sizeof(uint),
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-        auto drawMeshletCmdBuffer = getContext().getBufferPool().createGPUOnly(
-            "visibility drawcmd",
-            sizeof(GLTFMeshDrawCmd) * kMaxMeshletCount,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-
-        queue.clearUAV(countBuffer);
-
-        GLTFDrawPushConsts push = getGLTFDrawPushConsts(renderCtx);
-        fillHZBPushParam(renderCtx, push, hzbCtx);
-
-        push.drawedMeshletCountId = asSRV(queue, renderCtx.postBasicCullingCtx.meshletCountBuffer);
-        push.drawedMeshletCmdId = asSRV(queue, renderCtx.postBasicCullingCtx.meshletCmdBuffer);
-        push.drawedMeshletCountId_1 = asUAV(queue, countBuffer);
-        push.drawedMeshletCmdId_1 = asUAV(queue, drawMeshletCmdBuffer);
-
-        GLTFPrePassHZBCullCS::Permutation permutation;
-        permutation.set<GLTFPrePassHZBCullCS::SV_bFirstStage>(false);
-        permutation.set<GLTFPrePassHZBCullCS::SV_bPrintDebugBox>(shouldPrintDebugBox());
-        auto computeShader = getContext().getShaderLibrary().getShader<GLTFPrePassHZBCullCS>(permutation);
-
-        addIndirectComputePass2(queue,
-            "GLTFvisibility: MeshletLevelCulling",
-            getContext().computePipe(computeShader, "GLTFvisibilityPipe: MeshletLevelCulling"),
-            push,
-            meshletCullCmdBuffer);
-
-        auto renderGbufferPipe = [&](
-            VkCullModeFlags cullMode,
-            PoolBufferGPUOnlyRef cmdBuffer,
-            PoolBufferGPUOnlyRef countBuffer)
-        {
-            GLTFDrawPushConsts push = getGLTFDrawPushConsts(renderCtx);
-            push.drawedMeshletCmdId = asSRV(queue, cmdBuffer);
-            push.drawedMeshletCountId = asSRV(queue, countBuffer);
-
-            RenderTargets RTs{ };
-            RTs.RTs[0] = RenderTargetRT(gbuffers.visibility, ERenderTargetLoadStoreOp::Load_Store);
-            RTs.depthStencil = DepthStencilRT(
-                gbuffers.depthStencil,
-                EDepthStencilOp::DepthRead_StencilWrite,
-                ERenderTargetLoadStoreOp::Load_Store);
-
-            auto vertexShader = getContext().getShaderLibrary().getShader<GLTFVisibilityRenderingVS>();
-            auto pixelShader = getContext().getShaderLibrary().getShader<GLTFVisibilityRenderingPS>();
-
-            auto pipeline = getContext().graphicsPipe(
-                vertexShader, pixelShader,
-                "GLTF BasePass",
-                std::move(RTs.getRTsFormats()),
-                RTs.getDepthStencilFormat(),
-                RTs.getDepthStencilFormat());
-
-            addIndirectDrawPass(
-                queue,
-                "GLTF Basepass: Raster",
-                pipeline,
-                RTs,
-                cmdBuffer, 0, countBuffer, 0,
-                kMaxMeshletCount, sizeof(GLTFMeshDrawCmd), 
-                [&](graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)
-                {
-                    vkCmdSetCullMode(cmd, cullMode);
-                    pipe->pushConst(cmd, push);
-
-                    // ZWrite off.
-                    vkCmdSetDepthWriteEnable(cmd, VK_FALSE);
-
-                    // ZTest equal.
-                    vkCmdSetDepthTestEnable(cmd, VK_TRUE);
-                    vkCmdSetDepthCompareOp(cmd, VK_COMPARE_OP_EQUAL);
-                });
-        };
-
-        auto renderGbuffer = [&](
-            PoolBufferGPUOnlyRef cmdBuffer,
-            PoolBufferGPUOnlyRef countBuffer)
-        {
-            auto filterCmd = fillIndirectDispatchCmd(renderCtx, "Pipeline filter prepare.", countBuffer);
-            for (uint bTwoside = 0; bTwoside <= 1; bTwoside++)
-            {
-                auto countBufferStage1 = getContext().getBufferPool().createGPUOnly(
-                    "CountBufferStage#1",
-                    sizeof(uint),
-                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-                auto cmdBufferStage1 = getContext().getBufferPool().createGPUOnly(
-                    "CmdBufferStage#1",
-                    sizeof(GLTFMeshDrawCmd) * kMaxMeshletCount,
-                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-
-                queue.clearUAV(countBufferStage1);
-
-                GLTFDrawPushConsts pushCullTemplate = getGLTFDrawPushConsts(renderCtx);
-                pushCullTemplate.drawedMeshletCountId = asSRV(queue, countBuffer);
-                pushCullTemplate.drawedMeshletCmdId = asSRV(queue, cmdBuffer);
-                pushCullTemplate.drawedMeshletCountId_1 = asUAV(queue, countBufferStage1);
-                pushCullTemplate.drawedMeshletCmdId_1 = asUAV(queue, cmdBufferStage1);
-
-                pushCullTemplate.targetTwoSide = bTwoside;
-                pushCullTemplate.targetAlphaMode = kGLTFAlphaModeCullDonotCareFlag;
-
-                addIndirectComputePass2(queue,
-                    "GLTFPipeline: Filter",
-                    getContext().computePipe(getContext().getShaderLibrary().getShader<GLTFRenderingFillPipelineDrawParamCS>(), "GLTFPipeline: Filter"),
-                    pushCullTemplate,
-                    filterCmd);
-
-                VkCullModeFlags cullMode = bTwoside ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT;
-                renderGbufferPipe(cullMode, cmdBufferStage1, countBufferStage1);
-            }
-        };
-
-        renderGbuffer(drawMeshletCmdBuffer, countBuffer);
+        gltfRenderVisibility(renderCtx, drawMeshletCmdBuffer, countBuffer);
     }
 }

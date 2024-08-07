@@ -364,7 +364,7 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
         addBox(scene, worldPosExtents);
     #endif
     }
-#if DIM_HZB_CULLING_PHASE_0
+    #if DIM_HZB_CULLING_PHASE_0
     else
     {
         uint drawCmdId = interlockedAddUint(pushConsts.drawedMeshletCountId_2);
@@ -372,7 +372,7 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
         visibleDrawCmd.firstInstance  = drawCmdId;
         BATS(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId_2, drawCmdId, visibleDrawCmd);
     }
-#endif
+    #endif
 }
 
 // Loop all visibile meshlet, filter mesh and fill all draw cmd.
@@ -421,19 +421,19 @@ void fillPipelineDrawParamCS(uint threadId : SV_DispatchThreadID)
     }
 }
 
-struct DepthOnlyVS2PS
+struct VisibilityPassVS2PS
 {
     float4 positionHS : SV_Position;
+    nointerpolation uint2 id : TEXCOORD0;
 #if DIM_MASKED_MATERIAL
-    float2 uv : TEXCOORD0;
-    nointerpolation uint objectId : TEXCOORD1;
+    float2 uv : TEXCOORD1;
 #endif
 };
  
-void depthOnlyVS(
+void visibilityPassVS(
     uint vertexId : SV_VertexID, 
     uint instanceId : SV_INSTANCEID,
-    out DepthOnlyVS2PS output)
+    out VisibilityPassVS2PS output)
 {
     const GLTFMeshDrawCmd drawCmd = BATL(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, instanceId);
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
@@ -470,19 +470,23 @@ void depthOnlyVS(
 #if DIM_MASKED_MATERIAL
     ByteAddressBuffer uvDataBuffer = ByteAddressBindless(primitiveDataInfo.textureCoord0Buffer);
     output.uv = uvDataBuffer.TypeLoad(float2, indicesId);//
-    output.objectId = objectId;
 #endif
+
+    output.id.x = indicesId;
+    output.id.y = encodeObjectInfo(OBJECT_TYPE_GLTF, objectId);
 } 
 
-void depthOnlyPS(in DepthOnlyVS2PS input, out float4 outSceneColor : SV_Target0)
+void visibilityPassPS(in VisibilityPassVS2PS input, out uint2 outId : SV_Target0)
 {
-    outSceneColor = float4(0.0, 0.0, 0.0, 1.0);
-
 #if DIM_MASKED_MATERIAL
+    uint objectType;
+    uint objectId;
+    decodeObjectInfo(input.id.y, objectType, objectId);
+
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
     const GPUBasicData scene = perView.basicData;
 
-    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, input.objectId);
+    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
     const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
 
     Texture2D<float4> baseColorTexture = TBindless(Texture2D, float4, materialInfo.baseColorId);
@@ -494,59 +498,8 @@ void depthOnlyPS(in DepthOnlyVS2PS input, out float4 outSceneColor : SV_Target0)
         discard;
     }
 #endif
-}
 
-struct VisibilityPassVS2PS
-{
-    float4 positionHS : SV_Position;
-    nointerpolation uint2 id : TEXCOORD0;
-};
-
-void visibilityPassVS(uint vertexId : SV_VertexID, uint instanceId : SV_INSTANCEID, out VisibilityPassVS2PS output)
-{
-    const GLTFMeshDrawCmd drawCmd = BATL(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, instanceId);
-    PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
-    const GPUBasicData scene = perView.basicData;
-
-    uint objectId = drawCmd.objectId;
-    uint selectedLod;
-    uint meshletId;
-    {
-        unpackLodMeshlet(drawCmd.packLodMeshlet, selectedLod, meshletId);
-    }
-
-    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
-    const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
-    const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
-    const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
-    const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
-
-    ByteAddressBuffer indicesDataBuffer = ByteAddressBindless(primitiveDataInfo.indicesBuffer);
-    ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
-
-    const uint sampleIndices = lodInfo.firstIndex + meshlet.firstIndex + vertexId;
-    const uint indicesId = primitiveInfo.vertexOffset + indicesDataBuffer.TypeLoad(uint, sampleIndices);
-
-    // 
-    float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
-    float4x4 translatedWorldToView = perView.translatedWorldToView;
-    float4x4 viewToClip = perView.viewToClip;
-    float4x4 translatedWorldToClip = perView.translatedWorldToClip;
-
-    float3 rawPosition = positionDataBuffer.TypeLoad(float3, indicesId);
-    float4 positionLS = float4(rawPosition, 1.0);
-    float4 positionRS = mul(localToTranslatedWorld, positionLS);
-
-    // Keep same with prepass, if no, will z fighting. 
-    // Exist some simd instructions here, like fma, and result diff from cpp. 
-    output.positionHS = mul(translatedWorldToClip, positionRS); 
-
-    output.id.x = indicesId;
-    output.id.y = encodeObjectInfo(OBJECT_TYPE_GLTF, objectId);
-}
- 
-void visibilityPassPS( in VisibilityPassVS2PS input, out uint2 outId : SV_Target0)
-{
+    // Output id.
     outId = input.id;
 }
 

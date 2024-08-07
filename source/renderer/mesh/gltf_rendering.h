@@ -56,8 +56,6 @@ namespace chord
 
 	// Return true if need invoke stage1.
 	// Return false no need stage1.
-	extern bool gltfPrePassRenderingStage0(GLTFRenderContext& renderCtx);
-	extern void gltfPrePassRenderingStage1(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx);
-
-	extern void gltfVisibilityRendering(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx);
+	extern bool gltfVisibilityRenderingStage0(GLTFRenderContext& renderCtx);
+	extern void gltfVisibilityRenderingStage1(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx);
 }

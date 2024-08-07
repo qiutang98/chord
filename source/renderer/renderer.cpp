@@ -233,8 +233,8 @@ namespace chord
 			insertTimer("Clear GBuffers", graphics);
 
 			// Prepass stage0
-			const bool bShouldStage1GLTF = gltfPrePassRenderingStage0(gltfRenderCtx);
-			insertTimer("GLTF Prepass Stage0", graphics);
+			const bool bShouldStage1GLTF = gltfVisibilityRenderingStage0(gltfRenderCtx);
+			insertTimer("GLTF Visibility Stage0", graphics);
 
 			// Prepass stage1
 			if (bShouldStage1GLTF)
@@ -242,15 +242,12 @@ namespace chord
 				auto tempHzbCtx = buildHZB(graphics, gbuffers.depthStencil);
 				insertTimer("BuildHZB Post Prepass Stage0", graphics);
 
-				gltfPrePassRenderingStage1(gltfRenderCtx, tempHzbCtx);
-				insertTimer("GLTF Prepass Stage1", graphics);
+				gltfVisibilityRenderingStage1(gltfRenderCtx, tempHzbCtx);
+				insertTimer("GLTF Visibility Stage1", graphics);
 			}
 
 			hzbCtx = buildHZB(graphics, gbuffers.depthStencil);
 			insertTimer("BuildHZB", graphics);
-
-			gltfVisibilityRendering(gltfRenderCtx, hzbCtx);
-			insertTimer("GLTF Visibility", graphics);
 
 			check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 			check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);
