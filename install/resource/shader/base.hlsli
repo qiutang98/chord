@@ -170,13 +170,6 @@ uint2 convert2d(uint id, uint dim)
     return uint2(id % 2, id / 2);
 }
 
-float signedChar2float(uint data)
-{
-    int v = int(data & 0xFF); // 
-    v = (data > 127) ? (v | 0xFFFFFF80) : v; // Get signed. 
-    return v / 127.0;
-}
-
 uint encodeObjectInfo(uint objectType, uint objectId)
 {
     return ((objectId & kMaxObjectCount) << 8) | (objectType & kMaxObjectType);

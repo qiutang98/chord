@@ -255,6 +255,33 @@ namespace chord::graphics
 		vkCmdPushDescriptorSetKHR(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
 	}
 
+	void Context::setPerfMarkerBegin(VkCommandBuffer cmdBuf, const char* name, const math::vec4& color) const
+	{
+		if (!bGraphicsDebugMarkerEnable)
+		{
+			return;
+		}
+
+		VkDebugUtilsLabelEXT label = {};
+		label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+		label.pLabelName = name;
+		label.color[0] = color.r;
+		label.color[1] = color.g;
+		label.color[2] = color.b;
+		label.color[3] = color.a;
+		vkCmdBeginDebugUtilsLabelEXT(cmdBuf, &label);
+	}
+
+	void Context::setPerfMarkerEnd(VkCommandBuffer cmdBuf) const
+	{
+		if (!bGraphicsDebugMarkerEnable)
+		{
+			return;
+		}
+
+		vkCmdEndDebugUtilsLabelEXT(cmdBuf);
+	}
+
 	bool Context::init(const InitConfig& inputConfig)
 	{
 		m_initConfig = inputConfig;

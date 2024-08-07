@@ -19,6 +19,10 @@ namespace chord
 
 			// Visible meshlet draw cmd buffer id.
 			graphics::PoolBufferGPUOnlyRef meshletCmdBuffer;
+
+			// Stage count and cmd buffer.
+			graphics::PoolBufferGPUOnlyRef meshletCountBufferStage;
+			graphics::PoolBufferGPUOnlyRef meshletCmdBufferStage;
 		} postBasicCullingCtx;
 
 		const PerframeCollected* perframeCollect;
@@ -50,6 +54,10 @@ namespace chord
 		}
 	};
 
-	extern void gltfPrePassRendering(GLTFRenderContext& renderCtx);
-	extern void gltfBasePassRendering(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx);
+	// Return true if need invoke stage1.
+	// Return false no need stage1.
+	extern bool gltfPrePassRenderingStage0(GLTFRenderContext& renderCtx);
+	extern void gltfPrePassRenderingStage1(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx);
+
+	extern void gltfVisibilityRendering(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx);
 }

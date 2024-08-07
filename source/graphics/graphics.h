@@ -77,7 +77,8 @@ namespace chord::graphics
 
 		explicit Context() = default;
 
-		const auto& getPhysicalDeviceDescriptorIndexingProperties() { return m_physicalDeviceProperties.descriptorIndexingProperties;  }
+		const auto& getPhysicalDeviceDescriptorIndexingProperties() const { return m_physicalDeviceProperties.descriptorIndexingProperties;  }
+		const auto& getPhysicalDeviceProperties() const { return m_physicalDeviceProperties; }
 		VkInstance getInstance() const { return m_instance; }
 		VkPhysicalDevice getPhysicalDevice() const { return m_physicalDevice; }
 		VkDevice getDevice() const { return m_device; }
@@ -218,6 +219,9 @@ namespace chord::graphics
 			uint32 descriptorWriteCount,
 			const VkWriteDescriptorSet* pDescriptorWrites);
 
+		void setPerfMarkerBegin(VkCommandBuffer cmdBuf, const char* name, const math::vec4& color) const;
+		void setPerfMarkerEnd(VkCommandBuffer cmdBuf) const;
+
 	public:
 		bool init(const InitConfig& config);
 		bool tick(const ApplicationTickData& tickData);
@@ -334,4 +338,21 @@ namespace chord::graphics
 	}
 
 	extern void setResourceName(VkObjectType objectType, uint64 handle, const char* name);
+
+	struct ScopePerframeMarker
+	{
+		std::string    name;
+		VkCommandBuffer cmd;
+
+		ScopePerframeMarker(GraphicsOrComputeQueue& queue, const std::string& name, const glm::vec4& color = { 1.0f, 1.0f, 1.0f, 1.0f })
+			: cmd(queue.getActiveCmd()->commandBuffer), name(name)
+		{
+			getContext().setPerfMarkerBegin(cmd, name.c_str(), color);
+		}
+
+		~ScopePerframeMarker()
+		{
+			getContext().setPerfMarkerEnd(cmd);
+		}
+	};
 }

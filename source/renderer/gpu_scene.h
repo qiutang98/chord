@@ -53,6 +53,11 @@ namespace chord
 			return m_allocatedElements[hashId].get();
 		}
 
+		bool isAllocated(uint64 hashId) const
+		{
+			return m_allocatedElements.contains(hashId);
+		}
+
 		// Update id in object, return offset in allocator.
 		void updateId(uint32 offset, const UploadType& data)
 		{

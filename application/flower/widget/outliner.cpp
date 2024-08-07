@@ -325,11 +325,21 @@ void WidgetOutliner::popupMenu()
 
 	if (bSelectedLessEqualOne)
 	{
+		const auto* camera = Flower::get().getActiveViewportCamera();
+		const dvec3 relativeCameraPos = dvec3(0);
+		if (camera)
+		{
+			camera->getPosition() + camera->getFront();
+		}
+
+
 		static const std::string kEmptyNodeStr = combineIcon("Empty Scene Node", ICON_FA_FAN);
 
 		if (ImGui::MenuItem(kEmptyNodeStr.c_str()))
 		{
 			auto newNode = activeScene->createNode(m_sceneManagerUI->addUniqueIdForName(u16str("Untitled")), selectedOneNode);
+			newNode->getTransform()->setTranslation(relativeCameraPos);
+
 			ImGui::EndPopup();
 			return;
 		}

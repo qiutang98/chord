@@ -306,6 +306,35 @@ namespace chord::graphics
 		~CommandPoolResetable();
 	};
 
+	class GPUTimestamps
+	{
+	public:
+		struct TimeStamp
+		{
+			std::string label;
+			float microseconds;
+		};
+
+		void init(uint32 numberOfBackBuffers, uint32 maxTimeStampCounts);
+		void release();
+
+		void getTimeStamp(VkCommandBuffer cmd, const char* label);
+		void getTimeStampCPU(TimeStamp ts); 
+
+		void onBeginFrame(VkCommandBuffer cmd, std::vector<TimeStamp>* pTimestamp);
+		void onEndFrame();
+
+	private:
+		VkQueryPool m_queryPool;
+
+		uint32 m_maxTimeStampCount = 0;
+		uint32 m_frame = 0;
+		uint32 m_numberOfBackBuffers = 0;
+
+		std::vector<std::string> m_labels[5];
+		std::vector<TimeStamp> m_cpuTimeStamps[5];
+	};
+
 	namespace log
 	{
 		extern spdlog::logger& get();

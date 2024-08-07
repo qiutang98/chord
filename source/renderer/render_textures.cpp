@@ -20,6 +20,9 @@ namespace chord
         GBufferTextures result { };
         auto& pool = getContext().getTexturePool();
 
+        // Visibility.
+        result.visibility = pool.create("Gbuffer.Visibility", width, height, GBufferTextures::visibilityFormat(), kGBufferVkImageUsage);
+
         // Color and depth stencil.
         result.color = pool.create("Gbuffer.Color", width, height, GBufferTextures::colorFormat(), kGBufferVkImageUsage);
         result.depthStencil = pool.create("Gbuffer.DepthStencil", width, height, GBufferTextures::depthStencilFormat(), kDepthVkImageUsage);
@@ -34,10 +37,15 @@ namespace chord
 
     void chord::addClearGbufferPass(GraphicsQueue& queue, GBufferTextures& textures)
     {
+        ScopePerframeMarker marker(queue, "Clear Gbuffers");
+
         queue.checkRecording();
         {
             static const auto clearValue = VkClearColorValue{ .uint32 = { 0, 0, 0, 0} };
             static const auto range = helper::buildBasicImageSubresource();
+
+            // Visibility.
+            queue.clearImage(textures.visibility, &clearValue, 1, &range);
 
             // Color.
             queue.clearImage(textures.color, &clearValue, 1, &range);

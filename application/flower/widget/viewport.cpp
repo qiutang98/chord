@@ -18,6 +18,18 @@ static AutoCVarRef<float> cVarScreenPercentage(
 	"set all deferred renderer screen percentage.",
 	EConsoleVarFlags::Scalability);
 
+static uint32 sEnableStatUnit = 1;
+static AutoCVarRef<uint32> cVarEnableStatUnit(
+	"r.viewport.stat.unit",
+	sEnableStatUnit,
+	"Enable stat unit frame.");
+
+static uint32 sEnableStatFrame = 1;
+static AutoCVarRef<uint32> cVarEnableStatFrame(
+	"r.viewport.stat.frame",
+	sEnableStatFrame,
+	"Enable stat frame detail.");
+
 WidgetViewport::WidgetViewport(size_t index)
 	: IWidget(
 		combineIcon("Viewport", kIconViewport).c_str(),
@@ -72,15 +84,18 @@ void WidgetViewport::onVisibleTick(const ApplicationTickData& tickData)
 		{
 			m_camera->tick(tickData, (GLFWwindow*)ImGui::GetCurrentWindow()->Viewport->PlatformHandle);
 		}
+
+		// If camera move, current viewport camera is active, so notify flower know.
 		if (m_camera->getPosition() != prevCamPos)
 		{
-			// TODO:
-			// Editor::get()->setActiveViewportCameraPos(m_camera->getPosition());
+			Flower::get().setActiveViewportCamera(m_camera.get());
 		}
 
 		ImGui::SetCursorPos(startPos);
 		ImGui::NewLine();
 
+		// Draw profile viewer.
+		drawProfileViewer(width, height);
 	
 		// Change viewport size, need notify renderer change render size.
 		if (m_cacheWidth != width ||
@@ -116,6 +131,106 @@ void WidgetViewport::onAfterTick(const ApplicationTickData& tickData)
 void WidgetViewport::onRelease()
 {
 	m_deferredRenderer.reset();
+}
+
+void WidgetViewport::drawProfileViewer(uint32_t width, uint32_t height)
+{
+	ImGui::Indent(2.0f);
+	if (sEnableStatUnit > 0)
+	{
+		const auto& timeStamps = m_deferredRenderer->getTimingValues();
+		const bool bTimeStampsAvailable = timeStamps.size() > 0;
+		if (bTimeStampsAvailable)
+		{
+			m_profileViewer.recentHighestFrameTime = 0;
+
+			m_profileViewer.frameTimeArray[m_profileViewer.kNumFrames - 1] = timeStamps.back().microseconds;
+			for (uint32_t i = 0; i < m_profileViewer.kNumFrames - 1; i++)
+			{
+				m_profileViewer.frameTimeArray[i] = m_profileViewer.frameTimeArray[i + 1];
+			}
+			m_profileViewer.recentHighestFrameTime =
+				std::max(m_profileViewer.recentHighestFrameTime, m_profileViewer.frameTimeArray[m_profileViewer.kNumFrames - 1]);
+		}
+		const float& frameTime_us = m_profileViewer.frameTimeArray[m_profileViewer.kNumFrames - 1];
+		const float  frameTime_ms = frameTime_us * 0.001f;
+		const int fps = bTimeStampsAvailable ? static_cast<int>(1000000.0f / frameTime_us) : 0;
+		static const char* textFormat = "%s : %.2f %s";
+
+		auto profileUI = [&]()
+		{
+			ui::beginGroupPanel("Profiler");
+			{
+				ImGui::Text("Resolution : %ix%i", (int32_t)width, (int32_t)height);
+				ImGui::Text("FPS : %d (%.2f ms)", fps, frameTime_ms);
+
+				for (uint32_t i = 0; i < timeStamps.size(); i++)
+				{
+					float value = m_profileViewer.bShowMilliseconds ? timeStamps[i].microseconds / 1000.0f : timeStamps[i].microseconds;
+					const char* pStrUnit = m_profileViewer.bShowMilliseconds ? "ms" : "us";
+					ImGui::Text(textFormat, timeStamps[i].label.c_str(), value, pStrUnit);
+				}
+			}
+			ImGui::Spacing();
+			ui::endGroupPanel();
+		};
+
+		const auto srcPos = ImGui::GetCursorPos();
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.0f);
+		ImGui::BeginDisabled();
+		profileUI();
+		ImGui::EndDisabled();
+		ImGui::PopStyleVar();
+		ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(0, 0, 0, 139), 2.0f);
+
+		ImGui::SetCursorPos(srcPos);
+		profileUI();
+	}
+
+	if (sEnableStatFrame > 0)
+	{
+		size_t iFrameTimeGraphMaxValue = 0;
+		size_t iFrameTimeGraphMinValue = 0;
+		for (int i = 0; i < m_profileViewer.kCountNum; ++i)
+		{
+			if (m_profileViewer.recentHighestFrameTime < m_profileViewer.frameTimeGraphMaxValues[i])
+			{
+				iFrameTimeGraphMaxValue = std::min(int(m_profileViewer.kCountNum - 1), i + 1);
+				break;
+			}
+		}
+
+		auto frameGraphView = [&]()
+		{
+			ui::beginGroupPanel("GPU frame time (us)");
+			{
+				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, { 0,0,0,0 });
+				ImGui::PlotLines("",
+					m_profileViewer.frameTimeArray,
+					m_profileViewer.kNumFrames,
+					0,
+					0,
+					0.0f,
+					m_profileViewer.frameTimeGraphMaxValues[iFrameTimeGraphMaxValue],
+					ImVec2(200, 80));
+				ImGui::PopStyleColor();
+				ImGui::PopStyleVar();
+			}
+			ui::endGroupPanel();
+		};
+
+		const auto srcPos = ImGui::GetCursorPos();
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.0f);
+		ImGui::BeginDisabled();
+		frameGraphView();
+		ImGui::EndDisabled();
+		ImGui::PopStyleVar();
+		ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(0, 0, 0, 139), 2.0f);
+		ImGui::SetCursorPos(srcPos);
+		frameGraphView();
+	}
+	ImGui::Unindent();
 }
 
 void ViewportCamera::updateCameraVectors()
@@ -305,4 +420,12 @@ void ViewportCamera::updateMatrixMisc()
 
 	// Reset z far to zero ensure we use infinite invert z.
 	m_projectMatrix = chord::infiniteInvertZPerspectiveRH_ZO(getAspect(), m_fovy, m_zNear);
+}
+
+ProfilerViewer::ProfilerViewer()
+{
+	for (int i = 0; i < kCountNum; ++i)
+	{
+		frameTimeGraphMaxValues[i] = 1000000.f / frameTimeGraphMaxFps[i];
+	}
 }

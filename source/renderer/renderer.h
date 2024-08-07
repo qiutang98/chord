@@ -67,7 +67,8 @@ namespace chord
 		};
 
 		bool updateDimension(uint32 outputWidth, uint32 outputHeight, float renderScaleToPost, float postScaleToOutput);
-	
+		const auto& getTimingValues() { return m_timeStamps; }
+
 	protected:
 		void clearHistory(bool bClearOutput);
 
@@ -85,5 +86,9 @@ namespace chord
 
 		// Current frame camera relative view uniform buffer.
 		PerframeCameraView m_perframeCameraView;
+
+		// GPU timer.
+		graphics::GPUTimestamps m_rendererTimer;
+		std::vector<graphics::GPUTimestamps::TimeStamp> m_timeStamps;
 	};
 }

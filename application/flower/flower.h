@@ -77,6 +77,9 @@ public:
 		return *m_sceneContentManager;
 	}
 
+	const auto* getActiveViewportCamera() const { return m_activeViewportCamera; }
+	void setActiveViewportCamera(const chord::ICamera* in) { m_activeViewportCamera = in; }
+
 private:
 	explicit Flower() = default;
 
@@ -125,4 +128,7 @@ private:
 	UISceneContentManager* m_sceneContentManager = nullptr;
 	WidgetOutliner* m_widgetOutlineHandle = nullptr;
 	std::array<WidgetDetail*, kMultiWidgetMaxNum> m_details;
+
+
+	const chord::ICamera* m_activeViewportCamera = nullptr;
 };

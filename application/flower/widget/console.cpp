@@ -473,7 +473,7 @@ void CVarCommandContext::inputCallbackOnHistory(ImGuiInputTextCallbackData* data
 			}
 		}
 
-		if (bCommandSelectPop && selectedCommandIndex >= 0)
+		if (bCommandSelectPop && selectedCommandIndex >= 0 && selectedCommandIndex < activeCommands.size())
 		{
 			data->DeleteChars(0, data->BufTextLen);
 			data->InsertChars(0, activeCommands[selectedCommandIndex].name.data());

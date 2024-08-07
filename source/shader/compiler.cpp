@@ -65,6 +65,11 @@ namespace chord::graphics
 			}
 		}
 
+		#ifdef CHORD_DEBUG
+		{
+			out.push_back("-D"); out.push_back("CHORD_DEBUG");
+		}
+		#endif
 
 		// Push back shader stage definition.
 		{

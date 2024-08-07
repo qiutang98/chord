@@ -15,16 +15,20 @@
 namespace chord
 {
 	using namespace graphics;
+	constexpr uint32 kTimerFramePeriod = 3;
+	constexpr uint32 kTimerStampMaxCount = 128;
 
 	DeferredRenderer::DeferredRenderer(const std::string& name)
 		: m_name(name)
 	{
-		
+		// Init gpu timer.
+		m_rendererTimer.init(kTimerFramePeriod, kTimerStampMaxCount);
 	}
 
 	DeferredRenderer::~DeferredRenderer()
 	{
 		graphics::getContext().waitDeviceIdle();
+		m_rendererTimer.release();
 	}
 
 	PoolTextureRef DeferredRenderer::getOutput()
@@ -129,8 +133,21 @@ namespace chord
 		graphics::CommandList& cmd,
 		ICamera* camera)
 	{
+		const uint32 currentRenderWidth = m_dimensionConfig.getRenderWidth();
+		const uint32 currentRenderHeight = m_dimensionConfig.getRenderHeight();
+
 		auto* sceneManager = &Application::get().getEngine().getSubsystem<SceneManager>();
 		auto scene = sceneManager->getActiveScene();
+
+		// Graphics start timeline.
+		auto& graphics = cmd.getGraphicsQueue();
+		auto frameStartTimeline = graphics.getCurrentTimeline();
+
+		// Render 
+		graphics.beginCommand({ frameStartTimeline });
+
+		// GPU timer start.
+		m_rendererTimer.onBeginFrame(graphics.getActiveCmd()->commandBuffer, &m_timeStamps);
 
 		// Update camera info first.
 		{
@@ -146,11 +163,13 @@ namespace chord
 		}
 
 		DebugLineCtx debugLineCtx = allocateDebugLineCtx();
+		auto finalOutput = getOutput();
 
 		// Now collect perframe camera.
 		PerframeCollected perframe { };
 		uint gltfBufferId = ~0;
 		uint gltfObjectCount = 0;
+		uint32 viewGPUId;
 		{
 			perframe.debugLineCtx = &debugLineCtx;
 
@@ -179,26 +198,14 @@ namespace chord
 				m_perframeCameraView.basicData.debuglineCount = debugLineCtx.gpuCountBuffer->get().requireView(true, false).storage.get();
 				m_perframeCameraView.basicData.debuglineVertices = debugLineCtx.gpuVertices->get().requireView(true, false).storage.get();
 			}
-		}
 
-		const uint32 currentRenderWidth = m_dimensionConfig.getRenderWidth();
-		const uint32 currentRenderHeight = m_dimensionConfig.getRenderHeight();
+			// Allocate view gpu uniform buffer.
+			viewGPUId = uploadBufferToGPU(cmd, "PerViewCamera-" + m_name, &m_perframeCameraView);
 
-		auto finalOutput = getOutput();
-
-		// Graphics start timeline.
-		auto& graphics = cmd.getGraphicsQueue();
-
-		// Allocate view gpu uniform buffer.
-		uint32 viewGPUId = uploadBufferToGPU(cmd, "PerViewCamera-" + m_name, &m_perframeCameraView);
-
-		// update debugline gpu.
-		{
+			// update debugline gpu.
 			debugLineCtx.cameraViewBufferId = viewGPUId;
 		}
 
-
-		
 		// 
 		auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
 
@@ -211,36 +218,56 @@ namespace chord
 			gbuffers,
 			m_rendererHistory);
 
-		auto frameStartTimeline = graphics.getCurrentTimeline();
+		debugLineCtx.prepareForRender(graphics);
 
 		HZBContext hzbCtx { };
-		graphics.beginCommand({ frameStartTimeline });
+		auto insertTimer = [&](const std::string& label, GraphicsOrComputeQueue& queue)
 		{
-			debugLineCtx.prepareForRender(graphics);
+			m_rendererTimer.getTimeStamp(queue.getActiveCmd()->commandBuffer, label.c_str());
+		};
+		{
+			insertTimer("FrameBegin", graphics);
 
 			// Clear all gbuffer textures.
 			addClearGbufferPass(graphics, gbuffers);
+			insertTimer("Clear GBuffers", graphics);
 
+			// Prepass stage0
+			const bool bShouldStage1GLTF = gltfPrePassRenderingStage0(gltfRenderCtx);
+			insertTimer("GLTF Prepass Stage0", graphics);
 
-			gltfPrePassRendering(gltfRenderCtx);
+			// Prepass stage1
+			if (bShouldStage1GLTF)
+			{
+				auto tempHzbCtx = buildHZB(graphics, gbuffers.depthStencil);
+				insertTimer("BuildHZB Post Prepass Stage0", graphics);
+
+				gltfPrePassRenderingStage1(gltfRenderCtx, tempHzbCtx);
+				insertTimer("GLTF Prepass Stage1", graphics);
+			}
 
 			hzbCtx = buildHZB(graphics, gbuffers.depthStencil);
+			insertTimer("BuildHZB", graphics);
 
-			// Render GLTF
-			gltfBasePassRendering(gltfRenderCtx, hzbCtx);
+			gltfVisibilityRendering(gltfRenderCtx, hzbCtx);
+			insertTimer("GLTF Visibility", graphics);
 
 			check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 			check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);
 			tonemapping(graphics, gbuffers.color, finalOutput);
+			insertTimer("Tonemapping", graphics);
 
 			check(finalOutput->get().getExtent().width == gbuffers.depthStencil->get().getExtent().width);
 			check(finalOutput->get().getExtent().height == gbuffers.depthStencil->get().getExtent().height);
 			debugLine(graphics, debugLineCtx, gbuffers.depthStencil, finalOutput);
+			insertTimer("DebugLine", graphics);
+
 
 			graphics.transitionPresent(finalOutput);
+			insertTimer("FrameEnd", graphics);
 		}
-		auto gbufferPassTimeline = graphics.endCommand();
-
+		m_rendererTimer.onEndFrame();
+		graphics.endCommand();
 
 		m_rendererHistory.hzbCtx = hzbCtx;
 	}

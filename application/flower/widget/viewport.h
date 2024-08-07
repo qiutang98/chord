@@ -75,6 +75,23 @@ public:
 	void tick(const chord::ApplicationTickData& tickData, GLFWwindow* window);
 };
 
+struct ProfilerViewer
+{
+	ProfilerViewer();
+
+	bool bShowProfilerWindow = true;
+	bool bShowMilliseconds = true;
+
+	static const size_t kNumFrames = 256;
+	float frameTimeArray[kNumFrames] = { 0.0f };
+
+	float recentHighestFrameTime = 0.0f;
+
+	const static size_t kCountNum = 14;
+	const int frameTimeGraphMaxFps[kCountNum] = { 800, 240, 120, 90, 60, 45, 30, 15, 10, 5, 4, 3, 2, 1 };
+	float frameTimeGraphMaxValues[kCountNum]  = { 0.0f };
+};
+
 class WidgetViewport : public chord::IWidget
 {
 public:
@@ -122,6 +139,9 @@ public:
 	}
 
 private:
+	void drawProfileViewer(uint32_t width, uint32_t height);
+
+private:
 	// Index of content widget.
 	size_t m_index;
 
@@ -136,4 +156,5 @@ private:
 
 	std::unique_ptr<chord::DeferredRenderer> m_deferredRenderer;
 	std::unique_ptr<ViewportCamera> m_camera;
+	ProfilerViewer m_profileViewer;
 };

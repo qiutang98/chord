@@ -84,6 +84,8 @@ namespace chord
 
 		Frustum computeRelativeWorldFrustum() const;
 
+		const auto& getFront() const { return m_front; }
+
 	protected:
 		// world space position.
 		math::dvec3 m_position = { 25.0f, 25.0f, 25.0f };

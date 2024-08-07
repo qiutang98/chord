@@ -8,11 +8,14 @@ struct GLTFMeshDrawCmd
     uint firstInstance;
     uint objectId;
     uint packLodMeshlet;
+    uint pipelineBin;
 };
 
 #define kLODEnableBit            0
 #define kFrustumCullingEnableBit 1
 #define kHZBCullingEnableBit     2
+
+#define kGLTFAlphaModeCullDonotCareFlag 3
 
 struct GLTFDrawPushConsts
 {
@@ -38,6 +41,9 @@ struct GLTFDrawPushConsts
     uint drawedMeshletCmdId_1;
     uint drawedMeshletCountId_2;
     uint drawedMeshletCmdId_2;
+
+    uint targetAlphaMode; // 0 opaque, 1 masked, 2 blend, 3 don't care.
+    uint targetTwoSide; // 
 };
 CHORD_PUSHCONST(GLTFDrawPushConsts, pushConsts);
 
@@ -47,6 +53,29 @@ CHORD_PUSHCONST(GLTFDrawPushConsts, pushConsts);
 #include "base.hlsli"
 #include "debug.hlsli"
 #include "debug_line.hlsli"
+
+// GLTF material two state:
+// 1. alphaMode: OPAQUE, MASK, BLEND.
+// 2. bool doubleSided.
+uint packPipelineState(uint bTwoSide, uint alphaMode)
+{
+    uint result = 0;
+    result |= (alphaMode & 0x3) << 0; // Used two bit. 
+    result |= (bTwoSide  & 0x1) << 2; // Used one bit. 
+
+    // next
+    return result;
+}
+
+uint isTwoSide(uint packData)
+{
+    return (packData >> 2) & 0x1;
+}
+
+uint getAlphaMode(uint packData)
+{
+    return (packData >> 0) & 0x3;
+}
 
 [numthreads(64, 1, 1)]
 void perobjectCullingCS(uint threadId : SV_DispatchThreadID)
@@ -175,6 +204,9 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
 
     uint drawCmdId = interlockedAddUint(pushConsts.drawedMeshletCountId);
 
+        // Load material info.
+    const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
+
     // Fill in draw cmd. 
     {
         GLTFMeshDrawCmd drawCmd;
@@ -185,6 +217,7 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         drawCmd.firstInstance  = drawCmdId;
         drawCmd.objectId       = objectId;
         drawCmd.packLodMeshlet = packLodMeshlet(selectedLod, meshletId);
+        drawCmd.pipelineBin    = packPipelineState(materialInfo.bTwoSided, materialInfo.alphaMode);
 
         BATS(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, drawCmdId, drawCmd);
     }
@@ -220,8 +253,6 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
     {
         return;
     }
-
-    SamplerState pointSampler = getPointClampEdgeSampler(perView);
 
     const GLTFMeshDrawCmd drawCmd = BATL(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, threadId);
     uint objectId = drawCmd.objectId;
@@ -309,12 +340,8 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
         }
     }
 
-    GLTFMeshDrawCmd visibleDrawCmd;
-    visibleDrawCmd.vertexCount    = meshlet.triangleCount * 3;
-    visibleDrawCmd.instanceCount  = 1;
-    visibleDrawCmd.firstVertex    = 0;
-    visibleDrawCmd.objectId       = objectId;
-    visibleDrawCmd.packLodMeshlet = packLodMeshlet(selectedLod, meshletId);
+    // Load material info.
+    GLTFMeshDrawCmd visibleDrawCmd = drawCmd;
 
     // If visible, add to draw list.
     if (bVisible)
@@ -346,6 +373,52 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
         BATS(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId_2, drawCmdId, visibleDrawCmd);
     }
 #endif
+}
+
+// Loop all visibile meshlet, filter mesh and fill all draw cmd.
+[numthreads(64, 1, 1)]
+void fillPipelineDrawParamCS(uint threadId : SV_DispatchThreadID)
+{
+    const PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
+    const GPUBasicData scene = perView.basicData;
+
+    const uint meshletCount = BATL(uint, pushConsts.drawedMeshletCountId, 0);
+    if (threadId >= meshletCount)
+    {
+        return;
+    }
+
+    const GLTFMeshDrawCmd drawCmd = BATL(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, threadId);
+    uint objectId = drawCmd.objectId;
+    uint selectedLod;
+    uint meshletId;
+    {
+        unpackLodMeshlet(drawCmd.packLodMeshlet, selectedLod, meshletId);
+    }
+
+    //
+    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
+    const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
+
+    const uint bTwoSided = materialInfo.bTwoSided;
+    const uint alphaMode = materialInfo.alphaMode;
+    check(bTwoSided == 0 || bTwoSided == 1);
+    check(alphaMode == 0 || alphaMode == 1 || alphaMode == 2);
+
+    const bool bAlphaPass = 
+        (kGLTFAlphaModeCullDonotCareFlag == pushConsts.targetAlphaMode) || 
+        (pushConsts.targetAlphaMode == alphaMode);
+
+    // Visible, fill draw command.
+    if (bAlphaPass && pushConsts.targetTwoSide == bTwoSided)
+    {
+        // Load material info.
+        GLTFMeshDrawCmd visibleDrawCmd = drawCmd;
+
+        uint drawCmdId = interlockedAddUint(pushConsts.drawedMeshletCountId_1);
+        visibleDrawCmd.firstInstance  = drawCmdId;
+        BATS(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId_1, drawCmdId, visibleDrawCmd);
+    }
 }
 
 struct DepthOnlyVS2PS
@@ -408,6 +481,7 @@ void depthOnlyPS(in DepthOnlyVS2PS input, out float4 outSceneColor : SV_Target0)
 #if DIM_MASKED_MATERIAL
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
     const GPUBasicData scene = perView.basicData;
+
     const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, input.objectId);
     const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
 
@@ -422,17 +496,13 @@ void depthOnlyPS(in DepthOnlyVS2PS input, out float4 outSceneColor : SV_Target0)
 #endif
 }
 
-struct BasePassVS2PS
+struct VisibilityPassVS2PS
 {
     float4 positionHS : SV_Position;
-    float2 uv : TEXCOORD0;
-    nointerpolation uint objectId : TEXCOORD1;
+    nointerpolation uint2 id : TEXCOORD0;
 };
 
-void basepassVS(
-    uint vertexId : SV_VertexID, 
-    uint instanceId : SV_INSTANCEID,
-    out BasePassVS2PS output)
+void visibilityPassVS(uint vertexId : SV_VertexID, uint instanceId : SV_INSTANCEID, out VisibilityPassVS2PS output)
 {
     const GLTFMeshDrawCmd drawCmd = BATL(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, instanceId);
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
@@ -453,7 +523,6 @@ void basepassVS(
 
     ByteAddressBuffer indicesDataBuffer = ByteAddressBindless(primitiveDataInfo.indicesBuffer);
     ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
-    ByteAddressBuffer uvDataBuffer = ByteAddressBindless(primitiveDataInfo.textureCoord0Buffer);
 
     const uint sampleIndices = lodInfo.firstIndex + meshlet.firstIndex + vertexId;
     const uint indicesId = primitiveInfo.vertexOffset + indicesDataBuffer.TypeLoad(uint, sampleIndices);
@@ -471,27 +540,14 @@ void basepassVS(
     // Keep same with prepass, if no, will z fighting. 
     // Exist some simd instructions here, like fma, and result diff from cpp. 
     output.positionHS = mul(translatedWorldToClip, positionRS); 
-    output.uv = uvDataBuffer.TypeLoad(float2, indicesId);//
-    output.objectId = objectId;
+
+    output.id.x = indicesId;
+    output.id.y = encodeObjectInfo(OBJECT_TYPE_GLTF, objectId);
 }
  
-// Draw pixel color.
-void basepassPS(  
-    in BasePassVS2PS input, 
-    out float4 outSceneColor : SV_Target0)
+void visibilityPassPS( in VisibilityPassVS2PS input, out uint2 outId : SV_Target0)
 {
-    PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
-    const GPUBasicData scene = perView.basicData;
-    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, input.objectId);
-    const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
-
-    Texture2D<float4> baseColorTexture = TBindless(Texture2D, float4, materialInfo.baseColorId);
-    SamplerState baseColorSampler = Bindless(SamplerState, materialInfo.baseColorSampler);
-
-    float4 sampleColor = baseColorTexture.Sample(baseColorSampler, input.uv) * materialInfo.baseColorFactor;
-
-    outSceneColor.xyz = sampleColor.xyz;
-    outSceneColor.a = 1.0;
+    outId = input.id;
 }
 
 #endif // !__cplusplus

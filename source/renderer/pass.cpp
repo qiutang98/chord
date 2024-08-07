@@ -17,6 +17,7 @@ namespace chord
 		std::function<void(GraphicsQueue& queue, GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
 		auto& cmd = queue.getActiveCmd()->commandBuffer;
+		ScopePerframeMarker marker(queue, name.c_str());
 		RTs.beginRendering(queue);
 		{
 			pipe->bind(cmd);
@@ -40,6 +41,8 @@ namespace chord
 		queue.checkRecording();
 		auto& cmd = queue.getActiveCmd()->commandBuffer;
 
+		ScopePerframeMarker marker(queue, name.c_str());
+
 		pipe->bind(cmd);
 		lambda(queue, pipe, cmd);
 		vkCmdDispatch(cmd, dispatchParameter.x, dispatchParameter.y, dispatchParameter.z);
@@ -54,6 +57,7 @@ namespace chord
 		std::function<void(graphics::GraphicsOrComputeQueue& queue, graphics::ComputePipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
 		queue.checkRecording();
+		ScopePerframeMarker marker(queue, name.c_str());
 
 		queue.transition(dispatchBuffer, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
 
@@ -73,6 +77,7 @@ namespace chord
 	{
 		queue.checkRecording();
 		auto& cmd = queue.getActiveCmd()->commandBuffer;
+		ScopePerframeMarker marker(queue, name.c_str());
 
 		pipe->bind(cmd);
 
@@ -94,7 +99,7 @@ namespace chord
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
 		queue.checkRecording();
-
+		ScopePerframeMarker marker(queue, name.c_str());
 		queue.transition(cmdBuffer, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
 		queue.transition(countBuffer, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
 

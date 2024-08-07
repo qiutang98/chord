@@ -1536,7 +1536,8 @@ namespace chord
 
 	inline uint64 getPrimitiveDetailHash(uint64 GPUSceneHash, uint64 meshId, uint64 primitiveId)
 	{
-		return hashCombine(hashCombine(GPUSceneHash, primitiveId + 0x4c), meshId + 0xfe);
+
+		return hashCombine(hashCombine(GPUSceneHash, primitiveId), meshId);
 	}
 
 	void GPUGLTFPrimitiveAsset::updateGPUScene()
@@ -1575,6 +1576,7 @@ namespace chord
 		m_gpuSceneGLTFPrimitiveDetailAssetId.resize(assetRef->getMeshes().size());
 
 		auto& gltfPrimitiveDetailPool = Application::get().getGPUScene().getGLTFPrimitiveDetailPool();
+		std::set<uint64> meshPrimitiveAllocated{};
 		for (uint32 meshId = 0; meshId < assetRef->getMeshes().size(); meshId++)
 		{
 			auto& meshPrimitiveIds = m_gpuSceneGLTFPrimitiveDetailAssetId[meshId];
@@ -1583,7 +1585,15 @@ namespace chord
 			for (uint32 primitiveId = 0; primitiveId < meshInfo.primitives.size(); primitiveId++)
 			{
 				// Require GPU scene id.
-				meshPrimitiveIds[primitiveId] = gltfPrimitiveDetailPool.requireId(getPrimitiveDetailHash(GPUSceneHash(), meshId, primitiveId));
+				const auto primitiveHash = getPrimitiveDetailHash(GPUSceneHash(), meshId, primitiveId);
+				if (meshPrimitiveAllocated.contains(primitiveHash))
+				{
+					// Pre-return if allocated.
+					continue;
+				}
+
+				meshPrimitiveAllocated.insert(primitiveHash);
+				meshPrimitiveIds[primitiveId] = gltfPrimitiveDetailPool.requireId(primitiveHash);
 
 				const auto& primitiveInfo = meshInfo.primitives[primitiveId];
 
@@ -1641,13 +1651,21 @@ namespace chord
 		}
 
 		auto& gltfPrimitiveDetailPool = Application::get().getGPUScene().getGLTFPrimitiveDetailPool();
+		std::set<uint64> freeHash { };
 		for (uint32 meshId = 0; meshId < m_gpuSceneGLTFPrimitiveDetailAssetId.size(); meshId++)
 		{
 			const auto& primitiveInfos = m_gpuSceneGLTFPrimitiveDetailAssetId[meshId];
 			for (uint32 primitiveId = 0; primitiveId < primitiveInfos.size(); primitiveId++)
 			{
-				uint32 freeId = gltfPrimitiveDetailPool.free(getPrimitiveDetailHash(GPUSceneHash(), meshId, primitiveId));
+				const auto hash = getPrimitiveDetailHash(GPUSceneHash(), meshId, primitiveId);
+				if (freeHash.contains(hash))
+				{
+					continue;
+				}
+
+				uint32 freeId = gltfPrimitiveDetailPool.free(hash);
 				check(freeId == primitiveInfos[primitiveId]);
+				freeHash.insert(hash);
 			}
 		}
 		m_gpuSceneGLTFPrimitiveDetailAssetId.clear();
