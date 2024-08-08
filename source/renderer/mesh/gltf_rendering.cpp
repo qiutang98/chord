@@ -213,11 +213,6 @@ namespace chord
         class SV_bFirstStage : SHADER_VARIANT_BOOL("DIM_HZB_CULLING_PHASE_0");
         class SV_bPrintDebugBox : SHADER_VARIANT_BOOL("DIM_PRINT_DEBUG_BOX");
         using Permutation = TShaderVariantVector<SV_bFirstStage, SV_bPrintDebugBox>;
-
-        static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId)
-        {
-            o.enableDebugSource();
-        }
     };
     IMPLEMENT_GLOBAL_SHADER(GLTFHZBCullCS, "resource/shader/gltf_rendering.hlsl", "HZBCullingCS", EShaderStage::Compute);
 

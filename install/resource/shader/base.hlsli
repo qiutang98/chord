@@ -3,6 +3,20 @@
 
 #include "base.h"
 
+/**
+    Gather pattern
+
+    https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/gather4--sm5---asm-
+
+    This instruction behaves like the sample instruction, but a filtered sample is not generated. 
+    The four samples that would contribute to filtering are placed into xyzw in counter clockwise order 
+    starting with the sample to the lower left of the queried location. 
+    
+    This is the same as point sampling with (u,v) texture coordinate deltas at the following locations: 
+    (-,+),(+,+),(+,-),(-,-), where the magnitude of the deltas are always half a texel.
+
+**/
+
 // Simple hash uint.
 // from niagara stream. see https://www.youtube.com/watch?v=BR2my8OE1Sc
 uint simpleHash(uint a)
@@ -170,15 +184,25 @@ uint2 convert2d(uint id, uint dim)
     return uint2(id % 2, id / 2);
 }
 
-uint encodeObjectInfo(uint objectType, uint objectId)
+uint encodeObjectInfo(uint shadingType, uint objectId)
 {
-    return ((objectId & kMaxObjectCount) << 8) | (objectType & kMaxObjectType);
+    return ((objectId & kMaxObjectCount) << 8) | (shadingType & kMaxShadingType);
 }
 
-void decodeObjectInfo(uint pack, out uint objectType, out uint objectId)
+void decodeObjectInfo(uint pack, out uint shadingType, out uint objectId)
 {
-    objectType = (pack & kMaxObjectType);
+    shadingType = (pack & kMaxShadingType);
     objectId = (pack >> 8) & kMaxObjectCount;
+}
+
+uint4 getShadingType4(uint4 pack4)
+{
+    return pack4 & kMaxShadingType;
+}
+
+uint getShadingType(uint pack)
+{
+    return pack & kMaxShadingType;
 }
 
 #endif // !SHADER_BASE_HLSLI

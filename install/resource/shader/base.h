@@ -186,14 +186,25 @@ inline float4 shaderUnpackColor(uint packData)
 
 // HZB mipmap count max 12, meaning from 4096 - 1.
 #define kHZBMaxMipmapCount 12
-#define kMaxObjectCount 0xFFFFFF
-#define kMaxObjectType  0xFF
 
-// ObjectType list, max is 255.
-#define OBJECT_TYPE_GLTF 0
+// 25 bit for max object id count.
+#define kMaxObjectCount 0x1FFFFFF
 
+// Max shading type is 127.
+#define kMaxShadingType  0x7F
 
+// Shading type list, max is 127.
+enum class EShadingType
+{
+    None = 0,
+    GLTF_MetallicRoughnessPBR = 1,
 
+    MAX
+};
+
+// LIGHTING_TYPE
+#define kLightingType_None 0
+#define kLightingType_GLTF_MetallicRoughnessPBR 1
 
 
 #endif // !SHADER_BASE_H

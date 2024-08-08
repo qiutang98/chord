@@ -11,11 +11,10 @@ struct GLTFMeshDrawCmd
     uint pipelineBin;
 };
 
+// Flag of switchFlags.
 #define kLODEnableBit            0
 #define kFrustumCullingEnableBit 1
 #define kHZBCullingEnableBit     2
-
-#define kGLTFAlphaModeCullDonotCareFlag 3
 
 struct GLTFDrawPushConsts
 {
@@ -42,7 +41,7 @@ struct GLTFDrawPushConsts
     uint drawedMeshletCountId_2;
     uint drawedMeshletCmdId_2;
 
-    uint targetAlphaMode; // 0 opaque, 1 masked, 2 blend, 3 don't care.
+    uint targetAlphaMode; // 0 opaque, 1 masked, 2 blend.
     uint targetTwoSide; // 
 };
 CHORD_PUSHCONST(GLTFDrawPushConsts, pushConsts);
@@ -405,12 +404,11 @@ void fillPipelineDrawParamCS(uint threadId : SV_DispatchThreadID)
     check(bTwoSided == 0 || bTwoSided == 1);
     check(alphaMode == 0 || alphaMode == 1 || alphaMode == 2);
 
-    const bool bAlphaPass = 
-        (kGLTFAlphaModeCullDonotCareFlag == pushConsts.targetAlphaMode) || 
-        (pushConsts.targetAlphaMode == alphaMode);
+    const bool bAlphaPass = (pushConsts.targetAlphaMode == alphaMode);
+    const bool bTwoSidedPass = (pushConsts.targetTwoSide == bTwoSided);
 
     // Visible, fill draw command.
-    if (bAlphaPass && pushConsts.targetTwoSide == bTwoSided)
+    if (bAlphaPass && bTwoSidedPass)
     {
         // Load material info.
         GLTFMeshDrawCmd visibleDrawCmd = drawCmd;
@@ -472,16 +470,16 @@ void visibilityPassVS(
     output.uv = uvDataBuffer.TypeLoad(float2, indicesId);//
 #endif
 
-    output.id.x = indicesId;
-    output.id.y = encodeObjectInfo(OBJECT_TYPE_GLTF, objectId);
+    output.id.x = encodeObjectInfo((uint)(EShadingType::GLTF_MetallicRoughnessPBR), objectId);
+    output.id.y = indicesId;
 } 
 
 void visibilityPassPS(in VisibilityPassVS2PS input, out uint2 outId : SV_Target0)
 {
 #if DIM_MASKED_MATERIAL
-    uint objectType;
+    uint shadingType;
     uint objectId;
-    decodeObjectInfo(input.id.y, objectType, objectId);
+    decodeObjectInfo(input.id.x, shadingType, objectId);
 
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
     const GPUBasicData scene = perView.basicData;
@@ -493,10 +491,7 @@ void visibilityPassPS(in VisibilityPassVS2PS input, out uint2 outId : SV_Target0
     SamplerState baseColorSampler = Bindless(SamplerState, materialInfo.baseColorSampler);
 
     float4 sampleColor = baseColorTexture.Sample(baseColorSampler, input.uv) * materialInfo.baseColorFactor;
-    if (sampleColor.w < materialInfo.alphaCutOff)
-    {
-        discard;
-    }
+    clip(sampleColor.w - materialInfo.alphaCutOff);
 #endif
 
     // Output id.

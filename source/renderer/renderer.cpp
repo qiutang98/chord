@@ -11,6 +11,8 @@
 #include <renderer/gpu_scene.h>
 #include <scene/scene_manager.h>
 #include <renderer/postprocessing/postprocessing.h>
+#include <renderer/visibility_tile.h>
+#include "lighting.h"
 
 namespace chord
 {
@@ -248,6 +250,12 @@ namespace chord
 
 			hzbCtx = buildHZB(graphics, gbuffers.depthStencil);
 			insertTimer("BuildHZB", graphics);
+
+			auto visibilityCtx = visibilityMark(graphics, gbuffers.visibility);
+			insertTimer("Visibility Tile Marker", graphics);
+
+			lighting(graphics, gbuffers, viewGPUId, visibilityCtx);
+			insertTimer("lighting Tile", graphics);
 
 			check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 			check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);

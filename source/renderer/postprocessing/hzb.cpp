@@ -17,11 +17,6 @@ namespace chord
 
         class SV_MipCount : SHADER_VARIANT_RANGE_INT("MIP_COUNT", 1, 12);
         using Permutation = TShaderVariantVector<SV_MipCount>;
-
-        static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId)
-        {
-            o.enableDebugSource();
-        }
     };
     IMPLEMENT_GLOBAL_SHADER(HZBCS, "resource/shader/hzb.hlsl", "mainCS", EShaderStage::Compute);
     

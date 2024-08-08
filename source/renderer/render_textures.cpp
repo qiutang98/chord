@@ -24,7 +24,7 @@ namespace chord
         result.visibility = pool.create("Gbuffer.Visibility", width, height, GBufferTextures::visibilityFormat(), kGBufferVkImageUsage);
 
         // Color and depth stencil.
-        result.color = pool.create("Gbuffer.Color", width, height, GBufferTextures::colorFormat(), kGBufferVkImageUsage);
+        result.color = pool.create("Gbuffer.Color", width, height, GBufferTextures::colorFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
         result.depthStencil = pool.create("Gbuffer.DepthStencil", width, height, GBufferTextures::depthStencilFormat(), kDepthVkImageUsage);
 
         // Extract gbuffer.
