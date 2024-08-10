@@ -10,7 +10,7 @@ namespace chord
 	struct GBufferTextures
 	{
 		// Visibility: .x = encodeObjectInfo(ShadingType, ObjectId)
-		//             .y = indices id.
+		//             .y = triangle id.
 		graphics::PoolTextureRef visibility = nullptr;
 		static auto visibilityFormat() { return VK_FORMAT_R32G32_UINT; }
 

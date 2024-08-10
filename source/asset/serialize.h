@@ -35,7 +35,9 @@ registerPODClassMember(GLTFMeshlet)
 	ar(data.firstIndex);
 	ar(data.posMax);
 	ar(data.triangleCount);
-	ar(data.posAverage);
+	ar(data.coneCutOff);
+	ar(data.coneAxis);
+	ar(data.coneApex);
 }
 
 registerPODClassMember(GLTFPrimitive)

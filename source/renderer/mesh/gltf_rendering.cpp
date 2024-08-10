@@ -30,6 +30,13 @@ namespace chord
         "Enable frustum culling or not."
     );
 
+    static uint32 sGLTFRenderingEnableMeshletConeCulling = 1;
+    static AutoCVarRef cVarGLTFRenderingEnableMeshletConeCulling(
+        "r.gltf.rendering.meshletConeCulling",
+        sGLTFRenderingEnableMeshletConeCulling,
+        "Enable meshlet cone culling or not."
+    );
+
     static uint32 sGLTFRenderingEnableHZBCulling = 1;
     static AutoCVarRef cVarGLTFRenderingEnableHZBCulling(
         "r.gltf.rendering.hzbCulling",
@@ -59,6 +66,7 @@ namespace chord
         if (sGLTFRenderingEnableLOD != 0) { result = shaderSetFlag(result, kLODEnableBit); }
         if (sGLTFRenderingEnableFrustumCulling != 0) { result = shaderSetFlag(result, kFrustumCullingEnableBit); }
         if (sGLTFRenderingEnableHZBCulling != 0) { result = shaderSetFlag(result, kHZBCullingEnableBit); }
+        if (sGLTFRenderingEnableMeshletConeCulling != 0) { result = shaderSetFlag(result, kMeshletConeCullEnableBit); }
         return result;
     }
 

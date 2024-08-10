@@ -361,14 +361,10 @@ namespace chord::graphics
 
 		uint64 hash() const
 		{
-			uint64 hash = hashCombine(pushConstantSize, uint64(shaderModule));
-
-			hash = cityhash::ctyhash64WithSeed(
+			return cityhash::cityhash64WithSeeds(
 				(const char*)additionalDescriptorSetLayouts.data(),
 				sizeof(VkDescriptorSetLayout) * additionalDescriptorSetLayouts.size(),
-				hash);
-
-			return hash;
+				uint64(pushConstantSize), uint64(shaderModule));
 		}
 
 		const VkShaderModule shaderModule;
@@ -403,20 +399,24 @@ namespace chord::graphics
 
 		uint64 hash() const
 		{
-			uint64 hash = hashCombine(pushConstantSize, uint64(topology));
-				   hash = hashCombine(hash, uint64(depthFormat));
-				   hash = hashCombine(hash, uint64(stencilFormat));
+			std::vector<uint64> datas{};
+
+			datas.push_back(pushConstantSize);
+			datas.push_back(uint64(topology));
+			datas.push_back(uint64(depthFormat));
+			datas.push_back(uint64(stencilFormat));
 
 			for (auto& format : attachmentFormats)
 			{
-				hash = hashCombine(hash, uint64(format));
+				uint64 pack = uint64(format) | (uint64(39) << 32);
+				datas.push_back(pack);
 			}
 			for (auto& stage : pipelineStages)
 			{
-				hash = hashCombine(hash, stage.hash());
+				datas.push_back(stage.hash());
 			}
 
-			return hash;
+			return cityhash::cityhash64((const char*)datas.data(), sizeof(uint64) * datas.size());
 		}
 
 		// Member of the structure, remember add hash combine in hash function.

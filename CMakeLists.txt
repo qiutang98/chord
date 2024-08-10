@@ -44,6 +44,8 @@ target_link_libraries(chord PUBLIC
     nativefiledialog
     RTTR::Core_Lib
     "${PROJECT_SOURCE_DIR}/external/library/dxcompiler.lib"
+    "${PROJECT_SOURCE_DIR}/external/library/metis.lib"
+    "${PROJECT_SOURCE_DIR}/external/library/GKlib.lib"
 )
 
 ## Add include directories.

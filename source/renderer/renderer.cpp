@@ -159,6 +159,13 @@ namespace chord
 			currentFrame.basicData = getGPUBasicData();
 			camera->fillViewUniformParameter(currentFrame);
 
+			currentFrame.renderDimension = {
+				1.0f * float(currentRenderWidth),
+				1.0f * float(currentRenderHeight),
+				1.0f / float(currentRenderWidth),
+				1.0f / float(currentRenderHeight)
+			};
+
 			// Update last frame infos.
 			currentFrame.translatedWorldToClipLastFrame = lastFrame.translatedWorldToClip;
 			for (uint i = 0; i < 6; i++) { currentFrame.frustumPlaneLastFrame[i] = lastFrame.frustumPlane[i]; }

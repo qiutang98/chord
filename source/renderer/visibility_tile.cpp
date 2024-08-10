@@ -42,7 +42,7 @@ namespace chord
 			"VisibilityTileMarker CS", 
 			getContext().computePipe(computeShader, "VisibilityTileMarkerPipe"),
 			pushConst,
-			math::uvec3((ctx.markerDim.x + 1) / 2, (ctx.markerDim.y + 1) / 2, 1));
+			math::uvec3((ctx.markerDim.x + 3) / 4, (ctx.markerDim.y + 3) / 4, 1));
 
 		return ctx;
 	}

@@ -38,20 +38,28 @@ void tilerMarkerCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Gr
     SamplerState gatherSampler = Bindless(SamplerState, pushConsts.gatherSampler);
 
     uint2 remapId = remap8x8(localThreadIndex);
-    uint2 gatherPos = workGroupId * 16 + 2 * remapId;
-    float2 gatherUv = (gatherPos + 1.0) * pushConsts.visibilityTexelSize;
-
-    uint4 packIDs4 = visibilityTexture.Gather(gatherSampler, gatherUv);
-    uint4 shadingType4 = getShadingType4(packIDs4);
 
     // Per-bit store one shading type usage state. 
     // Total used 128 bit, uint4.
     uint4 shadingTileMarker = 0;
-    [unroll(4)]
-    for (uint i = 0; i < 4; i ++)
+
+    [unroll(2)]
+    for (uint y = 0; y < 2; y ++)
     {
-        uint shadingType = shadingType4[i];
-        shadingTileMarker[shadingType / 32] |= 1U << (shadingType % 32);
+        [unroll(2)]
+        for (uint x = 0; x < 2; x ++)
+        {
+            uint2 gatherPos = workGroupId * 32 + 4 * remapId + 2 * uint2(x, y);
+            float2 gatherUv = (gatherPos + 1.0) * pushConsts.visibilityTexelSize;
+            uint4 shadingType4 = getShadingType4(visibilityTexture.Gather(gatherSampler, gatherUv));
+
+            [unroll(4)]
+            for (uint i = 0; i < 4; i ++)
+            {
+                uint shadingType = shadingType4[i];
+                shadingTileMarker[shadingType / 32] |= 1U << (shadingType % 32);
+            }
+        }
     }
 
     sTileMarkerR[remapId.x][remapId.y] = shadingTileMarker.r;
@@ -76,23 +84,7 @@ void tilerMarkerCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Gr
         sTileMarkerA[remapId.x][remapId.y] |= sTileMarkerA[remapId.x][remapId.y + 1];
     }
     GroupMemoryBarrierWithGroupSync();
-    if (remapId.x % 4 == 0)
-    {
-        sTileMarkerR[remapId.x][remapId.y] |= sTileMarkerR[remapId.x + 2][remapId.y];
-        sTileMarkerG[remapId.x][remapId.y] |= sTileMarkerG[remapId.x + 2][remapId.y];
-        sTileMarkerB[remapId.x][remapId.y] |= sTileMarkerB[remapId.x + 2][remapId.y];
-        sTileMarkerA[remapId.x][remapId.y] |= sTileMarkerA[remapId.x + 2][remapId.y];
-    }
-    GroupMemoryBarrierWithGroupSync();
-    if (remapId.y % 4 == 0)
-    {
-        sTileMarkerR[remapId.x][remapId.y] |= sTileMarkerR[remapId.x][remapId.y + 2];
-        sTileMarkerG[remapId.x][remapId.y] |= sTileMarkerG[remapId.x][remapId.y + 2];
-        sTileMarkerB[remapId.x][remapId.y] |= sTileMarkerB[remapId.x][remapId.y + 2];
-        sTileMarkerA[remapId.x][remapId.y] |= sTileMarkerA[remapId.x][remapId.y + 2];
-    }
-    GroupMemoryBarrierWithGroupSync();
-    if ((remapId.x % 4 == 0) && (remapId.y % 4 == 0))
+    if ((remapId.x % 2 == 0) && (remapId.y % 2 == 0))
     {
         uint4 tileResult = 0;
         tileResult.x = sTileMarkerR[remapId.x][remapId.y];
@@ -100,7 +92,7 @@ void tilerMarkerCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Gr
         tileResult.z = sTileMarkerB[remapId.x][remapId.y];
         tileResult.w = sTileMarkerA[remapId.x][remapId.y];
 
-        uint2 storePos = workGroupId * 2 + remapId / 4;
+        uint2 storePos = workGroupId * 4 + remapId / 2;
         rwTileMarker[storePos] = tileResult;
     }
 }

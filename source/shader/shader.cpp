@@ -24,7 +24,7 @@ namespace chord::graphics
 	// Generate shader module hash by permutation id and meta info id.
 	uint64 graphics::getShaderModuleHash(int32 permutationId, const GlobalShaderRegisteredInfo& info)
 	{
-		return hashCombine(info.getHash(), permutationId);
+		return hashCombine(info.getHash(), uint64(permutationId));
 	}
 
 	ShaderModule::ShaderModule(SizedBuffer buffer, const GlobalShaderRegisteredInfo& metaInfo)

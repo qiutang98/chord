@@ -101,10 +101,10 @@ namespace chord
 		double m_zFar = 39000.0; // 39 KM.
 
 		// render width.
-		size_t m_width;
+		size_t m_width = 1;
 
 		// render height.
-		size_t m_height;
+		size_t m_height = 1;
 
 		// camera front direction.
 		math::dvec3 m_front = { -0.5, -0.6, 0.6 };

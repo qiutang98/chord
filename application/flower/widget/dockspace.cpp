@@ -351,6 +351,8 @@ void ContentAssetImportWidget::onDraw()
     }
 }
 
+constexpr size_t kMaxImportLogItemsCount = 60;
+
 void ContentAssetImportWidget::onDrawState()
 {
     check(!importConfigs.empty());
@@ -396,10 +398,12 @@ void ContentAssetImportWidget::onDrawState()
             {
                 m_importProgress.logHandle = LoggerSystem::get().pushCallback([&](const std::string& info, ELogType type)
                 {
-                    m_importProgress.logItems.push_back({ type, info });
-                    if (static_cast<uint32_t>(m_importProgress.logItems.size()) >= 60)
+                    std::lock_guard lock(m_importProgress.asyncLogLock);
+
+                    m_importProgress.asyncLogItems.push_back({ type, info });
+                    if (static_cast<uint32_t>(m_importProgress.asyncLogItems.size()) >= kMaxImportLogItemsCount)
                     {
-                        m_importProgress.logItems.pop_front();
+                        m_importProgress.asyncLogItems.pop_front();
                     }
                 });
             }
@@ -459,6 +463,19 @@ void ContentAssetImportWidget::onDrawImporting()
     ImGui::Separator();
 
     ImGui::BeginDisabled();
+
+    {
+        std::lock_guard lock(m_importProgress.asyncLogLock);
+        for (const auto& logItem : m_importProgress.asyncLogItems)
+        {
+            m_importProgress.logItems.push_back(logItem);
+            if (static_cast<uint32_t>(m_importProgress.logItems.size()) >= kMaxImportLogItemsCount)
+            {
+                m_importProgress.logItems.pop_front();
+            }
+        }
+    }
+
     for (int i = 0; i < m_importProgress.logItems.size(); i++)
     {
         ImVec4 color;
@@ -476,11 +493,11 @@ void ContentAssetImportWidget::onDrawImporting()
             color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
         }
 
-
         ImGui::PushStyleColor(ImGuiCol_Text, color);
         ImGui::Selectable(m_importProgress.logItems[i].second.c_str());
         ImGui::PopStyleColor();
     }
+
     ImGui::EndDisabled();
 
     bool bAccept = false;

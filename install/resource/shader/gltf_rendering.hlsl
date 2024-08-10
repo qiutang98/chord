@@ -12,9 +12,10 @@ struct GLTFMeshDrawCmd
 };
 
 // Flag of switchFlags.
-#define kLODEnableBit            0
-#define kFrustumCullingEnableBit 1
-#define kHZBCullingEnableBit     2
+#define kLODEnableBit             0
+#define kFrustumCullingEnableBit  1
+#define kHZBCullingEnableBit      2
+#define kMeshletConeCullEnableBit 3
 
 struct GLTFDrawPushConsts
 {
@@ -90,18 +91,8 @@ void perobjectCullingCS(uint threadId : SV_DispatchThreadID)
     const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, threadId);
     const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
 
-    float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
-    float4x4 translatedWorldToLocal = objectInfo.basicData.translatedWorldToLocal;
-
-    float4x4 translatedWorldToView = perView.translatedWorldToView;
-    float4x4 viewToClip = perView.viewToClip;
-
-    const float4 positionAverageLS = float4(primitiveInfo.posAverage, 1.0);
-    const float4 positionAverageRS = mul(localToTranslatedWorld, positionAverageLS);
-//   const float4 positionAverageVS = mul(translatedWorldToView, positionAverageRS);
-
-    // Camera to average position distance.
-    const float cameraToPositionAverageVS = length(positionAverageRS.xyz);
+    const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
+    const float4x4 localToClip = mul(perView.translatedWorldToClip, localToTranslatedWorld);
 
     const float3 posMin = primitiveInfo.posMin;
     const float3 posMax = primitiveInfo.posMax;
@@ -121,9 +112,7 @@ void perobjectCullingCS(uint threadId : SV_DispatchThreadID)
     uint selectedLod = 0;
     if (shaderHasFlag(pushConsts.switchFlags, kLODEnableBit))
     {
-        // https://www.desmos.com/calculator/u0jgsic77y
-        float lodIndex = log2(cameraToPositionAverageVS * primitiveInfo.lodBase) * primitiveInfo.loadStep + 1.0;
-        selectedLod = clamp(uint(lodIndex), 0, primitiveInfo.lodCount - 1);
+        selectedLod = computeLodLevel(posCenter, extent, perView.renderDimension.zw, localToTranslatedWorld, localToClip, primitiveInfo);
     }
     
     const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
@@ -192,6 +181,19 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
     const float3 posCenter = (posMin + posMax) * 0.5;
     const float3 extent = posMax - posCenter;
 
+    // Load material info.
+    const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
+
+    // Do cone culling before frustum culling, it compute faster.
+    if ((materialInfo.bTwoSided == 0) && shaderHasFlag(pushConsts.switchFlags, kMeshletConeCullEnableBit))
+    {
+    	float3 cameraPosLS = mul(objectInfo.basicData.translatedWorldToLocal, float4(0, 0, 0, 1)).xyz;
+        if (dot(normalize(meshlet.coneApex - cameraPosLS), meshlet.coneAxis) >= meshlet.coneCutOff)
+        {
+            return;
+        }
+    }
+
     // Frustum visible culling: use obb.
     if (shaderHasFlag(pushConsts.switchFlags, kFrustumCullingEnableBit))
     {
@@ -203,8 +205,7 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
 
     uint drawCmdId = interlockedAddUint(pushConsts.drawedMeshletCountId);
 
-        // Load material info.
-    const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
+
 
     // Fill in draw cmd. 
     {
@@ -226,12 +227,6 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
 void fillHZBCullParamCS()
 {
     const uint meshletCount = BATL(uint, pushConsts.drawedMeshletCountId, 0);
-
-    if(pushConsts.debugFlags == 2)
-    {
-        printf("Meshlet count before hzb: %d.", meshletCount);
-    }
-
     uint4 cmdParameter;
     cmdParameter.x = (meshletCount + 63) / 64;
     cmdParameter.y = 1;
@@ -351,7 +346,7 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
         BATS(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId_1, drawCmdId, visibleDrawCmd);
 
     #if DIM_PRINT_DEBUG_BOX
-        uint packColor = simpleHashColorPack(visibleDrawCmd.packLodMeshlet);
+        uint packColor = shaderPackColor(kLODLevelDebugColor[selectedLod]);
         LineDrawVertex worldPosExtents[8];
         for (uint i = 0; i < 8; i ++)
         {
@@ -471,7 +466,7 @@ void visibilityPassVS(
 #endif
 
     output.id.x = encodeObjectInfo((uint)(EShadingType::GLTF_MetallicRoughnessPBR), objectId);
-    output.id.y = indicesId;
+    output.id.y = sampleIndices / 3;
 } 
 
 void visibilityPassPS(in VisibilityPassVS2PS input, out uint2 outId : SV_Target0)

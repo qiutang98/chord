@@ -126,6 +126,8 @@ struct PerframeCameraView
 
     float4x4 translatedWorldToClipLastFrame;
     float4 frustumPlaneLastFrame[6];
+
+    float4 renderDimension; //  .xy is width and height, .zw is inverse of .xy.
 };
 CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);
 
@@ -163,6 +165,8 @@ struct LineDrawVertex
     uint color; // 8 bit per component, .rgba
 };
 
+
+
 inline uint shaderPackColor(uint R, uint G, uint B, uint A)
 {
     uint color = 0;
@@ -171,6 +175,11 @@ inline uint shaderPackColor(uint R, uint G, uint B, uint A)
     color |= (B & 0xFF) << 16;
     color |= (A & 0xFF) << 24;
     return color;
+}
+
+inline uint shaderPackColor(uint4 c)
+{
+    return shaderPackColor(c.x, c.y, c.z, c.w);
 }
 
 inline float4 shaderUnpackColor(uint packData)
@@ -205,6 +214,10 @@ enum class EShadingType
 // LIGHTING_TYPE
 #define kLightingType_None 0
 #define kLightingType_GLTF_MetallicRoughnessPBR 1
+
+// Nanite config: fit mesh shader.
+#define kNaniteMeshletMaxVertices 64
+#define kNaniteMeshletMaxTriangle 124
 
 
 #endif // !SHADER_BASE_H

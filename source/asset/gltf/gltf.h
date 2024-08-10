@@ -196,6 +196,7 @@ namespace chord
 
 		float lodBase = 10.0f;
 		float lodStep = 1.5f;
+		float lodScreenPercentageScale = 1.0f;
 	};
 
 	struct GLTFMesh

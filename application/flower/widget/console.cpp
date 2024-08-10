@@ -103,6 +103,22 @@ void WidgetConsole::onRelease()
 void WidgetConsole::onTick(const ApplicationTickData& tickData)
 {
 	m_name = getShowName();
+
+	// Sync async flush log.
+	{
+		std::lock_guard lock(m_asyncLogItemslock);
+		for (const auto& asyncLogItem : m_asyncLogItems)
+		{
+			if (static_cast<uint32>(m_logItems.size()) == kMaxLogsItemNum - 1)
+			{
+				m_logItems.pop_front();
+			}
+
+			m_logItems.push_back(asyncLogItem);
+			m_logTypeCount[size_t(asyncLogItem.second)]++;
+		}
+		m_asyncLogItems.clear();
+	}
 }
 
 void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
@@ -155,8 +171,7 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 	// Print log items.
 	for (int i = 0; i < m_logItems.size(); i++)
 	{
-		const char* item = m_logItems[i].first.c_str();
-		if (item == "" || !m_filter.PassFilter(item))
+		if (m_logItems[i].first == "" || !m_filter.PassFilter(m_logItems[i].first.c_str()))
 		{
 			continue;
 		}
@@ -198,7 +213,7 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 				continue;
 			}
 		}
-		else if (strncmp(item, "# ", 2) == 0)
+		else if (strncmp(m_logItems[i].first.c_str(), "# ", 2) == 0)
 		{
 			if (!m_logVisible[size_t(ELogType::Other)])
 			{
@@ -208,7 +223,7 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 			color = ImVec4(1.0f, 0.8f, 0.6f, 1.0f);
 			bHasColor = true;
 		}
-		else if (strncmp(item, "Help: ", 5) == 0)
+		else if (strncmp(m_logItems[i].first.c_str(), "Help: ", 5) == 0)
 		{
 			if (!m_logVisible[size_t(ELogType::Other)])
 			{
@@ -233,7 +248,7 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 
 		if (bHasColor) ImGui::PushStyleColor(ImGuiCol_Text, color);
 		{
-			ImGui::Selectable(item, m_hoverItem == i);
+			ImGui::Selectable(m_logItems[i].first.c_str(), m_hoverItem == i);
 		}
 		if (bHasColor) ImGui::PopStyleColor();
 
@@ -334,13 +349,13 @@ void WidgetConsole::clearLog()
 
 void WidgetConsole::addLog(const std::string& info, ELogType type)
 {
-	if (static_cast<uint32>(m_logItems.size()) == kMaxLogsItemNum - 1)
-	{
-		m_logItems.pop_front();
-	}
+	std::lock_guard lock(m_asyncLogItemslock);
 
-	m_logTypeCount[size_t(type)]++;
-	m_logItems.push_back({ info, type });
+	if (static_cast<uint32>(m_asyncLogItems.size()) == kMaxLogsItemNum - 1)
+	{
+		m_asyncLogItems.pop_front();
+	}
+	m_asyncLogItems.push_back({ info, type });
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

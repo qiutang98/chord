@@ -4,6 +4,7 @@
 #include <utils/utils.h>
 #include <utils/cvar.h>
 
+
 class CVarCommandContext
 {
 public:
@@ -86,6 +87,8 @@ private:
 	bool m_bScrollToBottom;
 
 	// Log items deque.
+	std::mutex m_asyncLogItemslock;
+	std::deque<std::pair<std::string, chord::ELogType>> m_asyncLogItems;
 	std::deque<std::pair<std::string, chord::ELogType>> m_logItems;
 
 	// Max log item store.

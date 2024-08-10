@@ -61,6 +61,9 @@ protected:
 	struct ImportProgress
 	{
 		chord::EventHandle logHandle{ };
+
+		std::mutex asyncLogLock;
+		std::deque<std::pair<chord::ELogType, std::string>> asyncLogItems{ };
 		std::deque<std::pair<chord::ELogType, std::string>> logItems{ };
 	} m_importProgress{ };
 

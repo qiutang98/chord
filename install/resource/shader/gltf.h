@@ -10,8 +10,6 @@
 // id = ~0 if no exist.
 
 #define kMaxGLTFLodCount       8
-#define kMeshletMaxVertices   64
-#define kMeshletMaxTriangles 124
 
 struct GPUGLTFPrimitiveLOD
 {
@@ -24,13 +22,16 @@ struct GPUGLTFPrimitiveLOD
 struct GPUGLTFMeshlet
 {
     float3 posMin;
-    uint firstIndex;
+    uint   firstIndex;
 
     float3 posMax;
-    uint triangleCount;
+    uint   triangleCount;
 
-    float3 posAverage;
-    float pad0;
+    float3 coneAxis;
+    float  coneCutOff;
+
+    float3 coneApex;
+    float  pad0;
 };
 
 // Store in GPU scene.
@@ -54,7 +55,7 @@ struct GLTFPrimitiveBuffer
 
     float lodBase;
     float loadStep;
-    uint pad2;
+    float lodScreenPercentageScale;
     uint pad3;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveBuffer);

@@ -44,6 +44,14 @@ uint simpleHashColorPack(uint i)
     return shaderPackColor(h & 255, (h >> 8) & 255, (h >> 16) & 255, 255);
 }
 
+float2 screenUvToNdcUv(float2 uv)
+{
+    uv.x = 2.0 * (uv.x - 0.5);
+    uv.y = 2.0 * (0.5 - uv.y);
+
+    return uv;
+}
+
 float3 projectPosToUVz(float3 pos, in const float4x4 projectMatrix)
 {
     float4 posHS = mul(projectMatrix, float4(pos, 1.0));
@@ -116,6 +124,63 @@ bool frustumCulling(float4 planesRS[6], float3 centerLS, float3 extentLS, float4
     }
 
     return false;
+}
+
+static uint4 kLODLevelDebugColor[8] =
+{
+    uint4(255, 0,   0, 255), // Extent first.
+    uint4(125, 0, 255, 255), // Extent first.
+    uint4( 39, 0, 255, 255), // Extent first.
+    uint4(  0, 39, 255, 255), // Extent first.
+    uint4(  0, 125, 39, 255), // Extent first.
+    uint4(125, 125, 0, 255), // Extent first.
+    uint4( 39, 255, 0, 255), // Extent first.
+    uint4(  0, 255, 0, 255), // Extent first.
+};
+
+uint computeLodLevel(
+    float3 centerLS, 
+    float3 extentLS, 
+    float2 renderTexelSize,
+    in const float4x4 localToTranslatedWorld,
+    in const float4x4 localToClip, 
+    in const GLTFPrimitiveBuffer primitiveInfo)
+{
+    const float4 positionAverageLS = float4(primitiveInfo.posAverage, 1.0);
+    const float4 positionAverageRS = mul(localToTranslatedWorld, positionAverageLS);
+
+    // Camera to average position distance.
+    const float cameraToPositionAverageVS = length(positionAverageRS.xyz);
+
+    // Distance based lod selected: https://www.desmos.com/calculator/u0jgsic77y
+    float distanceLod = log2(cameraToPositionAverageVS * primitiveInfo.lodBase) * primitiveInfo.loadStep + 1.0;
+
+    // Screen percentage lod.
+    float screenPercentageLod;
+    {
+        float2 uvMin =  10.0f;
+        float2 uvMax = -10.0f;
+
+        [unroll(8)] 
+        for (uint k = 0; k < 8; k ++)
+        {
+            const float3 extentPosLS = centerLS + extentLS * kExtentApplyFactor[k];
+            float2 extentPosUv = projectPosToUVz(extentPosLS, localToClip).xy;
+
+            uvMin = min(uvMin, extentPosUv);
+            uvMax = max(uvMax, extentPosUv);
+        }
+
+        uvMin = saturate(uvMin);
+        uvMax = saturate(uvMax);
+
+        // Use longest size, at least one texel size.
+        float2 dist = max(uvMax - uvMin, renderTexelSize);
+        
+        screenPercentageLod = log2(primitiveInfo.lodScreenPercentageScale / max(dist.x, dist.y));
+    } 
+
+    return clamp(uint(min(distanceLod, screenPercentageLod)), 0, primitiveInfo.lodCount - 1);
 }
 
 // Quad schedule style, fake pixel shader dispatch style.
@@ -203,6 +268,57 @@ uint4 getShadingType4(uint4 pack4)
 uint getShadingType(uint pack)
 {
     return pack & kMaxShadingType;
+}
+
+struct Barycentrics
+{
+    float3 interpolation;
+    float3 ddx;
+    float3 ddy;
+};
+
+// Unreal Engine 5 Nanite improved perspective correct barycentric coordinates and partial derivatives using screen derivatives.
+Barycentrics calculateTriangleBarycentrics(float2 PixelClip, float4 PointClip0, float4 PointClip1, float4 PointClip2, float2 ViewInvSize)
+{
+	Barycentrics barycentrics;
+
+	const float3 RcpW = rcp(float3(PointClip0.w, PointClip1.w, PointClip2.w));
+	const float3 Pos0 = PointClip0.xyz * RcpW.x;
+	const float3 Pos1 = PointClip1.xyz * RcpW.y;
+	const float3 Pos2 = PointClip2.xyz * RcpW.z;
+
+	const float3 Pos120X = float3(Pos1.x, Pos2.x, Pos0.x);
+	const float3 Pos120Y = float3(Pos1.y, Pos2.y, Pos0.y);
+	const float3 Pos201X = float3(Pos2.x, Pos0.x, Pos1.x);
+	const float3 Pos201Y = float3(Pos2.y, Pos0.y, Pos1.y);
+
+	const float3 C_dx = Pos201Y - Pos120Y;
+	const float3 C_dy = Pos120X - Pos201X;
+
+	const float3 C = C_dx * (PixelClip.x - Pos120X) + C_dy * (PixelClip.y - Pos120Y);	// Evaluate the 3 edge functions
+	const float3 G = C * RcpW;
+
+	const float H = dot(C, RcpW);
+	const float RcpH = rcp(H);
+
+	// UVW = C * RcpW / dot(C, RcpW)
+	barycentrics.interpolation = G * RcpH;
+
+	// Texture coordinate derivatives:
+	// UVW = G / H where G = C * RcpW and H = dot(C, RcpW)
+	// UVW' = (G' * H - G * H') / H^2
+	// float2 TexCoordDX = UVW_dx.y * TexCoord10 + UVW_dx.z * TexCoord20;
+	// float2 TexCoordDY = UVW_dy.y * TexCoord10 + UVW_dy.z * TexCoord20;
+	const float3 G_dx = C_dx * RcpW;
+	const float3 G_dy = C_dy * RcpW;
+
+	const float H_dx = dot(C_dx, RcpW);
+	const float H_dy = dot(C_dy, RcpW);
+
+	barycentrics.ddx = (G_dx * H - G * H_dx) * (RcpH * RcpH) * ( 2.0f * ViewInvSize.x);
+	barycentrics.ddy = (G_dy * H - G * H_dy) * (RcpH * RcpH) * (-2.0f * ViewInvSize.y);
+
+	return barycentrics;
 }
 
 #endif // !SHADER_BASE_HLSLI

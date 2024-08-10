@@ -9,9 +9,15 @@ namespace chord
 	struct GLTFAssetImportConfig : public IAssetImportConfig
 	{
 		bool bGenerateSmoothNormal = false;
-		bool bGenerateLOD = true;
-		float lodBase = 10.0f;
-		float lodStep = 1.5f;
+
+		float meshletConeWeight = 0.7f;
+
+		bool bGenerateLOD              = true;
+		float lodBase                  = 10.0f; // Rendering.
+		float lodStep                  = 1.5f;  // Rendering.
+		float lodScreenPercentageScale = 1.0f;  // Rendering
+		float lodStepReduceFactor      = 0.8f;
+		float lodTargetError           = 5e-3f;
 	};
 	using GLTFAssetImportConfigRef = std::shared_ptr<GLTFAssetImportConfig>;
 	class GLTFAsset;
