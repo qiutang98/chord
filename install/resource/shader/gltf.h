@@ -9,36 +9,36 @@
 
 // id = ~0 if no exist.
 
-#define kMaxGLTFLodCount       8
-
-struct GPUGLTFPrimitiveLOD
-{
-    uint firstIndex;
-    uint indexCount;
-    uint firstMeshlet;
-    uint meshletCount;
-};
-
 struct GPUGLTFMeshlet
 {
     float3 posMin;
-    uint   firstIndex;
+    uint dataOffset;
 
     float3 posMax;
-    uint   triangleCount;
+    uint   vertexTriangleCount; // 8 bit: vertex count, 8 bit triangle count.
 
     float3 coneAxis;
     float  coneCutOff;
 
     float3 coneApex;
-    float  pad0;
+    uint lod;
+
+                                 // current bounding sphere compute from posMin & posMax.
+    float4 parentBoundingSphere; // .xyz = 0.5 * (posMax - posMin), .w = lenght(posMax - .xyz)
+
+    float error;
+    float parentError;
+    uint pad0;
+    uint pad1;
 };
+
+inline uint packVertexCountTriangleCount(uint vertexCount, uint triangleCount) { return (vertexCount & 0xff) | ((triangleCount & 0xff) << 8); }
+inline uint unpackVertexCount(uint pack) { return pack & 0xff; }
+inline uint unpackTriangleCount(uint pack) { return (pack >> 8) & 0xff; }
 
 // Store in GPU scene.
 struct GLTFPrimitiveBuffer
 {
-    GPUGLTFPrimitiveLOD lods[kMaxGLTFLodCount];
-
     float3 posMin;
     uint primitiveDatasBufferId;
 
@@ -48,15 +48,15 @@ struct GLTFPrimitiveBuffer
     float3 posAverage;
     uint vertexCount;
 
+    uint lod0IndexOffset;
+    uint lod0IndexCount;
+    uint lod0MeshletOffset;
+    uint lod0MeshletCount;
+
     uint color0Offset; 
     uint smoothNormalOffset; 
     uint textureCoord1Offset;
-    uint lodCount;
-
-    float lodBase;
-    float loadStep;
-    float lodScreenPercentageScale;
-    uint pad3;
+    uint pad0;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveBuffer);
 
@@ -74,7 +74,7 @@ struct GLTFPrimitiveDatasBuffer
     uint color0Buffer;
 
     uint smoothNormalsBuffer;
-    uint pad0;
+    uint meshletDataBuffer;
     uint pad1;
     uint pad2;
 };

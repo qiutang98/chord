@@ -23,31 +23,29 @@ registerPODClassMember(GLTFTextureInfo)
 	ar(image, textureCoord, sampler);
 }
 
-registerPODClassMember(GLTFPrimitiveLOD)
-{
-	ar(data.firstIndex, data.indexCount);
-	ar(data.firstMeshlet, data.meshletCount);
-}
-
 registerPODClassMember(GLTFMeshlet)
 {
 	ar(data.posMin);
-	ar(data.firstIndex);
+	ar(data.dataOffset);
 	ar(data.posMax);
-	ar(data.triangleCount);
+	ar(data.vertexTriangleCount);
 	ar(data.coneCutOff);
 	ar(data.coneAxis);
 	ar(data.coneApex);
+
+	ar(data.parentBoundingSphere);
+	ar(data.error);
+	ar(data.parentError);
+	ar(data.lod);
 }
 
 registerPODClassMember(GLTFPrimitive)
 {
 	ar(name, material, vertexCount, vertexOffset);
-	ar(lods);
 	ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
 	ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
 
-	ar(lodBase, lodStep);
+	ar(lod0IndexOffset, lod0IndexCount, lod0MeshletOffset, lod0MeshletCount);
 }
 
 registerPODClassMember(GLTFMesh)
@@ -76,6 +74,7 @@ registerPODClassMember(GLTFBinary)
 	ar(primitiveData.texcoords1);
 	ar(primitiveData.colors0);
 	ar(primitiveData.meshlets);
+	ar(primitiveData.meshletDatas);
 }
 
 registerClassMember(IAsset)

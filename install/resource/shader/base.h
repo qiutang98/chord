@@ -216,8 +216,13 @@ enum class EShadingType
 #define kLightingType_GLTF_MetallicRoughnessPBR 1
 
 // Nanite config: fit mesh shader.
-#define kNaniteMeshletMaxVertices 64
-#define kNaniteMeshletMaxTriangle 124
+#define kNaniteMeshletMaxVertices 255
+#define kNaniteMeshletMaxTriangle 128
+#define kNaniteMaxLODCount        25
 
+struct NaniteShadingMeshlet
+{
+    uint shadingPack; // ShadingType: 8bit, Material Id: 24bit.
+};
 
 #endif // !SHADER_BASE_H

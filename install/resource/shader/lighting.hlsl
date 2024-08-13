@@ -76,7 +76,7 @@ float3 gltfMetallicRoughnessPBR(uint objectId, uint triangleId, uint2 dispatchPo
 
     float4 sampleColor = baseColorTexture.SampleGrad(baseColorSampler, meshUv, meshUv_ddx, meshUv_ddy) * materialInfo.baseColorFactor;
 
-    return sampleColor.xyz;
+    return simpleHashColor(triangleId);// sampleColor.xyz;
 }
 
 float3 noneShading(uint objectId, uint triangleId, uint2 dispatchPos)

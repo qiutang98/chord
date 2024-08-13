@@ -150,14 +150,6 @@ namespace chord
 	using GLTFMaterialAssetRef = std::shared_ptr<GLTFMaterialAsset>;
 	using GLTFMaterialAssetWeak = std::weak_ptr<GLTFMaterialAsset>;
 
-	struct GLTFPrimitiveLOD
-	{
-		ARCHIVE_DECLARE;
-
-		GPUGLTFPrimitiveLOD data;
-	};
-	CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveLOD);
-
 	struct GLTFMeshlet
 	{
 		ARCHIVE_DECLARE;
@@ -175,10 +167,14 @@ namespace chord
 		// Current primitive use which material.
 		AssetSaveInfo material;
 
+		//
+		uint32 lod0IndexOffset   = 0;
+		uint32 lod0IndexCount    = 0;
+		uint32 lod0MeshletOffset = 0;
+		uint32 lod0MeshletCount  = 0;
+
 		uint32 vertexOffset = 0; // used for required attributes.
 		uint32 vertexCount  = 0;
-
-		std::vector<GLTFPrimitiveLOD> lods;
 
 		bool bColor0Exist = false;
 		bool bSmoothNormalExist = false;
@@ -193,10 +189,6 @@ namespace chord
 		math::vec3 posMin;
 		math::vec3 posMax;
 		math::vec3 posAverage;
-
-		float lodBase = 10.0f;
-		float lodStep = 1.5f;
-		float lodScreenPercentageScale = 1.0f;
 	};
 
 	struct GLTFMesh
@@ -236,6 +228,7 @@ namespace chord
 
 			// Meshlet need to push to gpu buffer directly, take care of size pad.
 			std::vector<GLTFMeshlet> meshlets;
+			std::vector<uint32> meshletDatas;
 
 			// required.
 			std::vector<math::vec3> positions;
@@ -260,7 +253,8 @@ namespace chord
 					+ sizeofV(texcoords1)
 					+ sizeofV(colors0)
 					+ sizeofV(smoothNormals) 
-					+ sizeofV(meshlets);
+					+ sizeofV(meshlets)
+					+ sizeofV(meshletDatas);
 			}
 		} primitiveData;
 	};

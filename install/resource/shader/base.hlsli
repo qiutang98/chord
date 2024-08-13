@@ -128,60 +128,15 @@ bool frustumCulling(float4 planesRS[6], float3 centerLS, float3 extentLS, float4
 
 static uint4 kLODLevelDebugColor[8] =
 {
-    uint4(255, 0,   0, 255), // Extent first.
-    uint4(125, 0, 255, 255), // Extent first.
-    uint4( 39, 0, 255, 255), // Extent first.
+    uint4(255, 0,   0,  255), // Extent first.
+    uint4(125, 0, 255,  255), // Extent first.
+    uint4( 39, 0, 255,  255), // Extent first.
     uint4(  0, 39, 255, 255), // Extent first.
     uint4(  0, 125, 39, 255), // Extent first.
-    uint4(125, 125, 0, 255), // Extent first.
-    uint4( 39, 255, 0, 255), // Extent first.
-    uint4(  0, 255, 0, 255), // Extent first.
+    uint4(125, 125,  0, 255), // Extent first.
+    uint4( 39, 255,  0, 255), // Extent first.
+    uint4(  0, 255,  0, 255), // Extent first.
 };
-
-uint computeLodLevel(
-    float3 centerLS, 
-    float3 extentLS, 
-    float2 renderTexelSize,
-    in const float4x4 localToTranslatedWorld,
-    in const float4x4 localToClip, 
-    in const GLTFPrimitiveBuffer primitiveInfo)
-{
-    const float4 positionAverageLS = float4(primitiveInfo.posAverage, 1.0);
-    const float4 positionAverageRS = mul(localToTranslatedWorld, positionAverageLS);
-
-    // Camera to average position distance.
-    const float cameraToPositionAverageVS = length(positionAverageRS.xyz);
-
-    // Distance based lod selected: https://www.desmos.com/calculator/u0jgsic77y
-    float distanceLod = log2(cameraToPositionAverageVS * primitiveInfo.lodBase) * primitiveInfo.loadStep + 1.0;
-
-    // Screen percentage lod.
-    float screenPercentageLod;
-    {
-        float2 uvMin =  10.0f;
-        float2 uvMax = -10.0f;
-
-        [unroll(8)] 
-        for (uint k = 0; k < 8; k ++)
-        {
-            const float3 extentPosLS = centerLS + extentLS * kExtentApplyFactor[k];
-            float2 extentPosUv = projectPosToUVz(extentPosLS, localToClip).xy;
-
-            uvMin = min(uvMin, extentPosUv);
-            uvMax = max(uvMax, extentPosUv);
-        }
-
-        uvMin = saturate(uvMin);
-        uvMax = saturate(uvMax);
-
-        // Use longest size, at least one texel size.
-        float2 dist = max(uvMax - uvMin, renderTexelSize);
-        
-        screenPercentageLod = log2(primitiveInfo.lodScreenPercentageScale / max(dist.x, dist.y));
-    } 
-
-    return clamp(uint(min(distanceLod, screenPercentageLod)), 0, primitiveInfo.lodCount - 1);
-}
 
 // Quad schedule style, fake pixel shader dispatch style.
 // Input-> [0, 63]

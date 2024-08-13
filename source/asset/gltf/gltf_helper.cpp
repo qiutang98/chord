@@ -872,10 +872,6 @@ namespace chord
 						return;
 					}
 
-					primitiveMesh.lodStep = config->lodStep;
-					primitiveMesh.lodBase = config->lodBase;
-					primitiveMesh.lodScreenPercentageScale = config->lodScreenPercentageScale;
-
 					std::vector<uint32> tempIndices;
 					std::vector<math::vec3> tempPositions;
 					std::vector<math::vec3> tempNormals;
@@ -1042,7 +1038,7 @@ namespace chord
 						for (uint32 v = 0; v < generatedMesh.vertexCount; v++)
 						{
 							const xatlas::Vertex& vertex = generatedMesh.vertexArray[v];
-							uint32 originalVertex = vertex.xref * 3;
+							uint32 originalVertex = vertex.xref;
 
 							newPositions[v] = tempPositions[originalVertex];
 							newAvgPos += newPositions[v];
@@ -1073,127 +1069,50 @@ namespace chord
 
 
 					// Mesh lod and meshlet generation.
-					uint32 lod0FirstIndex = gltfBin.primitiveData.indices.size();
-					uint32 lod0IndexCount = tempIndices.size();
+					const uint32 lod0FirstIndex = gltfBin.primitiveData.indices.size();
+					const uint32 lod0IndexCount = tempIndices.size();
+					primitiveMesh.lod0IndexOffset = lod0FirstIndex;
+					primitiveMesh.lod0IndexCount  = lod0IndexCount;
 
-					meshopt_optimizeVertexCache(tempIndices.data(), tempIndices.data(), tempIndices.size(), tempPositions.size());
-						
-					auto computeMeshlet = [&](const std::vector<math::vec3>& positions, const std::vector<uint32>& indices, std::vector<uint32>& remapIndices)
 					{
-						remapIndices = {};
-						remapIndices.reserve(indices.size());
+						primitiveMesh.lod0MeshletCount = gltfBin.primitiveData.meshlets.size();
 
-						std::vector<meshopt_Meshlet> meshlets(meshopt_buildMeshletsBound(indices.size(), kMeshletMaxVertices, kMeshletMaxTriangles));
-						std::vector<uint32> meshletVertices(meshlets.size() * kMeshletMaxVertices);
-						std::vector<uint8> meshletTriangles(meshlets.size() * kMeshletMaxTriangles * 3);
+						nanite::NaniteBuilder builder(std::move(tempIndices), tempPositions, config->meshletConeWeight);
 
-						meshlets.resize(meshopt_buildMeshlets(meshlets.data(), meshletVertices.data(), meshletTriangles.data(), indices.data(), indices.size(), &positions[0].x, positions.size(), sizeof(positions[0]), kMeshletMaxVertices, kMeshletMaxTriangles, config->meshletConeWeight));
+						auto meshletCtx = builder.build();
 
-						for (const auto& meshlet : meshlets)
+						for (const auto& meshlet : meshletCtx.meshlets)
 						{
-							meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+							const auto dataOffset = gltfBin.primitiveData.meshletDatas.size();
 
-							meshopt_Bounds bounds = meshopt_computeMeshletBounds(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, &positions[0].x, positions.size(), sizeof(positions[0]));
-							GLTFMeshlet m = { };
-
-							// Triangle count and first index.
-							m.data.triangleCount = meshlet.triangle_count;
-							m.data.firstIndex    = remapIndices.size();
-
-							// Cone info.
-							m.data.coneCutOff = bounds.cone_cutoff;
-							m.data.coneAxis.x = bounds.cone_axis[0];
-							m.data.coneAxis.y = bounds.cone_axis[1];
-							m.data.coneAxis.z = bounds.cone_axis[2];
-							m.data.coneApex.x = bounds.cone_apex[0];
-							m.data.coneApex.y = bounds.cone_apex[1];
-							m.data.coneApex.z = bounds.cone_apex[2];
-							
-							// Position info.
-							math::vec3 posMin = math::vec3( FLT_MAX);
-							math::vec3 posMax = math::vec3(-FLT_MAX);
-
-							// Loop all triangle, also fill new indices.
-							for (uint32 triangleId = 0; triangleId < meshlet.triangle_count; triangleId++)
+							// Fill meshlet indices data.
 							{
-								uint8 id0 = meshletTriangles[meshlet.triangle_offset + triangleId * 3 + 0];
-								uint8 id1 = meshletTriangles[meshlet.triangle_offset + triangleId * 3 + 1];
-								uint8 id2 = meshletTriangles[meshlet.triangle_offset + triangleId * 3 + 2];
+								for (auto i = 0; i < meshlet.info.vertex_count; ++i) 
+								{ 
+									gltfBin.primitiveData.meshletDatas.push_back(meshletCtx.vertices[meshlet.info.vertex_offset + i]);
+								}
 
-								uint32 index0 = meshletVertices[meshlet.vertex_offset + id0];
-								uint32 index1 = meshletVertices[meshlet.vertex_offset + id1];
-								uint32 index2 = meshletVertices[meshlet.vertex_offset + id2];
+								for (auto i = 0; i < meshlet.info.triangle_count; ++i)
+								{ 
+									uint8 id0 = meshletCtx.triangles[meshlet.info.triangle_offset + i * 3 + 0];
+									uint8 id1 = meshletCtx.triangles[meshlet.info.triangle_offset + i * 3 + 1];
+									uint8 id2 = meshletCtx.triangles[meshlet.info.triangle_offset + i * 3 + 2];
 
-								remapIndices.push_back(index0);
-								remapIndices.push_back(index1);
-								remapIndices.push_back(index2);
+									uint32 idx = id0;
+									idx |= (uint32(id1) << 8);
+									idx |= (uint32(id2) << 16);
 
-								posMax = math::max(posMax, positions[index0]);
-								posMax = math::max(posMax, positions[index1]);
-								posMax = math::max(posMax, positions[index2]);
-
-								posMin = math::min(posMin, positions[index0]);
-								posMin = math::min(posMin, positions[index1]);
-								posMin = math::min(posMin, positions[index2]);
+									gltfBin.primitiveData.meshletDatas.push_back(idx);
+								}
 							}
 
-							m.data.posMin = posMin;
-							m.data.posMax = posMax;
-							gltfBin.primitiveData.meshlets.push_back(m);
+							gltfBin.primitiveData.meshlets.push_back(meshlet.getGLTFMeshlet(dataOffset));
 						}
 
-						return meshlets.size();
-					};
+						const std::vector<uint32>& lod0Indices = builder.getLod0Indices();
+						gltfBin.primitiveData.indices.insert(gltfBin.primitiveData.indices.end(), lod0Indices.begin(), lod0Indices.end());
 
-					std::vector<uint32> lodIndices = std::move(tempIndices);
-					while (primitiveMesh.lods.size() < kMaxGLTFLodCount)
-					{
-						primitiveMesh.lods.push_back({});
-						GLTFPrimitiveLOD& lod = primitiveMesh.lods.back();
-
-						lod.data.firstIndex   = gltfBin.primitiveData.indices.size();
-						lod.data.indexCount   = static_cast<uint32>(lodIndices.size());
-						lod.data.firstMeshlet = gltfBin.primitiveData.meshlets.size();
-
-						std::vector<uint32> remapIndices;
-						lod.data.meshletCount = computeMeshlet(tempPositions, lodIndices, remapIndices);
-						check(remapIndices.size() == lodIndices.size());
-
-						// Insert to bin data: use remap indices.
-						gltfBin.primitiveData.indices.insert(gltfBin.primitiveData.indices.end(), remapIndices.begin(), remapIndices.end());
-
-						if (primitiveMesh.lods.size() < kMaxGLTFLodCount)
-						{
-							uint32 nextLodIndicesTarget = uint32(double(lodIndices.size()) * double(config->lodStepReduceFactor));
-							float errorResult;
-							uint32 nextIndices = meshopt_simplify(
-								lodIndices.data(), 
-								lodIndices.data(), 
-								lodIndices.size(), 
-								&tempPositions[0].x, 
-								tempPositions.size(), 
-								sizeof(tempPositions[0]), 
-								nextLodIndicesTarget, 
-								config->lodTargetError,
-								0,
-								&errorResult);
-								
-							check(nextIndices <= lodIndices.size());
-							if (nextIndices == lodIndices.size())
-							{
-								// Reach error bound, pre-return.
-								LOG_TRACE("Mesh '{1}' lod pre-break at lod level {0}.", primitiveMesh.lods.size(), primitiveMesh.name);
-								break;
-							}
-							else
-							{
-								LOG_TRACE("Mesh '{1}' lod#{0} generated, current target error is {2}, and the error result is {3}.",
-									primitiveMesh.lods.size(), primitiveMesh.name, config->lodTargetError, errorResult);
-							}
-
-							lodIndices.resize(nextIndices);
-							meshopt_optimizeVertexCache(lodIndices.data(), lodIndices.data(), lodIndices.size(), tempPositions.size());
-						}
+						primitiveMesh.lod0MeshletCount = meshletCtx.meshlets.size();
 					}
 
 					// Get vertex offset.
@@ -1264,7 +1183,7 @@ namespace chord
 						ctx.m_pInterface->m_getNumFaces = [](const SMikkTSpaceContext* pContext) -> int
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							return ctx->mesh->lods[0].data.indexCount / 3;
+							return ctx->mesh->lod0IndexCount / 3;
 						};
 						ctx.m_pInterface->m_getNumVerticesOfFace = [](const SMikkTSpaceContext* pContext, const int iFace) -> int
 						{
@@ -1273,7 +1192,7 @@ namespace chord
 						ctx.m_pInterface->m_getPosition = [](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) -> void
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lods[0].data.firstIndex] + ctx->mesh->vertexOffset;
+							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lod0IndexOffset] + ctx->mesh->vertexOffset;
 							fvPosOut[0] = ctx->data->positions[id].x;
 							fvPosOut[1] = ctx->data->positions[id].y;
 							fvPosOut[2] = ctx->data->positions[id].z;
@@ -1281,7 +1200,7 @@ namespace chord
 						ctx.m_pInterface->m_getNormal = [](const SMikkTSpaceContext* pContext, float fvNormOut[], const int iFace, const int iVert) -> void
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lods[0].data.firstIndex] + ctx->mesh->vertexOffset;
+							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lod0IndexOffset] + ctx->mesh->vertexOffset;
 
 							fvNormOut[0] = ctx->data->normals[id].x;
 							fvNormOut[1] = ctx->data->normals[id].y;
@@ -1290,7 +1209,7 @@ namespace chord
 						ctx.m_pInterface->m_getTexCoord = [](const SMikkTSpaceContext* pContext, float fvTexcOut[], const int iFace, const int iVert) -> void
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lods[0].data.firstIndex] + ctx->mesh->vertexOffset;
+							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lod0IndexOffset] + ctx->mesh->vertexOffset;
 
 							fvTexcOut[0] = ctx->data->texcoords0[id].x;
 							fvTexcOut[1] = ctx->data->texcoords0[id].y;
@@ -1298,7 +1217,7 @@ namespace chord
 						ctx.m_pInterface->m_setTSpaceBasic = [](const SMikkTSpaceContext* pContext, const float fvTangent[], const float fSign, const int iFace, const int iVert)
 						{
 							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lods[0].data.firstIndex];
+							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lod0IndexOffset];
 
 							ctx->tangents[id].x = fvTangent[0];
 							ctx->tangents[id].y = fvTangent[1];
@@ -1528,7 +1447,8 @@ namespace chord
 			+ getValidSize(colors)
 			+ getValidSize(uv1s)
 			+ getValidSize(smoothNormals)
-			+ getValidSize(meshlet);
+			+ getValidSize(meshlet)
+			+ getValidSize(meshletData);
 	}
 
 	inline uint64 getPrimitiveDetailHash(uint64 GPUSceneHash, uint32 meshId, uint32 primitiveId)
@@ -1558,6 +1478,7 @@ namespace chord
 			ASSIGN_DATA(uv1s, textureCoord1Buffer);
 			ASSIGN_DATA(smoothNormals, smoothNormalsBuffer);
 			ASSIGN_DATA(meshlet, meshletBuffer);
+			ASSIGN_DATA(meshletData, meshletDataBuffer);
 		}
 		#undef ASSIGN_DATA
 
@@ -1589,31 +1510,20 @@ namespace chord
 				// Fill upload content.
 				GLTFPrimitiveBuffer primitiveBufferData{};
 				{
-					for (uint32 i = 0; i < kMaxGLTFLodCount; i++)
-					{
-						GLTFPrimitiveLOD lod{};
-						if (i < primitiveInfo.lods.size())
-						{
-							lod = primitiveInfo.lods[i];
-						}
-
-						primitiveBufferData.lods[i] = lod.data;
-					}
-
-					primitiveBufferData.posMin = primitiveInfo.posMin;
+					primitiveBufferData.posMin                 = primitiveInfo.posMin;
 					primitiveBufferData.primitiveDatasBufferId = m_gpuSceneGLTFPrimitiveAssetId;
-					primitiveBufferData.posMax = primitiveInfo.posMax;
-					primitiveBufferData.vertexOffset = primitiveInfo.vertexOffset;
-					primitiveBufferData.posAverage = primitiveInfo.posAverage;
-					primitiveBufferData.vertexCount = primitiveInfo.vertexCount;
-					primitiveBufferData.color0Offset = primitiveInfo.colors0Offset;
-					primitiveBufferData.smoothNormalOffset = primitiveInfo.smoothNormalOffset;
-					primitiveBufferData.textureCoord1Offset = primitiveInfo.textureCoord1Offset;
-					primitiveBufferData.lodCount = primitiveInfo.lods.size();
-					primitiveBufferData.lodBase = 1.0f / primitiveInfo.lodBase;
-					primitiveBufferData.loadStep = 1.0f / math::log2(primitiveInfo.lodStep);
-					primitiveBufferData.lodScreenPercentageScale = primitiveInfo.lodScreenPercentageScale;
+					primitiveBufferData.posMax                 = primitiveInfo.posMax;
+					primitiveBufferData.vertexOffset           = primitiveInfo.vertexOffset;
+					primitiveBufferData.posAverage             = primitiveInfo.posAverage;
+					primitiveBufferData.vertexCount            = primitiveInfo.vertexCount;
+					primitiveBufferData.color0Offset           = primitiveInfo.colors0Offset;
+					primitiveBufferData.smoothNormalOffset     = primitiveInfo.smoothNormalOffset;
+					primitiveBufferData.textureCoord1Offset    = primitiveInfo.textureCoord1Offset;
 
+					primitiveBufferData.lod0IndexOffset = primitiveInfo.lod0IndexOffset;
+					primitiveBufferData.lod0IndexCount = primitiveInfo.lod0IndexCount;
+					primitiveBufferData.lod0MeshletOffset = primitiveInfo.lod0MeshletOffset;
+					primitiveBufferData.lod0MeshletCount = primitiveInfo.lod0MeshletCount;
 				}
 
 				std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};

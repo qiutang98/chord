@@ -69,7 +69,7 @@ namespace chord
 			templatePrimitive.GLTFPrimitiveDetail = m_gltfGPU->getGPUScenePrimitiveDetailId(m_gltfMeshId, primitiveId);
 			templatePrimitive.GLTFMaterialData = materialProxy->getGPUSceneId();
 
-			meshletCount += meshes.primitives[primitiveId].lods[0].data.meshletCount;
+			meshletCount += meshes.primitives[primitiveId].lod0MeshletCount;
 			collector.gltfPrimitives.push_back(templatePrimitive);
 		}
 

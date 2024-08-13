@@ -197,6 +197,11 @@ namespace chord
 
         class SV_bMaskedMaterial : SHADER_VARIANT_BOOL("DIM_MASKED_MATERIAL");
         using Permutation = TShaderVariantVector<SV_bMaskedMaterial>;
+
+        static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId) 
+        { 
+            o.enableDebugSource();
+        }
     };
     IMPLEMENT_GLOBAL_SHADER(GLTFVisibilityVS, "resource/shader/gltf_rendering.hlsl", "visibilityPassVS", EShaderStage::Vertex);
 

@@ -112,18 +112,17 @@ void perobjectCullingCS(uint threadId : SV_DispatchThreadID)
     uint selectedLod = 0;
     if (shaderHasFlag(pushConsts.switchFlags, kLODEnableBit))
     {
-        selectedLod = computeLodLevel(posCenter, extent, perView.renderDimension.zw, localToTranslatedWorld, localToClip, primitiveInfo);
+        
     }
     
-    const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
-    const uint dispatchCullGroupCount = (lodInfo.meshletCount + 63) / 64;
+    const uint dispatchCullGroupCount = (primitiveInfo.lod0MeshletCount + 63) / 64;
     const uint meshletBaseOffset = interlockedAddUint(pushConsts.meshletCullGroupCountId, dispatchCullGroupCount);
 
     RWByteAddressBuffer meshletCullGroupBuffer = RWByteAddressBindless(pushConsts.meshletCullGroupDetailId);
     for (uint i = 0; i < dispatchCullGroupCount; i ++)
     {
         const uint id = i + meshletBaseOffset;
-        const uint meshletBaseIndex = lodInfo.firstMeshlet + i * 64;
+        const uint meshletBaseIndex = primitiveInfo.lod0MeshletOffset + i * 64;
 
         // Fill meshlet dispatch param, pack to 64.
         uint2 result = uint2(threadId, packLodMeshlet(selectedLod, meshletBaseIndex));
@@ -163,18 +162,22 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
 
     const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
     const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
-    const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
 
     float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
 
     // Skip out of range meshlt. 
-    if (meshletId >= lodInfo.firstMeshlet + lodInfo.meshletCount)
+    if (meshletId >= primitiveInfo.lod0MeshletOffset + primitiveInfo.lod0MeshletCount)
     {
         return;
     }
 
     const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
     const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
+
+    if (pushConsts.debugFlags != meshlet.lod)
+    {
+        return;
+    }
 
     const float3 posMin = meshlet.posMin;
     const float3 posMax = meshlet.posMax;
@@ -205,13 +208,11 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
 
     uint drawCmdId = interlockedAddUint(pushConsts.drawedMeshletCountId);
 
-
-
     // Fill in draw cmd. 
     {
         GLTFMeshDrawCmd drawCmd;
 
-        drawCmd.vertexCount    = meshlet.triangleCount * 3;
+        drawCmd.vertexCount    = unpackTriangleCount(meshlet.vertexTriangleCount) * 3;
         drawCmd.instanceCount  = 1;
         drawCmd.firstVertex    = 0;
         drawCmd.firstInstance  = drawCmdId;
@@ -259,7 +260,7 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
     //
     const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
     const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
-    const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
+
     const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
     const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
 
@@ -441,21 +442,40 @@ void visibilityPassVS(
 
     const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
     const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
-    const GPUGLTFPrimitiveLOD lodInfo = primitiveInfo.lods[selectedLod];
+
     const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
     const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
 
     ByteAddressBuffer indicesDataBuffer = ByteAddressBindless(primitiveDataInfo.indicesBuffer);
     ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
 
-    const uint sampleIndices = lodInfo.firstIndex + meshlet.firstIndex + vertexId;
-    const uint indicesId = primitiveInfo.vertexOffset + indicesDataBuffer.TypeLoad(uint, sampleIndices);
+    uint verticesCount = unpackVertexCount(meshlet.vertexTriangleCount);
+    uint triangleCount = unpackTriangleCount(meshlet.vertexTriangleCount);
+
+    ByteAddressBuffer meshletDataBuffer = ByteAddressBindless(primitiveDataInfo.meshletDataBuffer);
+
+    uint triangleIndicesSampleOffset = (meshlet.dataOffset + verticesCount + vertexId / 3) * 4;
+    uint indexTri = meshletDataBuffer.Load(triangleIndicesSampleOffset);
+
+    uint offsetBit = (vertexId % 3) * 8;
+    uint ss = (indexTri >> offsetBit) & 0xff;
+
+// printf("vertexid: %d, offset: %d, vertex tri: %d, %d indexTri %d, unpack %d.", vertexId, meshlet.dataOffset,  verticesCount, triangleCount, indexTri, ss);
+
+    uint verticesSampleOffset = (meshlet.dataOffset + ss) * 4;
+    uint verticesIndex = meshletDataBuffer.Load(verticesSampleOffset);
+
+    const uint indicesId = primitiveInfo.vertexOffset + verticesIndex;
+
+// printf("verticesSampleOffset: %d, verticesIndex: %d, indicesId: %d", verticesSampleOffset, verticesIndex, indicesId);
 
     // 
     float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
     float4x4 translatedWorldToClip = perView.translatedWorldToClip;
 
     const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
+//  printf("pos: %f, %f, %f", positionLS.x, positionLS.y, positionLS.z);
+
     const float4 positionRS = mul(localToTranslatedWorld, float4(positionLS, 1.0));
 
     output.positionHS = mul(translatedWorldToClip, positionRS);
@@ -466,7 +486,7 @@ void visibilityPassVS(
 #endif
 
     output.id.x = encodeObjectInfo((uint)(EShadingType::GLTF_MetallicRoughnessPBR), objectId);
-    output.id.y = sampleIndices / 3;
+    output.id.y = meshletId;
 } 
 
 void visibilityPassPS(in VisibilityPassVS2PS input, out uint2 outId : SV_Target0)
