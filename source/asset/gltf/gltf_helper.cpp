@@ -98,17 +98,328 @@ namespace chord
 	void uiDrawImportConfig(GLTFAssetImportConfigRef config)
 	{
 		ImGui::Checkbox("##SmoothNormal", &config->bGenerateSmoothNormal); ImGui::SameLine(); ImGui::Text("Generate Smooth Normal");
-
-		ImGui::DragFloat("Meshlet ConeWeight", &config->meshletConeWeight, 0.1f, 0.0f, 1.0f);
+		ImGui::Checkbox("##Fuse", &config->bFuse); ImGui::SameLine(); ImGui::Text("Fuse Close Vertex");
+		if (config->bFuse)
+		{
+			ImGui::DragFloat("Fuse Relative Distance", &config->fuseRelativeDistance, 1e-5f, 1e-5f, 1e-3f);
+		}
 
 		ImGui::Separator();
-		ImGui::Checkbox("##GenerateLOD",  &config->bGenerateLOD); ImGui::SameLine(); ImGui::Text("Generate LOD");
-		ImGui::DragFloat("LOD Base",      &config->lodBase, 1.0f, 1.0f, 20.0f);
-		ImGui::DragFloat("LOD Step",      &config->lodStep, 0.1f, 1.0f, 2.0f);
-		ImGui::DragFloat("LOD ScreenPercentage Scale", &config->lodScreenPercentageScale, 0.1f, 0.1f, 1.0f);
+		ImGui::DragFloat("Meshlet ConeWeight", &config->meshletConeWeight, 0.1f, 0.0f, 1.0f);
+	}
 
-		ImGui::DragFloat("Reduce Factor", &config->lodStepReduceFactor, 0.01f, 0.1f, 1.0f);
-		ImGui::DragFloat("Target Error",  &config->lodTargetError, 1e-4f, 0.0001f, 0.02f);
+	struct LoadMeshOptionalAttribute
+	{
+		bool bSmoothNormal = false;
+		bool bUv1 = false;
+		bool bColor0 = false;
+	};
+
+	static bool loadMesh(
+		const tinygltf::Model& model,
+		const tinygltf::Primitive& mesh, 
+		const std::string& meshName,
+		LoadMeshOptionalAttribute& optional,
+		bool bGenerateSmoothNormal,
+		std::vector<nanite::Vertex>& outputVertices, 
+		std::vector<uint32>& outputIndices,
+		math::vec3& meshPosMin,
+		math::vec3& meshPosMax,
+		math::vec3& meshPosAvg)
+	{
+		if (!mesh.attributes.contains("POSITION"))
+		{
+			LOG_ERROR("GLTF file is unvalid: a primitive without POSITION attribute, skip...");
+			return false;
+		}
+
+		// Prepare indices.
+		if (mesh.indices > -1)
+		{
+			const tinygltf::Accessor& indexAccessor = model.accessors[mesh.indices];
+			const tinygltf::BufferView& bufferView  = model.bufferViews[indexAccessor.bufferView];
+
+			outputIndices.resize(indexAccessor.count);
+			auto insertIndices = [&]<typename T>()
+			{
+				const auto* buf = reinterpret_cast<const T*>(&model.buffers[bufferView.buffer].data[indexAccessor.byteOffset + bufferView.byteOffset]);
+				for (auto index = 0; index < indexAccessor.count; index++)
+				{
+					outputIndices[index] = buf[index];
+				}
+			};
+			switch (indexAccessor.componentType)
+			{
+			case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT: { insertIndices.operator()<uint32>(); break; }
+			case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT: { insertIndices.operator()<uint16>(); break; }
+			case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE: { insertIndices.operator()<uint8>(); break; }
+			default: LOG_ERROR("Index component type %i not supported!\n", indexAccessor.componentType); return false;
+			}
+		}
+		else
+		{
+			LOG_TRACE("No INDICES found in mesh '{}', use triangle order indexing...", meshName);
+
+			const auto& accessor = model.accessors[mesh.attributes.find("POSITION")->second];
+			outputIndices.resize(accessor.count);
+			for (auto i = 0; i < accessor.count; i++)
+			{
+				outputIndices[i] = i;
+			}
+		}
+
+		// Position.
+		{
+			const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("POSITION")->second];
+			const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
+
+			const float* posBuffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+			math::vec3 positionMin = math::vec3( std::numeric_limits<float>::max());
+			math::vec3 positionMax = math::vec3(-std::numeric_limits<float>::max());
+
+			// Summary of position, use double to keep precision.
+			math::dvec3 positionSum = math::dvec3(0.0);
+			outputVertices.resize(accessor.count);
+
+			for (auto index = 0; index < accessor.count; index++)
+			{
+				outputVertices[index].position = { posBuffer[0], posBuffer[1], posBuffer[2] };
+				posBuffer += 3;
+
+				positionMin = math::min(positionMin, outputVertices[index].position);
+				positionMax = math::max(positionMax, outputVertices[index].position);
+
+				positionSum += outputVertices[index].position;
+			}
+
+			meshPosMax = positionMax;
+			meshPosMin = positionMin;
+
+			// Position average.
+			meshPosAvg = positionSum / double(accessor.count);
+		}
+
+		// Normal.
+		if (mesh.attributes.contains("NORMAL"))
+		{
+			const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("NORMAL")->second];
+			const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
+
+			const float* normalBuffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+			check(accessor.count == outputVertices.size());
+
+			for (auto index = 0; index < accessor.count; index++)
+			{
+				outputVertices[index].normal = { normalBuffer[0], normalBuffer[1], normalBuffer[2] };
+				normalBuffer += 3;
+			}
+		}
+		else
+		{
+			LOG_TRACE("No NORMAL found in mesh '{}', generating...", meshName);
+
+			for (auto i = 0; i < outputIndices.size(); i += 3)
+			{
+				uint32 ind0 = outputIndices[i + 0];
+				uint32 ind1 = outputIndices[i + 1];
+				uint32 ind2 = outputIndices[i + 2];
+
+				const auto& pos0 = outputVertices[ind0].position;
+				const auto& pos1 = outputVertices[ind1].position;
+				const auto& pos2 = outputVertices[ind2].position;
+
+				const auto v1 = math::normalize(pos1 - pos0);
+				const auto v2 = math::normalize(pos2 - pos0);
+				const auto n  = math::normalize(glm::cross(v1, v2));
+
+				outputVertices[ind0].normal = n;
+				outputVertices[ind1].normal = n;
+				outputVertices[ind2].normal = n;
+			}
+		}
+
+		// Texture Coordinate 0.
+		const bool bExistTextureCoord0 = mesh.attributes.contains("TEXCOORD_0");
+		if (bExistTextureCoord0)
+		{
+			const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("TEXCOORD_0")->second];
+			const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
+
+			const float* textureCoord0Buffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+			check(accessor.count == outputVertices.size());
+			for (auto index = 0; index < accessor.count; index++)
+			{
+				outputVertices[index].uv0 = { textureCoord0Buffer[0], textureCoord0Buffer[1] };
+				textureCoord0Buffer += 2;
+			}
+		}
+		else
+		{
+			LOG_TRACE("No TEXCOORD_0 found in mesh '{}', fill default...", meshName);
+			for (auto index = 0; index < outputVertices.size(); index++)
+			{
+				outputVertices[index].uv0 = { 0.0f, 0.0f };
+			}
+		}
+					
+		// Tangent.
+		if (bExistTextureCoord0)
+		{
+			if (mesh.attributes.contains("TANGENT"))
+			{
+				// Tangent already exist so just import.
+				const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("TANGENT")->second];
+				const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
+
+				const float* tangentBuffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+				check(accessor.count == outputVertices.size());
+				for (auto index = 0; index < accessor.count; index++)
+				{
+					outputVertices[index].tangent = { tangentBuffer[0], tangentBuffer[1], tangentBuffer[2], tangentBuffer[3] };
+					tangentBuffer += 4;
+				}
+			}
+			else
+			{
+				LOG_TRACE("No tangent found in mesh '{}', generating mikktspace...", meshName);
+
+				struct MikkTSpaceContext
+				{
+					std::vector<nanite::Vertex>* rawVerticesPtr;
+					std::vector<uint32>* rawIndicesPtr;
+				} computeCtx;
+
+				computeCtx.rawVerticesPtr = &outputVertices;
+				computeCtx.rawIndicesPtr  = &outputIndices;
+
+				SMikkTSpaceContext ctx{};
+				SMikkTSpaceInterface ctxI{};
+				ctx.m_pInterface = &ctxI;
+				ctx.m_pUserData  = &computeCtx;
+				ctx.m_pInterface->m_getNumFaces = [](const SMikkTSpaceContext* pContext) -> int { return ((MikkTSpaceContext*)pContext->m_pUserData)->rawIndicesPtr->size() / 3; };
+				ctx.m_pInterface->m_getNumVerticesOfFace = [](const SMikkTSpaceContext* pContext, const int iFace) -> int { return 3; };
+				ctx.m_pInterface->m_getPosition = [](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) -> void
+				{
+					auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
+					uint32 id = ctx->rawIndicesPtr->at(iFace * 3 + iVert);
+
+					fvPosOut[0] = ctx->rawVerticesPtr->at(id).position.x;
+					fvPosOut[1] = ctx->rawVerticesPtr->at(id).position.y;
+					fvPosOut[2] = ctx->rawVerticesPtr->at(id).position.z;
+				};
+				ctx.m_pInterface->m_getNormal = [](const SMikkTSpaceContext* pContext, float fvNormOut[], const int iFace, const int iVert) -> void
+				{
+					auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
+					uint32 id = ctx->rawIndicesPtr->at(iFace * 3 + iVert);
+
+					fvNormOut[0] = ctx->rawVerticesPtr->at(id).normal.x;
+					fvNormOut[1] = ctx->rawVerticesPtr->at(id).normal.x;
+					fvNormOut[2] = ctx->rawVerticesPtr->at(id).normal.x;
+				};
+				ctx.m_pInterface->m_getTexCoord = [](const SMikkTSpaceContext* pContext, float fvTexcOut[], const int iFace, const int iVert) -> void
+				{
+					auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
+					uint32 id = ctx->rawIndicesPtr->at(iFace * 3 + iVert);
+
+					fvTexcOut[0] = ctx->rawVerticesPtr->at(id).uv0.x;
+					fvTexcOut[1] = ctx->rawVerticesPtr->at(id).uv0.y;
+				};
+				ctx.m_pInterface->m_setTSpaceBasic = [](const SMikkTSpaceContext* pContext, const float fvTangent[], const float fSign, const int iFace, const int iVert)
+				{
+					auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
+					uint32 id = ctx->rawIndicesPtr->at(iFace * 3 + iVert);
+
+					ctx->rawVerticesPtr->at(id).tangent.x = fvTangent[0];
+					ctx->rawVerticesPtr->at(id).tangent.y = fvTangent[1];
+					ctx->rawVerticesPtr->at(id).tangent.z = fvTangent[2];
+					ctx->rawVerticesPtr->at(id).tangent.w = fSign;
+				};
+
+				if (!genTangSpaceDefault(&ctx))
+				{
+					LOG_ERROR("Mesh '{}' mikktspace generate error, skip...", meshName);
+					return false;
+				}
+			}
+		}
+		else
+		{
+			LOG_TRACE("Mesh uv0 use default, src tangent is unvalid and fill with default...", meshName);
+			for (auto index = 0; index < outputVertices.size(); index++)
+			{
+				outputVertices[index].tangent = { 0.0f, 0.0f, 0.0f, 0.0f };
+			}
+		}
+
+		// Smooth normals.
+		optional.bSmoothNormal = bGenerateSmoothNormal;
+		if (optional.bSmoothNormal)
+		{
+			std::vector<math::vec3> newSmoothNormals(outputVertices.size());
+			for (auto i = 0; i < outputIndices.size(); i += 3)
+			{
+				uint32 ind0 = outputIndices[i + 0];
+				uint32 ind1 = outputIndices[i + 1];
+				uint32 ind2 = outputIndices[i + 2];
+
+				const auto& n0 = outputVertices[ind0].normal;
+				const auto& n1 = outputVertices[ind1].normal;
+				const auto& n2 = outputVertices[ind2].normal;
+
+				newSmoothNormals[ind0] += n0;
+				newSmoothNormals[ind1] += n1;
+				newSmoothNormals[ind2] += n2;
+			}
+
+			for (auto& n : newSmoothNormals)
+			{
+				n = math::normalize(n);
+			}
+
+			for (uint i = 0; i < outputVertices.size(); i++)
+			{
+				outputVertices[i].smoothNormal = newSmoothNormals[i];
+			}
+		}
+
+		/////////////////////////////
+		// Optional attributes import.
+		// 
+					
+		// Texture Coordinate 1.
+		optional.bUv1 = mesh.attributes.contains("TEXCOORD_1");
+		if (optional.bUv1)
+		{
+			const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("TEXCOORD_1")->second];
+			const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
+
+			const float* textureCoord1Buffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+			check(accessor.count == outputVertices.size());
+			for (auto index = 0; index < accessor.count; index++)
+			{
+				outputVertices[index].uv1 = { textureCoord1Buffer[0], textureCoord1Buffer[1] };
+				textureCoord1Buffer += 2;
+			}
+		}
+
+		// Color 0.
+		optional.bColor0 = mesh.attributes.contains("COLOR_0");
+		if (optional.bColor0)
+		{
+			const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("COLOR_0")->second];
+			const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
+
+			const float* colorBuffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+			check(accessor.count == outputVertices.size());
+
+			for (auto index = 0; index < accessor.count; index++)
+			{
+				outputVertices[index].color0 = { colorBuffer[0], colorBuffer[1], colorBuffer[2], colorBuffer[3]};
+				colorBuffer += 4;
+			}
+		}
+
+		return true;
 	}
 
 	bool importFromConfig(GLTFAssetImportConfigRef config)
@@ -866,219 +1177,37 @@ namespace chord
 
 				if (!bPrimitiveCache)
 				{
-					if (!mesh.attributes.contains("POSITION"))
+					LoadMeshOptionalAttribute optionalAttri { };
+					std::vector<nanite::Vertex> rawVertices;
+					std::vector<uint32> rawIndices;
+					math::vec3 meshPosMin;
+					math::vec3 meshPosMax;
+					math::vec3 meshPosAvg;
+
+					bool bLoadResult = loadMesh(model, mesh, primitiveMesh.name, optionalAttri, bGenerateSmoothNormal, rawVertices, rawIndices, meshPosMin, meshPosMax, meshPosAvg);
+					if (!bLoadResult) { return; }
+
+					// Get vertex offset.
+					primitiveMesh.vertexOffset = gltfBin.primitiveData.positions.size();
+					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.normals.size());
+					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.texcoords0.size());
+					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.tangents.size());
+
+					// Optional attribute offset.
+					primitiveMesh.colors0Offset       = gltfBin.primitiveData.colors0.size();
+					primitiveMesh.textureCoord1Offset = gltfBin.primitiveData.texcoords1.size();
+					primitiveMesh.smoothNormalOffset  = gltfBin.primitiveData.smoothNormals.size();
+
+					// Meshlet offset.
+					primitiveMesh.meshletOffset = gltfBin.primitiveData.meshlets.size();
+
+					// Position min, max and average.
+					primitiveMesh.posMin = meshPosMin;
+					primitiveMesh.posMax = meshPosMax;
+					primitiveMesh.posAverage = meshPosAvg;
+
+					nanite::NaniteBuilder builder(std::move(rawIndices), std::move(rawVertices), config->bFuse ? config->fuseRelativeDistance : -1.0f, config->meshletConeWeight);
 					{
-						LOG_ERROR("GLTF file is unvalid: a primitive without POSITION attribute, skip...");
-						return;
-					}
-
-					std::vector<uint32> tempIndices;
-					std::vector<math::vec3> tempPositions;
-					std::vector<math::vec3> tempNormals;
-					std::vector<math::vec2> tempUv0s;
-					math::vec3 tempPosMin;
-					math::vec3 tempPosMax;
-					math::vec3 tempPosAvg;
-
-					if (mesh.indices > -1)
-					{
-						const tinygltf::Accessor& indexAccessor = model.accessors[mesh.indices];
-						const tinygltf::BufferView& bufferView = model.bufferViews[indexAccessor.bufferView];
-
-						tempIndices.resize(indexAccessor.count);
-						auto insertIndices = [&]<typename T>()
-						{
-							const auto* buf = reinterpret_cast<const T*>(&model.buffers[bufferView.buffer].data[indexAccessor.byteOffset + bufferView.byteOffset]);
-							for (auto index = 0; index < indexAccessor.count; index++)
-							{
-								tempIndices[index] = buf[index];
-							}
-						};
-						switch (indexAccessor.componentType)
-						{
-						case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT: { insertIndices.operator()<uint32>(); break; }
-						case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT: { insertIndices.operator()<uint16>(); break; }
-						case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE: { insertIndices.operator()<uint8>(); break; }
-						default: LOG_ERROR("Index component type %i not supported!\n", indexAccessor.componentType); return;
-						}
-					}
-					else
-					{
-						LOG_TRACE("No INDICES found in mesh '{}', generating...", primitiveMesh.name);
-
-						const auto& accessor = model.accessors[mesh.attributes.find("POSITION")->second];
-						tempIndices.resize(accessor.count);
-						for (auto i = 0; i < accessor.count; i++)
-						{
-							tempIndices[i] = i;
-						}
-					}
-
-					// Position.
-					{
-						const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("POSITION")->second];
-						const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
-
-						const float* posBuffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-						math::vec3 positionMin = math::vec3( std::numeric_limits<float>::max());
-						math::vec3 positionMax = math::vec3(-std::numeric_limits<float>::max());
-
-						// Summary of position, use double to keep precision.
-						math::dvec3 positionSum = math::dvec3(0.0);
-						tempPositions.resize(accessor.count);
-						for (auto index = 0; index < accessor.count; index++)
-						{
-							tempPositions[index] = { posBuffer[0], posBuffer[1], posBuffer[2] };
-							posBuffer += 3;
-
-							positionMin = math::min(positionMin, tempPositions[index]);
-							positionMax = math::max(positionMax, tempPositions[index]);
-
-							positionSum += tempPositions[index];
-						}
-
-						tempPosMax = positionMax;
-						tempPosMin = positionMin;
-
-						// Position average.
-						tempPosAvg = positionSum / double(accessor.count);
-					}
-
-					// Normal.
-					if (mesh.attributes.contains("NORMAL"))
-					{
-						const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("NORMAL")->second];
-						const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
-
-						const float* normalBuffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-						tempNormals.resize(accessor.count);
-						for (auto index = 0; index < accessor.count; index++)
-						{
-							tempNormals[index] = { normalBuffer[0], normalBuffer[1], normalBuffer[2] };
-							normalBuffer += 3;
-						}
-					}
-					else
-					{
-						LOG_TRACE("No NORMAL found in mesh '{}', generating...", primitiveMesh.name);
-
-						tempNormals.resize(tempPositions.size());
-						for (auto i = 0; i < tempIndices.size(); i += 3)
-						{
-							uint32 ind0 = tempIndices[i + 0];
-							uint32 ind1 = tempIndices[i + 1];
-							uint32 ind2 = tempIndices[i + 2];
-
-							const auto& pos0 = tempPositions[ind0];
-							const auto& pos1 = tempPositions[ind1];
-							const auto& pos2 = tempPositions[ind2];
-
-							const auto v1 = math::normalize(pos1 - pos0);
-							const auto v2 = math::normalize(pos2 - pos0);
-							const auto n  = math::normalize(glm::cross(v1, v2));
-
-							tempNormals[ind0] = n;
-							tempNormals[ind1] = n;
-							tempNormals[ind2] = n;
-						}
-					}
-
-					// Texture Coordinate 0.
-					const bool bExistTextureCoord0 = mesh.attributes.contains("TEXCOORD_0");
-					if (bExistTextureCoord0)
-					{
-						const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("TEXCOORD_0")->second];
-						const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
-
-						const float* textureCoord0Buffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-						tempUv0s.resize(accessor.count);
-						for (auto index = 0; index < accessor.count; index++)
-						{
-							tempUv0s[index] = { textureCoord0Buffer[0], textureCoord0Buffer[1] };
-							textureCoord0Buffer += 2;
-						}
-					}
-					else
-					{
-						LOG_TRACE("No TEXCOORD_0 found in mesh '{}', generating...", primitiveMesh.name);
-
-						// NOTE: UV split will copy vertex in seam, so vertex count increment.
-						auto* singleMeshAtlas = xatlas::Create();
-
-						xatlas::MeshDecl meshDecl;
-						meshDecl.vertexCount          = tempPositions.size();
-						meshDecl.vertexPositionData   = tempPositions.data();
-						meshDecl.vertexPositionStride = sizeof(tempPositions[0]);
-						meshDecl.vertexNormalData     = tempNormals.data();
-						meshDecl.vertexNormalStride   = sizeof(tempNormals[0]);
-						meshDecl.indexCount           = tempIndices.size();
-						meshDecl.indexData            = tempIndices.data();
-						meshDecl.indexOffset          = 0;
-						meshDecl.indexFormat          = xatlas::IndexFormat::UInt32;
-
-						xatlas::AddMeshError error = xatlas::AddMesh(singleMeshAtlas, meshDecl, 1);
-						if (error != xatlas::AddMeshError::Success) 
-						{
-							xatlas::Destroy(singleMeshAtlas);
-							LOG_ERROR("Error adding mesh '{}' for uv generation.", primitiveMesh.name);
-							return;
-						}
-
-						xatlas::Generate(singleMeshAtlas);
-						auto& generatedMesh = singleMeshAtlas->meshes[0];
-
-						std::vector<math::vec3> newPositions(generatedMesh.vertexCount);
-						std::vector<math::vec3> newNormals(generatedMesh.vertexCount);
-						std::vector<math::vec2> newUv0s(generatedMesh.vertexCount);
-
-						float invW = 1.0f / float(singleMeshAtlas->width);
-						float invH = 1.0f / float(singleMeshAtlas->height);
-
-						math::dvec3 newAvgPos = math::dvec3{ 0.0 };
-						for (uint32 v = 0; v < generatedMesh.vertexCount; v++)
-						{
-							const xatlas::Vertex& vertex = generatedMesh.vertexArray[v];
-							uint32 originalVertex = vertex.xref;
-
-							newPositions[v] = tempPositions[originalVertex];
-							newAvgPos += newPositions[v];
-
-							newNormals[v]   = tempNormals[originalVertex];
-							newUv0s[v]      = { vertex.uv[0] * invW, vertex.uv[1] * invH };
-						}
-
-						newAvgPos /= double(generatedMesh.vertexCount);
-
-						std::vector<uint32> newIndices(generatedMesh.indexCount);
-						for (uint32 i = 0; i < generatedMesh.indexCount; i ++)
-						{
-							newIndices[i] = generatedMesh.indexArray[i];
-						}
-
-						tempPositions = std::move(newPositions);
-						tempNormals   = std::move(newNormals);
-						tempUv0s      = std::move(newUv0s);
-						tempIndices   = std::move(newIndices);
-
-						// NOTE: Only average position need recompute, min and max pos unchange.
-						tempPosAvg    = std::move(newAvgPos);
-
-						// NOTE: Tangent auto recompute when uv0 input unvalid.
-						xatlas::Destroy(singleMeshAtlas);	
-					}
-
-
-					// Mesh lod and meshlet generation.
-					const uint32 lod0FirstIndex = gltfBin.primitiveData.indices.size();
-					const uint32 lod0IndexCount = tempIndices.size();
-					primitiveMesh.lod0IndexOffset = lod0FirstIndex;
-					primitiveMesh.lod0IndexCount  = lod0IndexCount;
-
-					{
-						primitiveMesh.lod0MeshletCount = gltfBin.primitiveData.meshlets.size();
-
-						nanite::NaniteBuilder builder(std::move(tempIndices), tempPositions, config->meshletConeWeight);
-
 						auto meshletCtx = builder.build();
 
 						for (const auto& meshlet : meshletCtx.meshlets)
@@ -1109,191 +1238,30 @@ namespace chord
 							gltfBin.primitiveData.meshlets.push_back(meshlet.getGLTFMeshlet(dataOffset));
 						}
 
-						const std::vector<uint32>& lod0Indices = builder.getLod0Indices();
-						gltfBin.primitiveData.indices.insert(gltfBin.primitiveData.indices.end(), lod0Indices.begin(), lod0Indices.end());
-
-						primitiveMesh.lod0MeshletCount = meshletCtx.meshlets.size();
+						primitiveMesh.meshletCount = meshletCtx.meshlets.size();
 					}
 
-					// Get vertex offset.
-					primitiveMesh.vertexOffset = gltfBin.primitiveData.positions.size();
-					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.normals.size());
-					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.texcoords0.size());
-					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.tangents.size());
-
-					// Optional attribute offset.
-					primitiveMesh.colors0Offset       = gltfBin.primitiveData.colors0.size();
-					primitiveMesh.textureCoord1Offset = gltfBin.primitiveData.texcoords1.size();
-					primitiveMesh.smoothNormalOffset  = gltfBin.primitiveData.smoothNormals.size();
+					const std::vector<nanite::Vertex>& builderVertices = builder.getVertices();
 
 					// 
-					primitiveMesh.vertexCount = tempPositions.size();
+					primitiveMesh.vertexCount = builderVertices.size();
 
-					// Position min, max and average.
-					primitiveMesh.posMin = tempPosMin; // NOTE: UV layout copy positions.
-					primitiveMesh.posMax = tempPosMax;
-					primitiveMesh.posAverage = tempPosAvg;
+					// Fill exist state.
+					primitiveMesh.bColor0Exist = optionalAttri.bColor0;
+					primitiveMesh.bSmoothNormalExist = optionalAttri.bSmoothNormal;
+					primitiveMesh.bTextureCoord1Exist = optionalAttri.bUv1;
 
 					// Insert back to binary data.
-					gltfBin.primitiveData.texcoords0.insert(gltfBin.primitiveData.texcoords0.end(), tempUv0s.begin(), tempUv0s.end());
-					gltfBin.primitiveData.positions.insert(gltfBin.primitiveData.positions.end(), tempPositions.begin(), tempPositions.end());
-					gltfBin.primitiveData.normals.insert(gltfBin.primitiveData.normals.end(), tempNormals.begin(), tempNormals.end());
-
-
-					// Tangent.
-					if (bExistTextureCoord0 && mesh.attributes.contains("TANGENT"))
+					for (auto& vertex : builderVertices)
 					{
-						// Tangent already exist so just import.
-						const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("TANGENT")->second];
-						const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
+						gltfBin.primitiveData.texcoords0.push_back(vertex.uv0);
+						gltfBin.primitiveData.positions.push_back(vertex.position);
+						gltfBin.primitiveData.normals.push_back(vertex.normal);
+						gltfBin.primitiveData.tangents.push_back(vertex.tangent);
 
-						const float* tangentBuffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-						for (auto index = 0; index < accessor.count; index++)
-						{
-							gltfBin.primitiveData.tangents.push_back({ tangentBuffer[0], tangentBuffer[1], tangentBuffer[2], tangentBuffer[3] });
-							tangentBuffer += 4;
-						}
-					}
-					else
-					{
-						if (!bExistTextureCoord0)
-						{
-							LOG_TRACE("Mesh uv0 auto layout when import '{}', src tangent is unvalid, generating mikktspace...", primitiveMesh.name);
-						}
-						else
-						{
-							LOG_TRACE("No tangent found in mesh '{}', generating mikktspace...", primitiveMesh.name);
-						}
-
-						struct MikkTSpaceContext
-						{
-							GLTFPrimitive* mesh;
-							GLTFBinary::PrimitiveDatas* data;
-							std::vector<math::vec4> tangents;
-						} computeCtx;
-
-						computeCtx.mesh = &primitiveMesh;
-						computeCtx.data = &gltfBin.primitiveData;
-						computeCtx.tangents.resize(primitiveMesh.vertexCount);
-
-						SMikkTSpaceContext ctx{};
-						SMikkTSpaceInterface ctxI{};
-						ctx.m_pInterface = &ctxI;
-						ctx.m_pUserData = &computeCtx;
-						ctx.m_pInterface->m_getNumFaces = [](const SMikkTSpaceContext* pContext) -> int
-						{
-							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							return ctx->mesh->lod0IndexCount / 3;
-						};
-						ctx.m_pInterface->m_getNumVerticesOfFace = [](const SMikkTSpaceContext* pContext, const int iFace) -> int
-						{
-							return 3;
-						};
-						ctx.m_pInterface->m_getPosition = [](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) -> void
-						{
-							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lod0IndexOffset] + ctx->mesh->vertexOffset;
-							fvPosOut[0] = ctx->data->positions[id].x;
-							fvPosOut[1] = ctx->data->positions[id].y;
-							fvPosOut[2] = ctx->data->positions[id].z;
-						};
-						ctx.m_pInterface->m_getNormal = [](const SMikkTSpaceContext* pContext, float fvNormOut[], const int iFace, const int iVert) -> void
-						{
-							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lod0IndexOffset] + ctx->mesh->vertexOffset;
-
-							fvNormOut[0] = ctx->data->normals[id].x;
-							fvNormOut[1] = ctx->data->normals[id].y;
-							fvNormOut[2] = ctx->data->normals[id].z;
-						};
-						ctx.m_pInterface->m_getTexCoord = [](const SMikkTSpaceContext* pContext, float fvTexcOut[], const int iFace, const int iVert) -> void
-						{
-							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lod0IndexOffset] + ctx->mesh->vertexOffset;
-
-							fvTexcOut[0] = ctx->data->texcoords0[id].x;
-							fvTexcOut[1] = ctx->data->texcoords0[id].y;
-						};
-						ctx.m_pInterface->m_setTSpaceBasic = [](const SMikkTSpaceContext* pContext, const float fvTangent[], const float fSign, const int iFace, const int iVert)
-						{
-							auto* ctx = (MikkTSpaceContext*)pContext->m_pUserData;
-							uint32 id = ctx->data->indices[iFace * 3 + iVert + ctx->mesh->lod0IndexOffset];
-
-							ctx->tangents[id].x = fvTangent[0];
-							ctx->tangents[id].y = fvTangent[1];
-							ctx->tangents[id].z = fvTangent[2];
-							ctx->tangents[id].w = fSign;
-						};
-
-						if (!genTangSpaceDefault(&ctx))
-						{
-							LOG_ERROR("Mesh '{}' mikktspace generate error, skip.", primitiveMesh.name);
-							return;
-						}
-
-						gltfBin.primitiveData.tangents.insert(gltfBin.primitiveData.tangents.end(), computeCtx.tangents.begin(), computeCtx.tangents.end());
-					}
-
-					// Smooth normals.
-					if (bGenerateSmoothNormal)
-					{
-						primitiveMesh.bSmoothNormalExist = true;
-
-						std::vector<math::vec3> newSmoothNormals(primitiveMesh.vertexCount);
-						for (auto i = 0; i < lod0IndexCount; i += 3)
-						{
-							uint32 ind0 = gltfBin.primitiveData.indices[lod0FirstIndex + i + 0];
-							uint32 ind1 = gltfBin.primitiveData.indices[lod0FirstIndex + i + 1];
-							uint32 ind2 = gltfBin.primitiveData.indices[lod0FirstIndex + i + 2];
-
-							const auto n0 = gltfBin.primitiveData.normals[ind0];
-							const auto n1 = gltfBin.primitiveData.normals[ind1];
-							const auto n2 = gltfBin.primitiveData.normals[ind2];
-
-							newSmoothNormals[ind0] += n0;
-							newSmoothNormals[ind1] += n1;
-							newSmoothNormals[ind2] += n2;
-						}
-
-						for (auto& n : newSmoothNormals)
-						{
-							n = math::normalize(n);
-						}
-						gltfBin.primitiveData.smoothNormals.insert(gltfBin.primitiveData.smoothNormals.end(), newSmoothNormals.begin(), newSmoothNormals.end());
-					}
-
-					/////////////////////////////
-					// Optional attributes import.
-					// 
-					
-					// Texture Coordinate 1.
-					if (mesh.attributes.contains("TEXCOORD_1"))
-					{
-						primitiveMesh.bTextureCoord1Exist = true;
-						const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("TEXCOORD_1")->second];
-						const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
-
-						const float* textureCoord1Buffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-						for (auto index = 0; index < accessor.count; index++)
-						{
-							gltfBin.primitiveData.texcoords1.push_back({ textureCoord1Buffer[0], textureCoord1Buffer[1] });
-							textureCoord1Buffer += 2;
-						}
-					}
-
-					// Color 0.
-					if (mesh.attributes.contains("COLOR_0"))
-					{
-						primitiveMesh.bColor0Exist = true;
-						const tinygltf::Accessor& accessor = model.accessors[mesh.attributes.find("COLOR_0")->second];
-						const tinygltf::BufferView& view = model.bufferViews[accessor.bufferView];
-
-						const float* colorBuffer = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-						for (auto index = 0; index < accessor.count; index++)
-						{
-							gltfBin.primitiveData.colors0.push_back({ colorBuffer[0], colorBuffer[1], colorBuffer[2], colorBuffer[3]});
-							colorBuffer += 4;
-						}
+						if (primitiveMesh.bColor0Exist) { gltfBin.primitiveData.colors0.push_back(vertex.color0); }
+						if (primitiveMesh.bTextureCoord1Exist) { gltfBin.primitiveData.texcoords1.push_back(vertex.uv1); }
+						if (primitiveMesh.bSmoothNormalExist) { gltfBin.primitiveData.smoothNormals.push_back(vertex.smoothNormal); }
 					}
 
 					cachePrimMesh[key] = primitiveMesh;
@@ -1439,8 +1407,7 @@ namespace chord
 		};
 
 		return 
-			  getValidSize(indices) 
-			+ getValidSize(positions) 
+			  getValidSize(positions) 
 			+ getValidSize(normals) 
 			+ getValidSize(uv0s) 
 			+ getValidSize(tangents)
@@ -1469,7 +1436,6 @@ namespace chord
 
 		#define ASSIGN_DATA(A, B) if(A != nullptr) { uploadData.B = A->bindless.get(); } else { uploadData.B = ~0; }
 		{
-			ASSIGN_DATA(indices, indicesBuffer);
 			ASSIGN_DATA(positions, positionBuffer);
 			ASSIGN_DATA(normals, normalBuffer);
 			ASSIGN_DATA(uv0s, textureCoord0Buffer);
@@ -1519,11 +1485,8 @@ namespace chord
 					primitiveBufferData.color0Offset           = primitiveInfo.colors0Offset;
 					primitiveBufferData.smoothNormalOffset     = primitiveInfo.smoothNormalOffset;
 					primitiveBufferData.textureCoord1Offset    = primitiveInfo.textureCoord1Offset;
-
-					primitiveBufferData.lod0IndexOffset = primitiveInfo.lod0IndexOffset;
-					primitiveBufferData.lod0IndexCount = primitiveInfo.lod0IndexCount;
-					primitiveBufferData.lod0MeshletOffset = primitiveInfo.lod0MeshletOffset;
-					primitiveBufferData.lod0MeshletCount = primitiveInfo.lod0MeshletCount;
+					primitiveBufferData.meshletOffset          = primitiveInfo.meshletOffset;
+					primitiveBufferData.meshletCount           = primitiveInfo.meshletCount;
 				}
 
 				std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};

@@ -6,6 +6,19 @@
 
 namespace chord::nanite
 {
+	struct Vertex
+	{
+		float3 position;
+		float2 uv0;
+		float3 normal;
+		float4 tangent;
+		float3 smoothNormal;
+		float2 uv1;
+		float4 color0;
+	};
+	static_assert(sizeof(Vertex) == 21 * 4);
+
+
 	struct Meshlet
 	{
 		meshopt_Meshlet info;
@@ -23,11 +36,10 @@ namespace chord::nanite
 
 		// LOD reduce relative mesh space error.
 		float error = 0.0f;
-		float parentError = std::numeric_limits<float>::max();
 
-		// Bounds sphere.
-		math::vec4 boundingSphere;
-		math::vec4 parentBoundingSphere;
+		float parentError = std::numeric_limits<float>::max();
+		math::vec3 parentPosCenter;
+		math::vec3 clusterPosCenter;
 
 		bool isParentSet() const;
 
@@ -50,32 +62,29 @@ namespace chord::nanite
 	{
 	public:
 		explicit NaniteBuilder(
-			std::vector<uint32>&& indices, 
-			const std::vector<math::vec3>& positions,
+			std::vector<uint32>&& indices,
+			std::vector<Vertex>&& vertices,
+			float fuseDistance,
 			float coneWeight);
 
 		MeshletContainer build() const;
 
-		const std::vector<uint32>& getLod0Indices() const
-		{
-			return m_indicesLod0;
-		}
+		const std::vector<Vertex>& getVertices() const { return m_vertices; }
 
 	private:
 		void MeshletsGMSS(
 			MeshletContainer& srcCtx, 
 			MeshletContainer& outCtx, 
 			float targetError, 
-			uint32 lod,
-			float simplifyScale) const;
+			uint32 lod) const;
 
 	private:
 		const float m_coneWeight;
 
 		// Indices of triangles.
-		std::vector<uint32> m_indicesLod0;
+		std::vector<uint32> m_indices;
 
-		// Reference positions.
-		const std::vector<math::vec3>& m_positions;
+		// Vertices.
+		std::vector<Vertex> m_vertices;
 	};
 }

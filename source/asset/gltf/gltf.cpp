@@ -79,14 +79,6 @@ namespace chord
 					}
 					static_assert(sizeof(math::vec3) == sizeof(float) * 3);
 
-					newGPUPrimitives->indices = std::make_unique<ComponentBuffer>(
-						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_indices"),
-						bufferFlagBasic | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-						bufferFlagVMA,
-						(uint32)sizeof(gltfBin.primitiveData.indices[0]),
-						(uint32)gltfBin.primitiveData.indices.size());
-					copyBuffer(*newGPUPrimitives->indices, gltfBin.primitiveData.indices.data());
-
 					newGPUPrimitives->meshlet = std::make_unique<ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_meshlet"),
 						bufferFlagBasic,

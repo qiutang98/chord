@@ -42,12 +42,12 @@ namespace chord
     {
         GPUObjectBasicData data { };
 
+        math::dmat4 localToWorld = getTransform()->getWorldMatrix();
 
 
         // Local2TranslatedWorld
         {
             const dvec3& cameraWorldPos = camera->getPosition();
-            math::dmat4 localToWorld = getTransform()->getWorldMatrix();
 
             // Apply camera offset.
             localToWorld[3][0] -= cameraWorldPos.x;
@@ -56,7 +56,18 @@ namespace chord
 
             data.localToTranslatedWorld = math::mat4(localToWorld);
             data.translatedWorldToLocal = math::inverse(data.localToTranslatedWorld);
+
+            math::vec3 extractScale = math::vec3(
+                glm::length(glm::dvec3(data.localToTranslatedWorld[0])),
+                glm::length(glm::dvec3(data.localToTranslatedWorld[1])),
+                glm::length(glm::dvec3(data.localToTranslatedWorld[2])));
+
+            math::vec3 absScale = math::abs(extractScale);
+            const float maxScaleAbs = math::max(math::max(absScale.x, absScale.y), absScale.z);
+            data.scaleExtractFromMatrix = math::vec4(extractScale, maxScaleAbs);
         }
+
+
 
         // Local2TranslatedWorld last frame.
         {

@@ -10,10 +10,14 @@ using namespace chord::nanite;
 constexpr auto kNumMeshletPerGroup = 4;
 constexpr auto kNumGroupSplitAfterSimplify = 2;
 constexpr auto kGroupSimplifyThreshold = 1.0f / float(kNumGroupSplitAfterSimplify);
+constexpr auto kGroupSimplifyMinReduce = 0.8f; // At least next level lod need to reduce 20% triangles, otherwise it is no meaning to store it.
 
-using MeshletIndex  = uint32;
-using VertexIndex   = uint32;
-using ClusterGroup  = std::vector<MeshletIndex>;
+constexpr auto kSimplifyError = 0.01f;
+constexpr auto kGroupMergePosError = 0.1f;
+
+using MeshletIndex = uint32;
+using VertexIndex  = uint32;
+using ClusterGroup = std::vector<MeshletIndex>;
 
 constexpr float kMeshletParentErrorUninitialized = std::numeric_limits<float>::max();
 
@@ -27,11 +31,17 @@ uint32 loadVertexIndex(
 	return ctx.vertices[id + meshlet.vertex_offset];
 }
 
-static MeshletContainer buildMeshlets(const std::vector<math::vec3>& positions, const std::vector<uint32>& indices, float coneWeight, uint lod)
+static MeshletContainer buildMeshlets(
+	const std::vector<Vertex>& vertices,
+	const std::vector<uint32>& indices, 
+	float coneWeight, 
+	uint lod, 
+	float error,
+	float3 clusterPosCenter)
 {
 	MeshletContainer result{ };
 
-	const uint32 verticesCount = positions.size();
+	const uint32 verticesCount = vertices.size();
 	std::vector<meshopt_Meshlet> meshlets(meshopt_buildMeshletsBound(indices.size(), kNaniteMeshletMaxVertices, kNaniteMeshletMaxTriangle));
 	{
 		std::vector<uint32> meshletVertices(meshlets.size() * kNaniteMeshletMaxVertices);
@@ -44,9 +54,9 @@ static MeshletContainer buildMeshlets(const std::vector<math::vec3>& positions, 
 			meshletTriangles.data(),
 			indices.data(),
 			indices.size(),
-			&positions[0].x,
+			&vertices[0].position.x,
 			verticesCount,
-			sizeof(positions[0]),
+			sizeof(vertices[0]),
 			kNaniteMeshletMaxVertices,
 			kNaniteMeshletMaxTriangle,
 			coneWeight));
@@ -73,9 +83,9 @@ static MeshletContainer buildMeshlets(const std::vector<math::vec3>& positions, 
 			&result.vertices[meshlet.vertex_offset],
 			&result.triangles[meshlet.triangle_offset],
 			meshlet.triangle_count,
-			&positions[0].x,
+			&vertices[0].position.x,
 			verticesCount,
-			sizeof(positions[0]));
+			sizeof(vertices[0]));
 
 		math::vec3 posMin = math::vec3( FLT_MAX);
 		math::vec3 posMax = math::vec3(-FLT_MAX);
@@ -88,8 +98,8 @@ static MeshletContainer buildMeshlets(const std::vector<math::vec3>& positions, 
 			for (uint i = 0; i < 3; i++)
 			{
 				VertexIndex vid = loadVertexIndex(result, meshlet, triangleId, i);
-				posMax = math::max(posMax, positions[vid]);
-				posMin = math::min(posMin, positions[vid]);
+				posMax = math::max(posMax, vertices[vid].position);
+				posMin = math::min(posMin, vertices[vid].position);
 			}
 		}
 
@@ -100,6 +110,7 @@ static MeshletContainer buildMeshlets(const std::vector<math::vec3>& positions, 
 		Meshlet newMeshlet{ };
 
 		// Set parent uninitialized.
+		newMeshlet.error = error;
 		newMeshlet.parentError = kMeshletParentErrorUninitialized;
 
 		newMeshlet.info = meshlet;
@@ -115,8 +126,8 @@ static MeshletContainer buildMeshlets(const std::vector<math::vec3>& positions, 
 		newMeshlet.coneApex = math::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]);
 
 		// Current meshlet bouding sphere.
-		newMeshlet.boundingSphere = math::vec4(posCenter, radius);
-		newMeshlet.parentBoundingSphere = newMeshlet.boundingSphere;
+		newMeshlet.clusterPosCenter = clusterPosCenter;
+		newMeshlet.parentPosCenter  = clusterPosCenter;
 
 
 		// 
@@ -140,7 +151,7 @@ struct MeshletEdge
 		std::size_t operator()(const MeshletEdge& edge) const 
 		{
 			static_assert(std::is_same_v<std::size_t, uint64>);
-			return (uint64(edge.first) << 32) | uint64(edge.second);
+			return (uint64(edge.second) << 32) | uint64(edge.first);
 		}
 	};
 
@@ -161,14 +172,21 @@ static inline std::vector<ClusterGroup> buildOneClusterGroup(const MeshletContai
 	return { result };
 }
 
-std::vector<ClusterGroup> buildClusterGroup(const MeshletContainer& ctx)
+uint32 hashPosition(float3 pos, float posFuseThreshold)
+{
+	int3 posInt3 = math::ceil(pos / posFuseThreshold);
+	return crc::crc32((void*)&posInt3, sizeof(posInt3), 0);
+}
+
+ bool buildClusterGroup(const MeshletContainer& ctx, std::vector<ClusterGroup>& outGroup, const std::vector<Vertex>& vertices, float posFuseThreshold)
 {
 	const auto& meshlets = ctx.meshlets;
 
 	if (meshlets.size() < kNumGroupSplitAfterSimplify * kNumMeshletPerGroup)
 	{
 		// No enough meshlet count to group-simplify-split, just return one group.
-		return buildOneClusterGroup(ctx);
+		outGroup = buildOneClusterGroup(ctx);
+		return false;
 	}
 
 	std::unordered_map<MeshletEdge,  std::unordered_set<MeshletIndex>, MeshletEdge::Hash>  edges2Meshlets;
@@ -189,8 +207,8 @@ std::vector<ClusterGroup> buildClusterGroup(const MeshletContainer& ctx)
 					VertexIndex v0 = loadVertexIndex(ctx, meshletInfo, triangleIndex, i);
 					VertexIndex v1 = loadVertexIndex(ctx, meshletInfo, triangleIndex, (i + 1) % 3);
 
-					MeshletEdge edge(v0, v1);
-					check(edge.first != edge.second);
+					MeshletEdge edge(hashPosition(vertices.at(v0).position, posFuseThreshold), hashPosition(vertices.at(v1).position, posFuseThreshold));
+					// (edge.first != edge.second);
 					{
 						edges2Meshlets[edge].insert(meshletIndex);
 						meshlets2Edges[meshletIndex].insert(edge);
@@ -206,11 +224,11 @@ std::vector<ClusterGroup> buildClusterGroup(const MeshletContainer& ctx)
 	if (edges2Meshlets.empty()) 
 	{
 		// No connected meshlet exist, return one group.
-		return buildOneClusterGroup(ctx);
+		outGroup = buildOneClusterGroup(ctx);
+		return false;
 	}
 
 	// Metis group partition.
-	std::vector<ClusterGroup> clusterGroups{};
 	{
 		// Vertex count, from the point of view of METIS, where Meshlet = vertex
 		idx_t vertexCount = meshlets.size();
@@ -243,7 +261,8 @@ std::vector<ClusterGroup> buildClusterGroup(const MeshletContainer& ctx)
 						auto existingEdgeIter = std::find(edgeAdjacency.begin() + edgeAdjOffset, edgeAdjacency.end(), connectedMeshlet);
 						if (existingEdgeIter == edgeAdjacency.end())
 						{
-							checkMsgf(edgeAdjacency.size() == edgeWeights.size(), "edgeWeights and edgeAdjacency must have the same length.");
+							checkMsgf(edgeAdjacency.size() == edgeWeights.size(),
+								"edgeWeights and edgeAdjacency must have the same length.");
 
 							edgeAdjacency.push_back(connectedMeshlet);
 							edgeWeights.push_back(1);
@@ -251,7 +270,8 @@ std::vector<ClusterGroup> buildClusterGroup(const MeshletContainer& ctx)
 						else 
 						{
 							std::ptrdiff_t d = existingEdgeIter - edgeAdjacency.begin();
-							checkMsgf(d >= 0 && d < edgeWeights.size(), "edgeWeights and edgeAdjacency do not have the same length.");
+							checkMsgf(d >= 0 && d < edgeWeights.size(), 
+								"edgeWeights and edgeAdjacency do not have the same length.");
 
 							// More than one meshlet conneted, edge weight plus.
 							edgeWeights[d]++;
@@ -289,15 +309,15 @@ std::vector<ClusterGroup> buildClusterGroup(const MeshletContainer& ctx)
 		);
 		checkMsgf(metisPartResult == METIS_OK, "Graph partitioning failed!");
 
-		clusterGroups.resize(nparts);
+		outGroup.resize(nparts);
 		for (std::size_t i = 0; i < meshlets.size(); i++) 
 		{
 			idx_t partitionNumber = partition[i];
-			clusterGroups[partitionNumber].push_back(i);
+			outGroup[partitionNumber].push_back(i);
 		}
 	}
 
-	return clusterGroups;
+	return true;
 }
 
 // Input one lod level meshlet container, do Group-Merge-Simplify-Split operation.
@@ -306,17 +326,20 @@ void NaniteBuilder::MeshletsGMSS(
 	MeshletContainer& srcCtx,
 	MeshletContainer& outCtx, 
 	float targetError, 
-	uint32 lod,
-	float simplifyScale) const
+	uint32 lod) const
 {
 	// Group.
-	std::vector<ClusterGroup> clusterGroups = buildClusterGroup(srcCtx);
+	std::vector<ClusterGroup> clusterGroups;
+	const float posFuseThreshold = targetError * kGroupMergePosError;
 
-	// It never should be empty.
-	check(!clusterGroups.empty());
+	bool bCanGroup = buildClusterGroup(srcCtx, clusterGroups, m_vertices, posFuseThreshold);
 
-	// Current lod only exist one groups, can't do nothing yet, break.
-	if (clusterGroups.size() == 1)
+	if (bCanGroup)
+	{
+		// It never should be empty.
+		check(!clusterGroups.empty());
+	}
+	else
 	{
 		return;
 	}
@@ -324,6 +347,11 @@ void NaniteBuilder::MeshletsGMSS(
 	// Merge-Simplify-Split.
 	for (const auto& clusterGroup : clusterGroups)
 	{
+		std::vector<uint8> verticesLocked(m_vertices.size());
+		memset(verticesLocked.data(), 0, verticesLocked.size() * sizeof(verticesLocked[0]));
+
+		std::unordered_map<MeshletEdge, uint32, MeshletEdge::Hash> edgeUsedCount;
+
 		// Merge meshlet in one group.
 		std::vector<VertexIndex> groupMergeVertices;
 		{
@@ -334,10 +362,36 @@ void NaniteBuilder::MeshletsGMSS(
 				{
 					for (uint i = 0; i < 3; i++)
 					{
-						groupMergeVertices.push_back(loadVertexIndex(srcCtx, meshlet.info, triangleId, i));
+						VertexIndex v0 = loadVertexIndex(srcCtx, meshlet.info, triangleId, i);
+						groupMergeVertices.push_back(v0);
+
+
+
+						VertexIndex v1 = loadVertexIndex(srcCtx, meshlet.info, triangleId, (i + 1) % 3);
+						MeshletEdge edge(v0, v1);
+						edgeUsedCount[edge] ++;
 					}
 				}
 			}
+		}
+
+		uint32 edgeBorderCount = 0;
+		for (const auto& pair : edgeUsedCount)
+		{
+			if (pair.second == 1) // is edge.
+			{
+				MeshletEdge edge = pair.first;
+				verticesLocked[edge.first]  = 1;
+				verticesLocked[edge.second] = 1;
+
+				edgeBorderCount++;
+			}
+		}
+
+		if (edgeBorderCount == edgeUsedCount.size())
+		{
+			LOG_ERROR("The loose geometry import, please check fuse when import mesh...");
+			continue;
 		}
 
 		// Simplify group.
@@ -345,15 +399,20 @@ void NaniteBuilder::MeshletsGMSS(
 		float simplificationError = 0.f;
 		{
 			const auto targetIndicesCount = groupMergeVertices.size() * kGroupSimplifyThreshold;
-			uint32 options = meshopt_SimplifyLockBorder;
+			uint32 options = meshopt_SimplifySparse | meshopt_SimplifyErrorAbsolute;
 
-			simplifiedVertices.resize(meshopt_simplify(
+			simplifiedVertices.resize(meshopt_simplifyWithAttributes(
 				simplifiedVertices.data(),
 				groupMergeVertices.data(),
 				groupMergeVertices.size(),
-				&m_positions[0].x,
-				m_positions.size(),
-				sizeof(m_positions[0]),
+				&m_vertices[0].position.x,
+				m_vertices.size(),
+				sizeof(m_vertices[0]),
+				NULL,
+				0,
+				NULL,
+				0,
+				verticesLocked.data(),
 				targetIndicesCount,
 				targetError,
 				options,
@@ -361,36 +420,37 @@ void NaniteBuilder::MeshletsGMSS(
 		}
 
 		// Split - half meshlet.
-		if (simplifiedVertices.size() > 0 && simplifiedVertices.size() != groupMergeVertices.size())
+		const auto targetIndicesMin = groupMergeVertices.size() * kGroupSimplifyMinReduce;
+		if (simplifiedVertices.size() > 0 && simplifiedVertices.size() < targetIndicesMin)
 		{
-			float3 posMin = math::vec3( FLT_MAX);
-			float3 posMax = math::vec3(-FLT_MAX);
-
-			for (auto vid : simplifiedVertices)
-			{
-				posMax = math::max(posMax, m_positions[vid]);
-				posMin = math::min(posMin, m_positions[vid]);
-			}
-			const float3 posCenter = 0.5f * (posMax + posMin);
-			const float radius = math::length(posMax - posCenter);
-
 			float passedError = 0.0f;
 			for (uint32 sMid : clusterGroup)
 			{
 				passedError = math::max(passedError, srcCtx.meshlets[sMid].error);
 			}
-			const float relativeError = simplificationError * simplifyScale + passedError;
-
-			// Fill parent infos.
-			for (uint32 sMid : clusterGroup)
+			const float clusterError = simplificationError + passedError;
 			{
-				srcCtx.meshlets[sMid].parentError = relativeError;
-				srcCtx.meshlets[sMid].parentBoundingSphere = math::vec4(posCenter, radius);
-			}
+				float3 posMin = math::vec3( FLT_MAX);
+				float3 posMax = math::vec3(-FLT_MAX);
 
-			// Split new meshlets, and fill in return ctx.
-			MeshletContainer nextMeshletCtx = buildMeshlets(m_positions, simplifiedVertices, m_coneWeight, lod);
-			outCtx.merge(std::move(nextMeshletCtx));
+				for (auto vid : simplifiedVertices)
+				{
+					posMax = math::max(posMax, m_vertices[vid].position);
+					posMin = math::min(posMin, m_vertices[vid].position);
+				}
+
+				const float3 clusterPosCenter = 0.5f * (posMax + posMin);
+				// Fill parent infos.
+				for (uint32 sMid : clusterGroup)
+				{
+					srcCtx.meshlets[sMid].parentError = clusterError;
+					srcCtx.meshlets[sMid].parentPosCenter = clusterPosCenter;
+				}
+
+				// Split new meshlets, and fill in return ctx.
+				MeshletContainer nextMeshletCtx = buildMeshlets(m_vertices, simplifiedVertices, m_coneWeight, lod, clusterError, clusterPosCenter);
+				outCtx.merge(std::move(nextMeshletCtx));
+			}
 		}
 	}
 }
@@ -398,25 +458,22 @@ void NaniteBuilder::MeshletsGMSS(
 MeshletContainer NaniteBuilder::build() const
 {
 	MeshletContainer finalCtx { };
-	checkMsgf(m_indicesLod0.size() % 3 == 0, "Nanite only support triangle mesh!");
+	checkMsgf(m_indices.size() % 3 == 0, "Nanite only support triangle mesh!");
 
 	// Compute simplify scale for later cluster simplify.
-	const float meshOptSimplifyScale = meshopt_simplifyScale(&m_positions[0].x, m_positions.size(), sizeof(m_positions[0]));
+	const float meshOptSimplifyScale = meshopt_simplifyScale(&m_vertices[0].position.x, m_vertices.size(), sizeof(m_vertices[0]));
 
 	// Src mesh input meshlet context.
-	MeshletContainer currentLodCtx = buildMeshlets(m_positions, m_indicesLod0, m_coneWeight, 0);
+	MeshletContainer currentLodCtx = buildMeshlets(m_vertices, m_indices, m_coneWeight, 0, 0.0f, math::vec3(0.0f));
 
 	//
-	return currentLodCtx;
-
-
-	MeshletContainer nextLodCtx    = { };
-	for (uint32 lod = 0; lod < kNaniteMaxLODCount; lod++)
+	MeshletContainer nextLodCtx = { };
+	for (uint32 lod = 0; lod < (kNaniteMaxLODCount - 1); lod++)
 	{
 		// Clear next lod ctx.
 		nextLodCtx = {};
 
-		MeshletsGMSS(currentLodCtx, nextLodCtx, 0.01f, lod + 1, meshOptSimplifyScale);
+		MeshletsGMSS(currentLodCtx, nextLodCtx, kSimplifyError * meshOptSimplifyScale, lod + 1);
 
 		// Current lod ctx already update parent data, so merge to final.
 		finalCtx.merge(std::move(currentLodCtx));
@@ -433,17 +490,47 @@ MeshletContainer NaniteBuilder::build() const
 	return finalCtx;
 }
 
+struct FuseVertex
+{
+	int3 hashPos;
+	Vertex averageVertex;
+};
 
 NaniteBuilder::NaniteBuilder(
-	std::vector<uint32>&& indices, 
-	const std::vector<math::vec3>& positions,
+	std::vector<uint32>&& inputIndices,
+	std::vector<Vertex>&& inputVertices,
+	float fuseDistance,
 	float coneWeight)
-	: m_indicesLod0(indices)
-	, m_positions(positions)
+	: m_indices(inputIndices)
+	, m_vertices(inputVertices)
 	, m_coneWeight(coneWeight)
 {
-	// Optimize vertex cache before all operator.
-	meshopt_optimizeVertexCache(m_indicesLod0.data(), m_indicesLod0.data(), m_indicesLod0.size(), m_positions.size());
+
+
+	const bool bFuse = fuseDistance > 0.0f;
+	if (bFuse)
+	{
+
+	}
+
+
+	size_t indexCount = m_indices.size();
+
+	std::vector<uint32> remap(m_indices.size()); // allocate temporary memory for the remap table
+	size_t vertexCount = meshopt_generateVertexRemap(&remap[0], 
+		m_indices.data(), indexCount, &m_vertices[0], indexCount, sizeof(Vertex));
+
+	std::vector<Vertex> remapVertices(vertexCount);
+	std::vector<uint32> remapIndices(indexCount);
+
+	meshopt_remapVertexBuffer(remapVertices.data(), m_vertices.data(), indexCount, sizeof(Vertex), remap.data());
+	meshopt_remapIndexBuffer(remapIndices.data(), m_indices.data(), indexCount, remap.data());
+
+	meshopt_optimizeVertexCache(remapIndices.data(), remapIndices.data(), indexCount, vertexCount);
+	meshopt_optimizeVertexFetch(remapVertices.data(), remapIndices.data(), indexCount, remapVertices.data(), vertexCount, sizeof(Vertex));
+
+	m_indices = std::move(remapIndices);
+	m_vertices = std::move(remapVertices);
 }
 
 bool Meshlet::isParentSet() const
@@ -470,8 +557,10 @@ GLTFMeshlet Meshlet::getGLTFMeshlet(uint32 dataOffset) const
 
 	m.data.lod = lod;
 	m.data.error = error;
+
 	m.data.parentError = parentError;
-	m.data.parentBoundingSphere = parentBoundingSphere;
+	m.data.parentPosCenter = parentPosCenter;
+	m.data.clusterPosCenter = clusterPosCenter;
 
 	return m;
 }

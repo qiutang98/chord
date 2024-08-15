@@ -4,6 +4,8 @@
 #include <assert.h>
 #include <string.h>
 
+#include <utils/cityhash.h>
+
 // This work is based on:
 // John McDonald, Mark Kilgard. Crack-Free Point-Normal Triangles using Adjacent Edge Normals. 2010
 namespace meshopt

@@ -23,13 +23,11 @@ struct GPUGLTFMeshlet
     float3 coneApex;
     uint lod;
 
-                                 // current bounding sphere compute from posMin & posMax.
-    float4 parentBoundingSphere; // .xyz = 0.5 * (posMax - posMin), .w = lenght(posMax - .xyz)
-
-    float error;
+    float3 clusterPosCenter;
     float parentError;
-    uint pad0;
-    uint pad1;
+
+    float3 parentPosCenter; 
+    float error;
 };
 
 inline uint packVertexCountTriangleCount(uint vertexCount, uint triangleCount) { return (vertexCount & 0xff) | ((triangleCount & 0xff) << 8); }
@@ -48,35 +46,36 @@ struct GLTFPrimitiveBuffer
     float3 posAverage;
     uint vertexCount;
 
-    uint lod0IndexOffset;
-    uint lod0IndexCount;
-    uint lod0MeshletOffset;
-    uint lod0MeshletCount;
 
+    uint meshletOffset;
+    uint meshletCount;
     uint color0Offset; 
-    uint smoothNormalOffset; 
+    uint smoothNormalOffset;
+
     uint textureCoord1Offset;
     uint pad0;
+    uint pad1;
+    uint pad2;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveBuffer);
 
 // Store in GPUScene.
 struct GLTFPrimitiveDatasBuffer
 {
-    uint indicesBuffer;
     uint meshletBuffer;
     uint positionBuffer;
     uint normalBuffer;
-
     uint textureCoord0Buffer;
+
     uint tangentBuffer;
     uint textureCoord1Buffer;
     uint color0Buffer;
-
     uint smoothNormalsBuffer;
+
     uint meshletDataBuffer;
     uint pad1;
     uint pad2;
+    uint pad3;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveDatasBuffer);
 

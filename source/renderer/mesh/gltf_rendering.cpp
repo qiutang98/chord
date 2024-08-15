@@ -100,13 +100,13 @@ namespace chord
         auto& queue = ctx.queue;
         auto& gbuffers = ctx.gbuffers;
         uint32 cameraView = ctx.cameraView;
-        const uint kObjectCount = ctx.gltfObjectCount;
-        const uint kMaxMeshletCount = ctx.perframeCollect->gltfLod0MeshletCount;
+        const uint objectCount = ctx.gltfObjectCount;
+        const uint maxMeshletCount = ctx.perframeCollect->gltfLod0MeshletCount;
 
         ScopePerframeMarker marker(queue, "GLTF: BasicCulling");
 
-        check(kObjectCount == ctx.perframeCollect->gltfPrimitives.size());
-        check(kMaxMeshletCount > 0);
+        check(objectCount == ctx.perframeCollect->gltfPrimitives.size());
+        check(maxMeshletCount > 0);
         queue.checkRecording();
 
         GLTFDrawPushConsts pushTemplate { };
@@ -121,7 +121,7 @@ namespace chord
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         auto meshletCullGroupDetailBuffer = getContext().getBufferPool().createGPUOnly(
             "meshletCullGroupDetailBuffer",
-            sizeof(uvec2) * kMaxMeshletCount,
+            sizeof(uvec2) * maxMeshletCount,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
         queue.clearUAV(meshletCullGroupCountBuffer);
@@ -135,7 +135,7 @@ namespace chord
                 "GLTFBasePass: ObjectCull",
                 getContext().computePipe(computeShader, "GLTFBasePassPipe: ObjectCull"),
                 push,
-                math::uvec3(divideRoundingUp(kObjectCount, 64U), 1, 1));
+                math::uvec3(divideRoundingUp(objectCount, 64U), 1, 1));
         }
 
         // #1. Fill meshlet culling param.
@@ -166,7 +166,7 @@ namespace chord
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         auto drawMeshletCmdBuffer = getContext().getBufferPool().createGPUOnly(
             "drawMeshletCmdBuffer",
-            sizeof(GLTFMeshDrawCmd) * kMaxMeshletCount,
+            sizeof(GLTFMeshDrawCmd) * maxMeshletCount,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
         queue.clearUAV(drawMeshletCountBuffer);
         {
@@ -266,7 +266,7 @@ namespace chord
     {
         auto& gbuffers = renderCtx.gbuffers;
         auto& queue = renderCtx.queue;
-        const uint kMaxMeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
+        const uint maxMeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
         GLTFDrawPushConsts push = getGLTFDrawPushConsts(renderCtx);
 
@@ -302,7 +302,7 @@ namespace chord
             pipeline,
             RTs,
             cmdBuffer, 0, countBuffer, 0,
-            kMaxMeshletCount, sizeof(GLTFMeshDrawCmd),
+            maxMeshletCount, sizeof(GLTFMeshDrawCmd),
             [&](graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)
             {
                 vkCmdSetCullMode(cmd, cullMode);
@@ -317,7 +317,7 @@ namespace chord
     {
         auto& gbuffers = renderCtx.gbuffers;
         auto& queue = renderCtx.queue;
-        const uint kMaxMeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
+        const uint maxMeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
         auto filterCmd = fillIndirectDispatchCmd(renderCtx, "Pipeline filter prepare.", countBuffer);
         for (uint alphaMode = 0; alphaMode <= 1; alphaMode++) // alpha mode == 3 meaning blend.
@@ -330,7 +330,7 @@ namespace chord
                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
                 auto cmdBufferStage1 = getContext().getBufferPool().createGPUOnly(
                     "CmdBufferStage#1",
-                    sizeof(GLTFMeshDrawCmd) * kMaxMeshletCount,
+                    sizeof(GLTFMeshDrawCmd) * maxMeshletCount,
                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
                 queue.clearUAV(countBufferStage1);
@@ -380,7 +380,7 @@ namespace chord
             PoolBufferGPUOnlyRef countBufferStage1;
             PoolBufferGPUOnlyRef cmdBufferStage1;
             {
-                const uint kMaxMeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
+                const uint maxMeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
                 auto meshletCullCmdBuffer = fillIndirectDispatchCmd(renderCtx, "meshletCullCmdBuffer Stage#0", renderCtx.postBasicCullingCtx.meshletCountBuffer);
                 auto countBuffer = getContext().getBufferPool().createGPUOnly(
@@ -389,7 +389,7 @@ namespace chord
                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
                 auto drawMeshletCmdBuffer = getContext().getBufferPool().createGPUOnly(
                     "CmdBufferStage#0",
-                    sizeof(GLTFMeshDrawCmd) * kMaxMeshletCount,
+                    sizeof(GLTFMeshDrawCmd) * maxMeshletCount,
                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
                 countBufferStage1 = getContext().getBufferPool().createGPUOnly(
@@ -398,7 +398,7 @@ namespace chord
                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
                 cmdBufferStage1 = getContext().getBufferPool().createGPUOnly(
                     "CmdBufferStage#1",
-                    sizeof(GLTFMeshDrawCmd) * kMaxMeshletCount,
+                    sizeof(GLTFMeshDrawCmd) * maxMeshletCount,
                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
                 queue.clearUAV(countBuffer);
@@ -447,7 +447,7 @@ namespace chord
 
         auto& gbuffers = renderCtx.gbuffers;
         auto& queue = renderCtx.queue;
-        const uint kMaxMeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
+        const uint maxMeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
         // Stage #1.
         auto meshletCullCmdBuffer = fillIndirectDispatchCmd(renderCtx, "meshletCullCmdBuffer Stage#1", countBufferStage1);
@@ -458,7 +458,7 @@ namespace chord
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         auto drawMeshletCmdBuffer = getContext().getBufferPool().createGPUOnly(
             "CmdBufferStage#1 drawcmd",
-            sizeof(GLTFMeshDrawCmd) * kMaxMeshletCount,
+            sizeof(GLTFMeshDrawCmd) * maxMeshletCount,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
         queue.clearUAV(countBuffer);

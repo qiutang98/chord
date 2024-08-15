@@ -7,7 +7,7 @@ struct GLTFMeshDrawCmd
     uint firstVertex;
     uint firstInstance;
     uint objectId;
-    uint packLodMeshlet;
+    uint meshletId;
     uint pipelineBin;
 };
 
@@ -107,25 +107,18 @@ void perobjectCullingCS(uint threadId : SV_DispatchThreadID)
             return;
         }
     }
-
-    // LOD selected. 
-    uint selectedLod = 0;
-    if (shaderHasFlag(pushConsts.switchFlags, kLODEnableBit))
-    {
-        
-    }
     
-    const uint dispatchCullGroupCount = (primitiveInfo.lod0MeshletCount + 63) / 64;
+    const uint dispatchCullGroupCount = (primitiveInfo.meshletCount + 63) / 64;
     const uint meshletBaseOffset = interlockedAddUint(pushConsts.meshletCullGroupCountId, dispatchCullGroupCount);
 
     RWByteAddressBuffer meshletCullGroupBuffer = RWByteAddressBindless(pushConsts.meshletCullGroupDetailId);
     for (uint i = 0; i < dispatchCullGroupCount; i ++)
     {
         const uint id = i + meshletBaseOffset;
-        const uint meshletBaseIndex = primitiveInfo.lod0MeshletOffset + i * 64;
+        const uint meshletBaseIndex = primitiveInfo.meshletOffset + i * 64;
 
         // Fill meshlet dispatch param, pack to 64.
-        uint2 result = uint2(threadId, packLodMeshlet(selectedLod, meshletBaseIndex));
+        uint2 result = uint2(threadId, meshletBaseIndex);
         meshletCullGroupBuffer.TypeStore(uint2, id, result);
     }
 }
@@ -153,12 +146,7 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
     const uint2 meshletGroup =  BATL(uint2, pushConsts.meshletCullGroupDetailId, groupID);
 
     uint objectId = meshletGroup.x;
-    uint selectedLod;
-    uint meshletId;
-    {
-        unpackLodMeshlet(meshletGroup.y, selectedLod, meshletId);
-        meshletId += groupThreadID;
-    }
+    uint meshletId = groupThreadID + meshletGroup.y;
 
     const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
     const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
@@ -166,7 +154,7 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
     float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
 
     // Skip out of range meshlt. 
-    if (meshletId >= primitiveInfo.lod0MeshletOffset + primitiveInfo.lod0MeshletCount)
+    if (meshletId >= primitiveInfo.meshletOffset + primitiveInfo.meshletCount)
     {
         return;
     }
@@ -174,15 +162,50 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
     const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
     const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
 
-    if (pushConsts.debugFlags != meshlet.lod)
+    const float3 posMin    = meshlet.posMin;
+    const float3 posMax    = meshlet.posMax;
+    const float3 posCenter = 0.5 * (posMin + posMax);
+    const float3 extent    = posMax - posCenter;
+    
+    float4x4 localToView = mul(perView.translatedWorldToView, localToTranslatedWorld);
+    float4x4 localToClip = mul(perView.translatedWorldToClip, localToTranslatedWorld);
+    if (shaderHasFlag(pushConsts.switchFlags, kLODEnableBit))
     {
-        return;
+        const float kErrorPixelThreshold = 1.0f; // One pixel error.
+
+        const bool bFinalLod = (meshlet.parentError > 3e38f);
+        const bool bFirstlOD = (meshlet.lod == 0);
+        if (bFirstlOD && bFinalLod)
+        {
+            // Only exist one lod so always visible.
+        }
+        else
+        {
+            // Selected lod by error project. 
+            if (!bFinalLod)
+            {
+                float4 sphere = transformSphere(float4(meshlet.parentPosCenter, meshlet.parentError), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
+                float parentError = projectSphereToScreen(sphere, perView.renderDimension.y, perView.camMiscInfo.x);
+
+                if (parentError <= kErrorPixelThreshold) { return; }
+            }
+
+            if (!bFirstlOD)
+            {
+                float4 sphere = transformSphere(float4(meshlet.clusterPosCenter, meshlet.error), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
+                float error = projectSphereToScreen(sphere, perView.renderDimension.y, perView.camMiscInfo.x);
+
+                if (error > kErrorPixelThreshold) { return; }
+            }
+        }
+    }
+    else
+    {
+        // Only draw lod #0 if no lod enable. 
+        if (meshlet.lod != 0) { return; }
     }
 
-    const float3 posMin = meshlet.posMin;
-    const float3 posMax = meshlet.posMax;
-    const float3 posCenter = (posMin + posMax) * 0.5;
-    const float3 extent = posMax - posCenter;
+
 
     // Load material info.
     const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
@@ -217,7 +240,7 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         drawCmd.firstVertex    = 0;
         drawCmd.firstInstance  = drawCmdId;
         drawCmd.objectId       = objectId;
-        drawCmd.packLodMeshlet = packLodMeshlet(selectedLod, meshletId);
+        drawCmd.meshletId      = meshletId;
         drawCmd.pipelineBin    = packPipelineState(materialInfo.bTwoSided, materialInfo.alphaMode);
 
         BATS(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, drawCmdId, drawCmd);
@@ -250,12 +273,8 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
     }
 
     const GLTFMeshDrawCmd drawCmd = BATL(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, threadId);
-    uint objectId = drawCmd.objectId;
-    uint selectedLod;
-    uint meshletId;
-    {
-        unpackLodMeshlet(drawCmd.packLodMeshlet, selectedLod, meshletId);
-    }
+    uint objectId  = drawCmd.objectId;
+    uint meshletId = drawCmd.meshletId;
 
     //
     const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
@@ -347,7 +366,7 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
         BATS(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId_1, drawCmdId, visibleDrawCmd);
 
     #if DIM_PRINT_DEBUG_BOX
-        uint packColor = shaderPackColor(kLODLevelDebugColor[selectedLod]);
+        uint packColor = simpleHashColorPack(meshletId);
         LineDrawVertex worldPosExtents[8];
         for (uint i = 0; i < 8; i ++)
         {
@@ -384,12 +403,8 @@ void fillPipelineDrawParamCS(uint threadId : SV_DispatchThreadID)
     }
 
     const GLTFMeshDrawCmd drawCmd = BATL(GLTFMeshDrawCmd, pushConsts.drawedMeshletCmdId, threadId);
-    uint objectId = drawCmd.objectId;
-    uint selectedLod;
-    uint meshletId;
-    {
-        unpackLodMeshlet(drawCmd.packLodMeshlet, selectedLod, meshletId);
-    }
+    uint objectId  = drawCmd.objectId;
+    uint meshletId = drawCmd.meshletId;
 
     //
     const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
@@ -433,12 +448,8 @@ void visibilityPassVS(
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
     const GPUBasicData scene = perView.basicData;
 
-    uint objectId = drawCmd.objectId;
-    uint selectedLod;
-    uint meshletId;
-    {
-        unpackLodMeshlet(drawCmd.packLodMeshlet, selectedLod, meshletId);
-    }
+    uint objectId  = drawCmd.objectId;
+    uint meshletId = drawCmd.meshletId;
 
     const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
     const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
@@ -446,55 +457,46 @@ void visibilityPassVS(
     const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
     const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
 
-    ByteAddressBuffer indicesDataBuffer = ByteAddressBindless(primitiveDataInfo.indicesBuffer);
     ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
 
     uint verticesCount = unpackVertexCount(meshlet.vertexTriangleCount);
-    uint triangleCount = unpackTriangleCount(meshlet.vertexTriangleCount);
 
     ByteAddressBuffer meshletDataBuffer = ByteAddressBindless(primitiveDataInfo.meshletDataBuffer);
 
-    uint triangleIndicesSampleOffset = (meshlet.dataOffset + verticesCount + vertexId / 3) * 4;
+    const uint triangleId = vertexId / 3;
+
+    uint triangleIndicesSampleOffset = (meshlet.dataOffset + verticesCount + triangleId) * 4;
     uint indexTri = meshletDataBuffer.Load(triangleIndicesSampleOffset);
 
-    uint offsetBit = (vertexId % 3) * 8;
-    uint ss = (indexTri >> offsetBit) & 0xff;
-
-// printf("vertexid: %d, offset: %d, vertex tri: %d, %d indexTri %d, unpack %d.", vertexId, meshlet.dataOffset,  verticesCount, triangleCount, indexTri, ss);
-
-    uint verticesSampleOffset = (meshlet.dataOffset + ss) * 4;
+    uint verticesSampleOffset = (meshlet.dataOffset + ((indexTri >> ((vertexId % 3) * 8)) & 0xff)) * 4;
     uint verticesIndex = meshletDataBuffer.Load(verticesSampleOffset);
 
     const uint indicesId = primitiveInfo.vertexOffset + verticesIndex;
-
-// printf("verticesSampleOffset: %d, verticesIndex: %d, indicesId: %d", verticesSampleOffset, verticesIndex, indicesId);
 
     // 
     float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
     float4x4 translatedWorldToClip = perView.translatedWorldToClip;
 
     const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
-//  printf("pos: %f, %f, %f", positionLS.x, positionLS.y, positionLS.z);
-
     const float4 positionRS = mul(localToTranslatedWorld, float4(positionLS, 1.0));
 
     output.positionHS = mul(translatedWorldToClip, positionRS);
     
 #if DIM_MASKED_MATERIAL
     ByteAddressBuffer uvDataBuffer = ByteAddressBindless(primitiveDataInfo.textureCoord0Buffer);
-    output.uv = uvDataBuffer.TypeLoad(float2, indicesId);//
+    output.uv = uvDataBuffer.TypeLoad(float2, indicesId); //
 #endif
 
-    output.id.x = encodeObjectInfo((uint)(EShadingType::GLTF_MetallicRoughnessPBR), objectId);
-    output.id.y = meshletId;
+    output.id.x = encodeShadingMeshlet((uint)(EShadingType::GLTF_MetallicRoughnessPBR), meshletId);
+    output.id.y = encodeTriangleIdObjectId(triangleId, objectId);
 } 
 
 void visibilityPassPS(in VisibilityPassVS2PS input, out uint2 outId : SV_Target0)
 {
 #if DIM_MASKED_MATERIAL
-    uint shadingType;
+    uint triangleId;
     uint objectId;
-    decodeObjectInfo(input.id.x, shadingType, objectId);
+    decodeTriangleIdObjectId(input.id.y, triangleId, objectId);
 
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
     const GPUBasicData scene = perView.basicData;

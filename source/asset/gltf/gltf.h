@@ -168,10 +168,8 @@ namespace chord
 		AssetSaveInfo material;
 
 		//
-		uint32 lod0IndexOffset   = 0;
-		uint32 lod0IndexCount    = 0;
-		uint32 lod0MeshletOffset = 0;
-		uint32 lod0MeshletCount  = 0;
+		uint32 meshletOffset = 0;
+		uint32 meshletCount  = 0;
 
 		uint32 vertexOffset = 0; // used for required attributes.
 		uint32 vertexCount  = 0;
@@ -224,8 +222,6 @@ namespace chord
 		// Data from primitive accessor.
 		struct PrimitiveDatas
 		{
-			std::vector<uint32> indices;
-
 			// Meshlet need to push to gpu buffer directly, take care of size pad.
 			std::vector<GLTFMeshlet> meshlets;
 			std::vector<uint32> meshletDatas;
@@ -245,8 +241,7 @@ namespace chord
 			{
 				auto sizeofV = [](const auto& a) { return a.size() * sizeof(a[0]); };
 				return
-					  sizeofV(indices)
-					+ sizeofV(positions)
+					  sizeofV(positions)
 					+ sizeofV(normals)
 					+ sizeofV(texcoords0)
 					+ sizeofV(tangents)

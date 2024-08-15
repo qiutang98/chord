@@ -128,6 +128,8 @@ struct PerframeCameraView
     float4 frustumPlaneLastFrame[6];
 
     float4 renderDimension; //  .xy is width and height, .zw is inverse of .xy.
+
+    float4 camMiscInfo; // .x = fovy,
 };
 CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);
 
@@ -138,6 +140,8 @@ struct GPUObjectBasicData
     float4x4 translatedWorldToLocal; // inverse of localToTranslatedWorld
 
     float4x4 localToTranslatedWorldLastFrame;
+
+    float4 scaleExtractFromMatrix; // .xyz is scale, .w is largest abs(.xyz)
 };
 
 struct GPUObjectGLTFPrimitive
@@ -196,8 +200,11 @@ inline float4 shaderUnpackColor(uint packData)
 // HZB mipmap count max 12, meaning from 4096 - 1.
 #define kHZBMaxMipmapCount 12
 
-// 25 bit for max object id count.
-#define kMaxObjectCount 0x1FFFFFF
+// 24 bit for max object id count.
+#define kMaxObjectCount 0xFFFFFF
+
+// 25 bit for max meshlet id count.
+#define kMaxMeshletCount 0x1FFFFFF
 
 // Max shading type is 127.
 #define kMaxShadingType  0x7F
@@ -218,11 +225,15 @@ enum class EShadingType
 // Nanite config: fit mesh shader.
 #define kNaniteMeshletMaxVertices 255
 #define kNaniteMeshletMaxTriangle 128
-#define kNaniteMaxLODCount        25
+#define kNaniteMaxLODCount        8
 
 struct NaniteShadingMeshlet
 {
     uint shadingPack; // ShadingType: 8bit, Material Id: 24bit.
 };
+
+
+ // smallest such that 1.0 + kEpsilon != 1.0
+#define kEpsilon 1.192092896e-07F
 
 #endif // !SHADER_BASE_H

@@ -9,15 +9,10 @@ namespace chord
 	struct GLTFAssetImportConfig : public IAssetImportConfig
 	{
 		bool bGenerateSmoothNormal = false;
+		bool bFuse = false;
+		float fuseRelativeDistance = 1e-5f;
 
 		float meshletConeWeight = 0.7f;
-
-		bool bGenerateLOD              = true;
-		float lodBase                  = 10.0f; // Rendering.
-		float lodStep                  = 1.5f;  // Rendering.
-		float lodScreenPercentageScale = 1.0f;  // Rendering
-		float lodStepReduceFactor      = 0.8f;
-		float lodTargetError           = 5e-3f;
 	};
 	using GLTFAssetImportConfigRef = std::shared_ptr<GLTFAssetImportConfig>;
 	class GLTFAsset;
@@ -53,7 +48,6 @@ namespace chord
 			return hash();
 		}
 
-		std::unique_ptr<ComponentBuffer> indices = nullptr;
 		std::unique_ptr<ComponentBuffer> positions = nullptr;
 		std::unique_ptr<ComponentBuffer> normals = nullptr;
 		std::unique_ptr<ComponentBuffer> uv0s = nullptr;

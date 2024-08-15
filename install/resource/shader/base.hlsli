@@ -3,6 +3,11 @@
 
 #include "base.h"
 
+#define kPI 3.14159265358979323846
+#define kInvertPI (1.0 / kPI)
+#define KPIOver2  (kPI / 2.0)
+#define KPIOver4  (kPI / 4.0)
+
 /**
     Gather pattern
 
@@ -70,17 +75,6 @@ bool isUVzValid(float3 UVz)
     return all(UVz > 0.0) && all(UVz < 1.0);
 }
 
-uint packLodMeshlet(uint lod, uint meshlet)
-{
-    return (lod & 0xF) | ((meshlet & 0xFFFFFFF) << 4);
-}
-
-void unpackLodMeshlet(uint packData, out uint lod, out uint meshlet)
-{
-    lod     = packData & 0xF;
-    meshlet = packData >> 4;
-}
-
 static float3 kExtentApplyFactor[8] =
 {
     float3( 1,  1,  1), // Extent first.
@@ -92,6 +86,38 @@ static float3 kExtentApplyFactor[8] =
     float3(-1, -1,  1),
     float3(-1,  1, -1),
 };
+
+float4 projectScreen(float3 centerLS, float3 extentLS, float4x4 projectMatrix)
+{
+    float2 UVs[8];  
+
+    [unroll(8)] 
+    for (uint k = 0; k < 8; k ++)
+    {
+        const float3 extentPos = centerLS + extentLS * kExtentApplyFactor[k];
+        UVs[k] = projectPosToUVz(extentPos, projectMatrix).xy;
+    }
+
+    float4 result = UVs[0].xyxy;
+    [unroll(7)] 
+    for(uint j = 1; j < 8; j ++)
+    {
+        result.xy = min(result.xy, UVs[j]);
+        result.zw = max(result.zw, UVs[j]);
+    }
+
+    return result;
+}
+
+float4 transformSphere(float4 sphere, float4x4 nonPerspectiveProj, float maxScaleAbs) 
+{
+    float4 result;
+
+    result.xyz = mul(nonPerspectiveProj, float4(sphere.xyz, 1.0)).xyz;
+    result.w = maxScaleAbs * sphere.w;
+
+    return result;
+}
 
 // Return true if culled. 
 bool frustumCulling(float4 planesRS[6], float3 centerLS, float3 extentLS, float4x4 localToTranslatedWorld)
@@ -204,15 +230,26 @@ uint2 convert2d(uint id, uint dim)
     return uint2(id % 2, id / 2);
 }
 
-uint encodeObjectInfo(uint shadingType, uint objectId)
+uint encodeShadingMeshlet(uint shadingType, uint meshletId)
 {
-    return ((objectId & kMaxObjectCount) << 8) | (shadingType & kMaxShadingType);
+    return ((meshletId & kMaxMeshletCount) << 7) | (shadingType & kMaxShadingType);
 }
 
-void decodeObjectInfo(uint pack, out uint shadingType, out uint objectId)
+void decodeShadingMeshlet(uint pack, out uint shadingType, out uint meshletId)
 {
     shadingType = (pack & kMaxShadingType);
-    objectId = (pack >> 8) & kMaxObjectCount;
+    meshletId = (pack >> 7) & kMaxMeshletCount;
+}
+
+uint encodeTriangleIdObjectId(uint triangleId, uint objectId)
+{
+    return ((objectId & kMaxObjectCount) << 8) | (triangleId & 0xFF);
+}
+
+void decodeTriangleIdObjectId(uint pack, out uint triangleId, out uint objectId)
+{
+    triangleId = (pack & 0xFF);
+    objectId   = (pack >> 8) & kMaxObjectCount;
 }
 
 uint4 getShadingType4(uint4 pack4)
@@ -274,6 +311,17 @@ Barycentrics calculateTriangleBarycentrics(float2 PixelClip, float4 PointClip0, 
 	barycentrics.ddy = (G_dy * H - G * H_dy) * (RcpH * RcpH) * (-2.0f * ViewInvSize.y);
 
 	return barycentrics;
+}
+
+// https://stackoverflow.com/questions/21648630/radius-of-projected-sphere-in-screen-space
+// return radius of pixel of current sphere project result.
+float projectSphereToScreen(float4 sphere, float height, float fovy)
+{
+    float halfFovy = 0.5 * fovy;
+
+    const float d2 = dot(sphere.xyz, sphere.xyz);
+    const float r = sphere.w;
+    return height * 0.5 / tan(halfFovy) * r / sqrt(d2 - r * r);
 }
 
 #endif // !SHADER_BASE_HLSLI

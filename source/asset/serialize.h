@@ -32,8 +32,8 @@ registerPODClassMember(GLTFMeshlet)
 	ar(data.coneCutOff);
 	ar(data.coneAxis);
 	ar(data.coneApex);
-
-	ar(data.parentBoundingSphere);
+	ar(data.parentPosCenter);
+	ar(data.clusterPosCenter);
 	ar(data.error);
 	ar(data.parentError);
 	ar(data.lod);
@@ -45,7 +45,7 @@ registerPODClassMember(GLTFPrimitive)
 	ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
 	ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
 
-	ar(lod0IndexOffset, lod0IndexCount, lod0MeshletOffset, lod0MeshletCount);
+	ar(meshletOffset, meshletCount);
 }
 
 registerPODClassMember(GLTFMesh)
@@ -65,7 +65,6 @@ registerPODClassMember(GLTFScene)
 
 registerPODClassMember(GLTFBinary)
 {
-	ar(primitiveData.indices);
 	ar(primitiveData.positions);
 	ar(primitiveData.normals);
 	ar(primitiveData.texcoords0);

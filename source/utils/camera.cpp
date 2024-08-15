@@ -25,6 +25,8 @@ namespace chord
 		outUB.frustumPlane[3] = frustum.planes[3];
 		outUB.frustumPlane[4] = frustum.planes[4];
 		outUB.frustumPlane[5] = frustum.planes[5];
+
+		outUB.camMiscInfo.x = m_fovy;
     }
 
 	Frustum ICamera::computeRelativeWorldFrustum() const
