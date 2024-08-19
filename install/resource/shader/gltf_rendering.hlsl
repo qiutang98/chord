@@ -182,11 +182,11 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         else
         {
             // Selected lod by error project. 
+            float parentError = 0.0;
             if (!bFinalLod)
             {
                 float4 sphere = transformSphere(float4(meshlet.parentPosCenter, meshlet.parentError), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
-                float parentError = projectSphereToScreen(sphere, perView.renderDimension.y, perView.camMiscInfo.x);
-
+                parentError = projectSphereToScreen(sphere, perView.renderDimension.y, perView.camMiscInfo.x);
                 if (parentError <= kErrorPixelThreshold) { return; }
             }
 
@@ -194,9 +194,11 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
             {
                 float4 sphere = transformSphere(float4(meshlet.clusterPosCenter, meshlet.error), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
                 float error = projectSphereToScreen(sphere, perView.renderDimension.y, perView.camMiscInfo.x);
-
                 if (error > kErrorPixelThreshold) { return; }
             }
+
+            // A terrible fact: sometimes projected parent error is smaller than current projected error. 
+            //
         }
     }
     else
@@ -204,8 +206,6 @@ void meshletCullingCS(uint groupID : SV_GroupID, uint groupThreadID : SV_GroupTh
         // Only draw lod #0 if no lod enable. 
         if (meshlet.lod != 0) { return; }
     }
-
-
 
     // Load material info.
     const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);

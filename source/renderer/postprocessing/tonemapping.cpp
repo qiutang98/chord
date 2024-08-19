@@ -8,7 +8,6 @@ namespace chord
 	using namespace graphics;
 	PRIVATE_GLOBAL_SHADER(TonemappingPS, "resource/shader/tonemapping.hlsl", "mainPS", EShaderStage::Pixel);
 
-
 	void chord::tonemapping(GraphicsQueue& queue, PoolTextureRef srcImage, PoolTextureRef outImage)
 	{
 		RenderTargets RTs { };

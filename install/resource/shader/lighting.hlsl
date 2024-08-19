@@ -94,7 +94,7 @@ float3 gltfMetallicRoughnessPBR(uint objectId, uint meshletId, uint triangleId, 
     if(meshlet.lod == 5) { return float3(0.0, 1.0, 0.0); }
 #endif
     // return sampleColor.xyz;
-    return simpleHashColor(triangleId);
+    // return simpleHashColor(triangleId);
     return simpleHashColor(meshletId);// sampleColor.xyz;
 }
 

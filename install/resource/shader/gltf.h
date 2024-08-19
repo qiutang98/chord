@@ -9,6 +9,18 @@
 
 // id = ~0 if no exist.
 
+struct GPUBVHNode
+{
+    float4 sphere;
+
+    uint left;
+    uint right;
+    uint leafMeshletOffset;
+    uint leafMeshletCount; 
+
+    uint bvhNodeCount;
+};
+
 struct GPUGLTFMeshlet
 {
     float3 posMin;
@@ -46,16 +58,15 @@ struct GLTFPrimitiveBuffer
     float3 posAverage;
     uint vertexCount;
 
-
     uint meshletOffset;
-    uint meshletCount;
     uint color0Offset; 
     uint smoothNormalOffset;
-
     uint textureCoord1Offset;
+
+    uint bvhNodeOffset;
+    uint bvhMeshletIndicesOffset;
     uint pad0;
     uint pad1;
-    uint pad2;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveBuffer);
 
@@ -73,8 +84,8 @@ struct GLTFPrimitiveDatasBuffer
     uint smoothNormalsBuffer;
 
     uint meshletDataBuffer;
-    uint pad1;
-    uint pad2;
+    uint bvhNodeBuffer;
+    uint bvhMeshletIndicesBuffer;
     uint pad3;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveDatasBuffer);

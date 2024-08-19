@@ -34,7 +34,7 @@ namespace chord::graphics
 		checkVkResult(vmaCreateBuffer(getVMA(), &m_createInfo, &vmaCreateInfo, &m_buffer, &m_allocation, &m_vmaAllocationInfo));
 
 		GPUResource::setSize(createInfo.size); // Don't use allocate size.
-		rename(name);
+		rename(name, true);
 
 		sTotalGPUBufferDeviceSize += getSize();
 		if (bGraphicsBufferLifeLogTraceEnable)
@@ -61,9 +61,9 @@ namespace chord::graphics
 		}
 	}
 
-	void GPUBuffer::rename(const std::string& name)
+	void GPUBuffer::rename(const std::string& name, bool bForce)
 	{
-		if (setName(name))
+		if (setName(name, bForce))
 		{
 			setResourceName(VK_OBJECT_TYPE_BUFFER, (uint64)m_buffer, getName().c_str());
 		}

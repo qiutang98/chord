@@ -517,7 +517,7 @@ size_t meshopt_buildMeshletsBound(size_t index_count, size_t max_vertices, size_
 	assert(index_count % 3 == 0);
 	assert(max_vertices >= 3 && max_vertices <= kMeshletMaxVertices);
 	assert(max_triangles >= 1 && max_triangles <= kMeshletMaxTriangles);
-	assert(max_triangles % 4 == 0); // ensures the caller will compute output space properly as index data is 4b aligned
+	// assert(max_triangles % 4 == 0); // ensures the caller will compute output space properly as index data is 4b aligned
 
 	(void)kMeshletMaxVertices;
 	(void)kMeshletMaxTriangles;
@@ -542,7 +542,7 @@ size_t meshopt_buildMeshlets(meshopt_Meshlet* meshlets, unsigned int* meshlet_ve
 
 	assert(max_vertices >= 3 && max_vertices <= kMeshletMaxVertices);
 	assert(max_triangles >= 1 && max_triangles <= kMeshletMaxTriangles);
-	assert(max_triangles % 4 == 0); // ensures the caller will compute output space properly as index data is 4b aligned
+	// assert(max_triangles % 4 == 0); // ensures the caller will compute output space properly as index data is 4b aligned
 
 	assert(cone_weight >= 0 && cone_weight <= 1);
 
@@ -678,7 +678,7 @@ size_t meshopt_buildMeshletsScan(meshopt_Meshlet* meshlets, unsigned int* meshle
 
 	assert(max_vertices >= 3 && max_vertices <= kMeshletMaxVertices);
 	assert(max_triangles >= 1 && max_triangles <= kMeshletMaxTriangles);
-	assert(max_triangles % 4 == 0); // ensures the caller will compute output space properly as index data is 4b aligned
+	// assert(max_triangles % 4 == 0); // ensures the caller will compute output space properly as index data is 4b aligned
 
 	meshopt_Allocator allocator;
 

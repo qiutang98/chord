@@ -222,9 +222,11 @@ enum class EShadingType
 #define kLightingType_None 0
 #define kLightingType_GLTF_MetallicRoughnessPBR 1
 
+#define kWaveSize 32
+
 // Nanite config: fit mesh shader.
-#define kNaniteMeshletMaxVertices 255
-#define kNaniteMeshletMaxTriangle 128
+#define kNaniteMeshletMaxVertices 64
+#define kNaniteMeshletMaxTriangle 126
 #define kNaniteMaxLODCount        8
 
 struct NaniteShadingMeshlet
@@ -235,5 +237,19 @@ struct NaniteShadingMeshlet
 
  // smallest such that 1.0 + kEpsilon != 1.0
 #define kEpsilon 1.192092896e-07F
+
+// 
+#define kUnvalidIdUint32 0xFFFFFFFFu
+
+// Draw command for gltf meshlet, used for vertex shader fallback.
+struct GLTFMeshletDrawCmd
+{
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+    uint objectId;
+    uint meshletId;
+};
 
 #endif // !SHADER_BASE_H

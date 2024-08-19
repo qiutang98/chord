@@ -47,7 +47,7 @@ namespace chord::graphics
 		const auto& getSize() const { return m_size; }
 		const std::string& getName() const { return m_flattenName; }
 
-		virtual void rename(const std::string& name) = 0;
+		virtual void rename(const std::string& name, bool bForce) = 0;
 
 	protected:
 		// Update memory size, should only call once when allocate memory.
@@ -56,7 +56,7 @@ namespace chord::graphics
 			m_size = size;
 		}
 
-		bool setName(const std::string& name);
+		bool setName(const std::string& name, bool bForce);
 
 	private:
 		// Device size.
@@ -115,7 +115,7 @@ namespace chord::graphics
 
 		virtual ~GPUTexture();
 
-		virtual void rename(const std::string& name) override;
+		virtual void rename(const std::string& name, bool bForce) override;
 
 		operator VkImage() const
 		{
@@ -204,7 +204,7 @@ namespace chord::graphics
 			return m_vmaAllocationInfo;
 		}
 
-		virtual void rename(const std::string& name) override;
+		virtual void rename(const std::string& name, bool bForce) override;
 
 		operator VkBuffer() const
 		{

@@ -54,6 +54,21 @@ namespace chord
 		}
 	};
 
+	extern bool shouldRenderGLTF(GLTFRenderContext& renderCtx);
+	extern void instanceCulling(GLTFRenderContext& ctx);
+
+	namespace detail
+	{
+		extern graphics::PoolBufferGPUOnlyRef fillIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, graphics::PoolBufferGPUOnlyRef countBuffer);
+	
+		using CountAndCmdBuffer = std::pair<graphics::PoolBufferGPUOnlyRef, graphics::PoolBufferGPUOnlyRef>;
+		extern CountAndCmdBuffer hzbCulling(GLTFRenderContext& renderCtx, bool bFirstStage, graphics::PoolBufferGPUOnlyRef inCountBuffer, graphics::PoolBufferGPUOnlyRef inCmdBuffer, CountAndCmdBuffer& outBuffer);
+	
+		extern CountAndCmdBuffer filterPipeForVisibility(bool bMeshShader, GLTFRenderContext& renderCtx, graphics::PoolBufferGPUOnlyRef dispatchCmd, graphics::PoolBufferGPUOnlyRef inCmdBuffer, graphics::PoolBufferGPUOnlyRef inCountBuffer, uint alphaMode, uint bTwoSide);
+	}
+
+
+
 	// Return true if need invoke stage1.
 	// Return false no need stage1.
 	extern bool gltfVisibilityRenderingStage0(GLTFRenderContext& renderCtx);

@@ -61,7 +61,7 @@ namespace chord
 
 		const auto& meshes = m_gltfAsset->getMeshes().at(m_gltfMeshId);
 
-		uint meshletCount = 0;
+		uint lod0MeshletCount = 0;
 		for (uint32 primitiveId = 0; primitiveId < meshes.primitives.size(); primitiveId++)
 		{
 			auto materialProxy = materialComp->getProxy(primitiveId);
@@ -69,11 +69,11 @@ namespace chord
 			templatePrimitive.GLTFPrimitiveDetail = m_gltfGPU->getGPUScenePrimitiveDetailId(m_gltfMeshId, primitiveId);
 			templatePrimitive.GLTFMaterialData = materialProxy->getGPUSceneId();
 
-			meshletCount += meshes.primitives[primitiveId].meshletCount;
+			lod0MeshletCount += meshes.primitives[primitiveId].lod0meshletCount;
 			collector.gltfPrimitives.push_back(templatePrimitive);
 		}
 
-		collector.gltfLod0MeshletCount.fetch_add(meshletCount);
+		collector.gltfLod0MeshletCount.fetch_add(lod0MeshletCount);
 	}
 
 	bool GLTFMeshComponent::setGLTFMesh(const AssetSaveInfo& asset, int32 meshId)

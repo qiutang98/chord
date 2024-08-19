@@ -95,6 +95,25 @@ namespace chord
 						(uint32)gltfBin.primitiveData.meshletDatas.size());
 					copyBuffer(*newGPUPrimitives->meshletData, gltfBin.primitiveData.meshletDatas.data());
 
+					check(!gltfBin.primitiveData.bvhNodes.empty());
+					{
+						newGPUPrimitives->bvhNodeData = std::make_unique<ComponentBuffer>(
+							getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_bvhNodes"),
+							bufferFlagBasic,
+							bufferFlagVMA,
+							(uint32)sizeof(gltfBin.primitiveData.bvhNodes[0]),
+							(uint32)gltfBin.primitiveData.bvhNodes.size());
+						copyBuffer(*newGPUPrimitives->bvhNodeData, gltfBin.primitiveData.bvhNodes.data());
+					}
+
+					newGPUPrimitives->bvhMeshletIndicesData = std::make_unique<ComponentBuffer>(
+						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_bvhLeafMeshletIndices"),
+						bufferFlagBasic,
+						bufferFlagVMA,
+						(uint32)sizeof(gltfBin.primitiveData.bvhLeafMeshletIndices[0]),
+						(uint32)gltfBin.primitiveData.bvhLeafMeshletIndices.size());
+					copyBuffer(*newGPUPrimitives->bvhMeshletIndicesData, gltfBin.primitiveData.bvhLeafMeshletIndices.data());
+
 					newGPUPrimitives->positions = std::make_unique<ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_positions"),
 						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,

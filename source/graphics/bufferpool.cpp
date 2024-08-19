@@ -85,7 +85,7 @@ namespace chord::graphics
 			std::swap(freeBuffers.front(), freeBuffers.back()); // Use the oldest gay.
 
 			buffer = freeBuffers.back().buffer;
-			buffer->rename(name);
+			buffer->rename(name, false);
 			freeBuffers.pop_back();
 
 			recentUsedUpdate(freeBuffers);
@@ -126,7 +126,7 @@ namespace chord::graphics
 			std::swap(freeBuffers.front(), freeBuffers.back()); // Use the oldest gay.
 
 			buffer = std::dynamic_pointer_cast<GPUOnlyBuffer>(freeBuffers.back().buffer);
-			buffer->rename(name);
+			buffer->rename(name, false);
 			freeBuffers.pop_back();
 
 			recentUsedUpdate(freeBuffers);
@@ -170,7 +170,7 @@ namespace chord::graphics
 
 			buffer = std::dynamic_pointer_cast<HostVisibleGPUBuffer>(freeBuffers.back().buffer);
 
-			buffer->rename(name);
+			buffer->rename(name, false);
 			if (data.isValid())
 			{
 				buffer->copyTo(data.ptr, data.size);

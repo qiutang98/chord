@@ -23,6 +23,16 @@ registerPODClassMember(GLTFTextureInfo)
 	ar(image, textureCoord, sampler);
 }
 
+registerPODClassMember(GLTFBVHNode)
+{
+	ar(data.sphere);
+	ar(data.left);
+	ar(data.right);
+	ar(data.leafMeshletOffset);
+	ar(data.leafMeshletCount);
+	ar(data.bvhNodeCount);
+}
+
 registerPODClassMember(GLTFMeshlet)
 {
 	ar(data.posMin);
@@ -44,8 +54,7 @@ registerPODClassMember(GLTFPrimitive)
 	ar(name, material, vertexCount, vertexOffset);
 	ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
 	ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
-
-	ar(meshletOffset, meshletCount);
+	ar(meshletOffset, lod0meshletCount, bvhNodeOffset, bvhMeshletIndicesOffset);
 }
 
 registerPODClassMember(GLTFMesh)
@@ -74,6 +83,8 @@ registerPODClassMember(GLTFBinary)
 	ar(primitiveData.colors0);
 	ar(primitiveData.meshlets);
 	ar(primitiveData.meshletDatas);
+	ar(primitiveData.bvhNodes);
+	ar(primitiveData.bvhLeafMeshletIndices);
 }
 
 registerClassMember(IAsset)

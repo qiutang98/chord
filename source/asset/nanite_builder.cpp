@@ -3,21 +3,356 @@
 #include <metis/metis.h>
 #include <shader/base.h>
 #include <utils/log.h>
+#include <utils/cityhash.h>
 
 using namespace chord;
 using namespace chord::nanite;
 
-constexpr auto kNumMeshletPerGroup = 4;
-constexpr auto kNumGroupSplitAfterSimplify = 2;
-constexpr auto kGroupSimplifyThreshold = 1.0f / float(kNumGroupSplitAfterSimplify);
-constexpr auto kGroupSimplifyMinReduce = 0.8f; // At least next level lod need to reduce 20% triangles, otherwise it is no meaning to store it.
+// Group-merge-simplify-split parameters.
+constexpr uint32 kMinNumMeshletPerGroup = 2;
+constexpr uint32 kMaxNumMeshletPerGroup = 8;
+constexpr uint32 kNumGroupSplitAfterSimplify = 2;
+constexpr float  kGroupSimplifyThreshold = 1.0f / float(kNumGroupSplitAfterSimplify);
 
+// At least next level lod need to reduce 20% triangles, otherwise it is no meaning to store it.
+constexpr auto kGroupSimplifyMinReduce = 0.8f; 
+
+// Simplify error relative to extent.
 constexpr auto kSimplifyError = 0.01f;
-constexpr auto kGroupMergePosError = 0.1f;
+
+// Group merge position error, relative to simplify error. 
+constexpr auto kGroupMergePosError = 0.1f;    
 
 using MeshletIndex = uint32;
-using VertexIndex  = uint32;
+using VertexIndex = uint32;
 using ClusterGroup = std::vector<MeshletIndex>;
+
+// Load all error sphere, generate bvh accelerate iteration.
+class ClusterParentErrorBVHTree
+{
+public:
+	struct Node
+	{
+		float3 minPos;
+		float3 maxPos;
+
+		float4 sphereBuild() const
+		{
+			return float4(
+				0.5f * (maxPos + minPos), 
+				0.5f * math::length(maxPos - minPos));
+		}
+
+		std::unique_ptr<Node> left = nullptr;
+		std::unique_ptr<Node> right = nullptr;
+
+		std::vector<MeshletIndex> leaves;
+
+		uint flattenIndex = kUnvalidIdUint32;
+	};
+
+	std::unique_ptr<Node> root;
+};
+
+static uint64 hashErrorSphere(float4 sphere)
+{
+	return cityhash::cityhash64((const char*)&sphere, sizeof(sphere));
+}
+
+static void buildBVH(const MeshletContainer& ctx, ClusterParentErrorBVHTree::Node& rootNode, std::vector<const ClusterGroup*>&& rootNodeClusterGroupInBounds)
+{
+	struct NodeAndClusterGroups
+	{
+		std::vector<const ClusterGroup*> clusterGroupInBounds;
+		ClusterParentErrorBVHTree::Node* node;
+	};
+
+	std::queue<NodeAndClusterGroups> nodeQueue { };
+	nodeQueue.push( {.clusterGroupInBounds  = std::move(rootNodeClusterGroupInBounds), .node = &rootNode});
+
+	while (!nodeQueue.empty())
+	{
+		auto* iterNodePtr = nodeQueue.front().node;
+		std::vector<const ClusterGroup*> clusterGroupInBounds = std::move(nodeQueue.front().clusterGroupInBounds);
+
+		// Pop current node.
+		nodeQueue.pop();
+
+		if (clusterGroupInBounds.empty())
+		{
+			continue;
+		}
+
+		// Build leaf.
+		if (clusterGroupInBounds.size() == 1)
+		{
+			for (const auto* groupPtr : clusterGroupInBounds)
+			{
+				const auto& group = *groupPtr;
+				for (const auto& meshletIndex : group)
+				{
+					iterNodePtr->leaves.push_back(meshletIndex);
+				}
+			}
+			continue;
+		}
+
+		// Find longest axis.
+		uint longestAxis = 0;
+		{
+			float3 minPos = iterNodePtr->minPos;
+			float3 maxPos = iterNodePtr->maxPos;
+			float3 max2min = maxPos - minPos;
+
+			// Use longest axis to split space.
+			if (max2min.y >= max2min.x && max2min.y >= max2min.z) { longestAxis = 1; } // y axis
+			if (max2min.z >= max2min.x && max2min.z >= max2min.y) { longestAxis = 2; } // z axis
+		}
+
+		// Sort group on longest axis.
+		std::vector<std::pair<const ClusterGroup*, float>> meshletCenterInLongestAxisSort;
+		for (const auto* groupPtr : clusterGroupInBounds)
+		{
+			meshletCenterInLongestAxisSort.push_back({ groupPtr, ctx.meshlets[groupPtr->at(0)].parentPosCenter[longestAxis] });
+		}
+		std::ranges::sort(meshletCenterInLongestAxisSort, [](const auto& a, const auto& b) { return a.second < b.second; });
+
+
+		// Slit node.
+		check(meshletCenterInLongestAxisSort.size() >= 2);
+		{
+			iterNodePtr->left = std::make_unique<ClusterParentErrorBVHTree::Node>();
+
+			float3 posMin = float3( FLT_MAX);
+			float3 posMax = float3(-FLT_MAX);
+
+			std::vector<const ClusterGroup*> leftGroups{ };
+			for (uint i = 0; i < meshletCenterInLongestAxisSort.size() / 2; i++)
+			{
+				const auto& group = *(meshletCenterInLongestAxisSort[i].first);
+
+				for (const uint meshletIndex : group)
+				{
+					const auto& meshlet = ctx.meshlets[meshletIndex];
+
+					posMin = math::min(posMin, meshlet.parentPosCenter - meshlet.parentError);
+					posMax = math::max(posMax, meshlet.parentPosCenter + meshlet.parentError);
+				}
+
+
+				leftGroups.push_back(&group);
+			}
+
+			iterNodePtr->left->maxPos = posMax;
+			iterNodePtr->left->minPos = posMin;
+
+			nodeQueue.push({ .clusterGroupInBounds = std::move(leftGroups), .node = iterNodePtr->left.get()});
+		}
+		{
+			iterNodePtr->right = std::make_unique<ClusterParentErrorBVHTree::Node>();
+
+			float3 posMin = float3( FLT_MAX);
+			float3 posMax = float3(-FLT_MAX);
+
+			std::vector<const ClusterGroup*> rightGroups{ };
+			for (uint i = meshletCenterInLongestAxisSort.size() / 2; i < meshletCenterInLongestAxisSort.size(); i++)
+			{
+				const auto& group = *(meshletCenterInLongestAxisSort[i].first);
+
+				for (const uint meshletIndex : group)
+				{
+					const auto& meshlet = ctx.meshlets[meshletIndex];
+
+					posMin = math::min(posMin, meshlet.parentPosCenter - meshlet.parentError);
+					posMax = math::max(posMax, meshlet.parentPosCenter + meshlet.parentError);
+				}
+
+				rightGroups.push_back(&group);
+			}
+
+			iterNodePtr->right->maxPos = posMax;
+			iterNodePtr->right->minPos = posMin;
+
+			nodeQueue.push({ .clusterGroupInBounds = std::move(rightGroups), .node = iterNodePtr->right.get() });
+		}
+	}
+}
+
+static void flattenBVH(const MeshletContainer& ctx, ClusterParentErrorBVHTree::Node& root, 
+	std::vector<GPUBVHNode>& flattenNode, 
+	std::vector<MeshletIndex>& leafMeshletIndices)
+{
+	std::queue<ClusterParentErrorBVHTree::Node*> nodeQueue;
+
+	nodeQueue.push(&root);
+	while (!nodeQueue.empty())
+	{
+		auto* node = nodeQueue.front();
+		{
+			const uint currentIndex = flattenNode.size();
+			flattenNode.push_back({ });
+
+			auto& currentNode = flattenNode[currentIndex];
+			currentNode.sphere = node->sphereBuild();
+
+			uint leafIterCount = 0;
+			float4 loopMeshletSphere = float4(-1.0f);
+
+			// Prepare leaf meshlet.
+			currentNode.leafMeshletOffset = leafMeshletIndices.size();
+			currentNode.leafMeshletCount = node->leaves.size();
+			for (uint i = 0; i < node->leaves.size(); i++)
+			{
+				uint32 meshletIndex = node->leaves[i];
+
+				const auto& meshlet = ctx.meshlets.at(meshletIndex);
+				float4 meshletSphere = float4(meshlet.parentPosCenter, meshlet.parentError);
+				if (i == 0)
+				{
+					loopMeshletSphere = meshletSphere;
+				}
+				else if(node != &root)
+				{
+					float diff = math::length2(loopMeshletSphere - meshletSphere);
+					check(diff < FLT_EPSILON);
+				}
+
+				leafMeshletIndices.push_back(meshletIndex);
+			}
+
+			if (node->leaves.size() > 0 && node != &root)
+			{
+				float diff = math::length2(loopMeshletSphere - currentNode.sphere);
+				if (diff >= FLT_EPSILON)
+				{
+					currentNode.sphere = loopMeshletSphere;
+				}
+			}
+
+			node->flattenIndex = currentIndex;
+		}
+		nodeQueue.pop();
+		if (node->left) { nodeQueue.push(node->left.get()); }
+		if (node->right) { nodeQueue.push(node->right.get()); }
+	}
+
+	std::stack<ClusterParentErrorBVHTree::Node*> countNodeStack;
+	countNodeStack.push(&root);
+
+	nodeQueue.push(&root);
+	while (!nodeQueue.empty())
+	{
+		auto* node = nodeQueue.front();
+		nodeQueue.pop();
+
+		auto& nodeFlatten = flattenNode.at(node->flattenIndex);
+
+		if (node->left) 
+		{ 
+			nodeFlatten.left = node->left->flattenIndex;
+			nodeQueue.push(node->left.get()); 
+			countNodeStack.push(node->left.get());
+		}
+		else
+		{
+			nodeFlatten.left = kUnvalidIdUint32;
+		}
+		if (node->right)
+		{ 
+			nodeFlatten.right = node->right->flattenIndex;
+			nodeQueue.push(node->right.get()); 
+			countNodeStack.push(node->right.get());
+		}
+		else
+		{
+			nodeFlatten.right = kUnvalidIdUint32;
+		}
+	}
+
+	while (!countNodeStack.empty())
+	{
+		auto* node = countNodeStack.top();
+		countNodeStack.pop();
+
+		auto& nodeFlatten = flattenNode.at(node->flattenIndex);
+		nodeFlatten.bvhNodeCount = 1;
+
+		if (node->left)
+		{
+			auto& nodeFlattenLeft = flattenNode.at(node->left->flattenIndex);
+			nodeFlatten.bvhNodeCount += nodeFlattenLeft.bvhNodeCount;
+		}
+
+		if (node->right)
+		{
+			auto& nodeFlattenRight = flattenNode.at(node->right->flattenIndex);
+			nodeFlatten.bvhNodeCount += nodeFlattenRight.bvhNodeCount;
+		}
+	}
+}
+
+static void buildBVHTree(const MeshletContainer& ctx, std::vector<GPUBVHNode>& flattenNode, std::vector<MeshletIndex>& leafMeshletIndices)
+{
+	std::unordered_map<uint64, uint32> errorSphereGroupMap{ };
+	std::vector<ClusterGroup> parentValidMeshlet{ };
+
+	ClusterParentErrorBVHTree bvh { };
+
+	// 0. combine all meshlet find max bounds.
+	{
+		bvh.root = std::make_unique<ClusterParentErrorBVHTree::Node>();
+		
+		float3 posMin = float3( FLT_MAX);
+		float3 posMax = float3(-FLT_MAX);
+
+		for (MeshletIndex i = 0; i < ctx.meshlets.size(); i++)
+		{
+			const auto& meshlet = ctx.meshlets[i];
+			if (meshlet.isParentSet())
+			{
+				const uint64 hashInGroupMap = hashErrorSphere(float4(meshlet.parentPosCenter, meshlet.parentError));
+				if (errorSphereGroupMap.contains(hashInGroupMap))
+				{
+					parentValidMeshlet[errorSphereGroupMap[hashInGroupMap]].push_back(i);
+				}
+				else
+				{
+					posMin = math::min(posMin, meshlet.parentPosCenter - meshlet.parentError);
+					posMax = math::max(posMax, meshlet.parentPosCenter + meshlet.parentError);
+
+					errorSphereGroupMap[hashInGroupMap] = parentValidMeshlet.size();
+					parentValidMeshlet.push_back({ i });
+				}
+			}
+			else
+			{
+				// Fill root leaf if parent no set.
+				bvh.root->leaves.push_back(i);
+			}
+		}
+
+		// Root fill.
+		bvh.root->minPos = posMin;
+		bvh.root->maxPos = posMax;
+	}
+
+	// 1. Recursive build bvh.
+	{
+		std::vector<const ClusterGroup*> clusterGroupInBounds(parentValidMeshlet.size());
+		for (uint i = 0; i < clusterGroupInBounds.size(); i++)
+		{
+			clusterGroupInBounds[i] = &parentValidMeshlet[i];
+		}
+
+		buildBVH(ctx, *bvh.root, std::move(clusterGroupInBounds));
+	}
+	
+	// 2. Flatten bvh.
+	flattenBVH(ctx, *bvh.root, flattenNode, leafMeshletIndices);
+	check(flattenNode[0].bvhNodeCount == flattenNode.size());
+}
+
+
 
 constexpr float kMeshletParentErrorUninitialized = std::numeric_limits<float>::max();
 
@@ -178,16 +513,18 @@ uint32 hashPosition(float3 pos, float posFuseThreshold)
 	return crc::crc32((void*)&posInt3, sizeof(posInt3), 0);
 }
 
- bool buildClusterGroup(const MeshletContainer& ctx, std::vector<ClusterGroup>& outGroup, const std::vector<Vertex>& vertices, float posFuseThreshold)
+static bool buildClusterGroup(const MeshletContainer& ctx, std::vector<ClusterGroup>& outGroup, const std::vector<Vertex>& vertices, float posFuseThreshold)
 {
 	const auto& meshlets = ctx.meshlets;
 
-	if (meshlets.size() < kNumGroupSplitAfterSimplify * kNumMeshletPerGroup)
+	if (meshlets.size() < kMinNumMeshletPerGroup)
 	{
 		// No enough meshlet count to group-simplify-split, just return one group.
 		outGroup = buildOneClusterGroup(ctx);
 		return false;
 	}
+
+	const uint32 groupMeshletCount = math::min(uint32(meshlets.size()) / kMinNumMeshletPerGroup, kMaxNumMeshletPerGroup);
 
 	std::unordered_map<MeshletEdge,  std::unordered_set<MeshletIndex>, MeshletEdge::Hash>  edges2Meshlets;
 	std::unordered_map<MeshletIndex, std::unordered_set<MeshletEdge,   MeshletEdge::Hash>> meshlets2Edges;
@@ -291,7 +628,7 @@ uint32 hashPosition(float3 pos, float posFuseThreshold)
 
 		idx_t edgeCut;
 		idx_t ncon = 1;
-		idx_t nparts = meshlets.size() / kNumMeshletPerGroup;
+		idx_t nparts = meshlets.size() / groupMeshletCount;
 		std::vector<idx_t> partition(vertexCount);
 		int metisPartResult = METIS_PartGraphKway(&vertexCount,
 			&ncon,
@@ -318,6 +655,40 @@ uint32 hashPosition(float3 pos, float posFuseThreshold)
 	}
 
 	return true;
+}
+
+static bool isLooseGeometry(const std::vector<uint32>& indices, const std::vector<Vertex>& vertices)
+{
+	std::unordered_map<MeshletEdge, uint32, MeshletEdge::Hash> edgeUsedCount;
+
+	const uint triangleCount = indices.size() / 3;
+	for (uint triangleId = 0; triangleId < triangleCount; triangleId++) // Loop all triangle.
+	{
+		for (uint i = 0; i < 3; i++) // Loop all edge.
+		{
+			uint32 v0 = indices[triangleId * 3 + i];
+			uint32 v1 = indices[triangleId * 3 + (i + 1) % 3];
+
+			MeshletEdge edge(v0, v1);
+			edgeUsedCount[edge]++;
+		}
+	}
+
+	uint32 edgeBorderCount = 0;
+	for (const auto& pair : edgeUsedCount)
+	{
+		if (pair.second == 1) // is edge.
+		{
+			edgeBorderCount++;
+		}
+	}
+
+	if (edgeBorderCount == edgeUsedCount.size())
+	{
+		return true;
+	}
+
+	return false;
 }
 
 // Input one lod level meshlet container, do Group-Merge-Simplify-Split operation.
@@ -347,11 +718,6 @@ void NaniteBuilder::MeshletsGMSS(
 	// Merge-Simplify-Split.
 	for (const auto& clusterGroup : clusterGroups)
 	{
-		std::vector<uint8> verticesLocked(m_vertices.size());
-		memset(verticesLocked.data(), 0, verticesLocked.size() * sizeof(verticesLocked[0]));
-
-		std::unordered_map<MeshletEdge, uint32, MeshletEdge::Hash> edgeUsedCount;
-
 		// Merge meshlet in one group.
 		std::vector<VertexIndex> groupMergeVertices;
 		{
@@ -364,34 +730,9 @@ void NaniteBuilder::MeshletsGMSS(
 					{
 						VertexIndex v0 = loadVertexIndex(srcCtx, meshlet.info, triangleId, i);
 						groupMergeVertices.push_back(v0);
-
-
-
-						VertexIndex v1 = loadVertexIndex(srcCtx, meshlet.info, triangleId, (i + 1) % 3);
-						MeshletEdge edge(v0, v1);
-						edgeUsedCount[edge] ++;
 					}
 				}
 			}
-		}
-
-		uint32 edgeBorderCount = 0;
-		for (const auto& pair : edgeUsedCount)
-		{
-			if (pair.second == 1) // is edge.
-			{
-				MeshletEdge edge = pair.first;
-				verticesLocked[edge.first]  = 1;
-				verticesLocked[edge.second] = 1;
-
-				edgeBorderCount++;
-			}
-		}
-
-		if (edgeBorderCount == edgeUsedCount.size())
-		{
-			LOG_ERROR("The loose geometry import, please check fuse when import mesh...");
-			continue;
 		}
 
 		// Simplify group.
@@ -399,20 +740,15 @@ void NaniteBuilder::MeshletsGMSS(
 		float simplificationError = 0.f;
 		{
 			const auto targetIndicesCount = groupMergeVertices.size() * kGroupSimplifyThreshold;
-			uint32 options = meshopt_SimplifySparse | meshopt_SimplifyErrorAbsolute;
+			uint32 options = meshopt_SimplifyLockBorder | meshopt_SimplifySparse | meshopt_SimplifyErrorAbsolute;
 
-			simplifiedVertices.resize(meshopt_simplifyWithAttributes(
+			simplifiedVertices.resize(meshopt_simplify(
 				simplifiedVertices.data(),
 				groupMergeVertices.data(),
 				groupMergeVertices.size(),
 				&m_vertices[0].position.x,
 				m_vertices.size(),
 				sizeof(m_vertices[0]),
-				NULL,
-				0,
-				NULL,
-				0,
-				verticesLocked.data(),
 				targetIndicesCount,
 				targetError,
 				options,
@@ -487,14 +823,24 @@ MeshletContainer NaniteBuilder::build() const
 		currentLodCtx = std::move(nextLodCtx);
 	}
 
+	buildBVHTree(finalCtx, finalCtx.bvhNodes, finalCtx.bvhLeafMeshletIndices);
+
 	return finalCtx;
 }
 
 struct FuseVertex
 {
 	int3 hashPos;
-	Vertex averageVertex;
+	int2 hashUv;
+	Vertex cacheVertex;
 };
+
+void fuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices, float fuseDistance)
+{
+	if (fuseDistance < 0.0f) { return; }
+
+
+}
 
 NaniteBuilder::NaniteBuilder(
 	std::vector<uint32>&& inputIndices,
@@ -505,14 +851,14 @@ NaniteBuilder::NaniteBuilder(
 	, m_vertices(inputVertices)
 	, m_coneWeight(coneWeight)
 {
-
-
-	const bool bFuse = fuseDistance > 0.0f;
-	if (bFuse)
+	const bool bInputIsLooseGeometry = isLooseGeometry(m_indices, m_vertices);
+	if (bInputIsLooseGeometry)
 	{
+		LOG_TRACE("Nanite builder find loose geometry input, fusing vertex...");
 
+		// Fuse vertices first.
+		fuseVertices(m_indices, m_vertices, fuseDistance);
 	}
-
 
 	size_t indexCount = m_indices.size();
 
@@ -580,6 +926,6 @@ void MeshletContainer::merge(MeshletContainer&& inRhs)
 	}
 
 	triangles.insert(triangles.end(), rhs.triangles.begin(), rhs.triangles.end());
-	vertices.insert(vertices.end(), rhs.vertices.begin(), rhs.vertices.end());
-	meshlets.insert(meshlets.end(), rhs.meshlets.begin(), rhs.meshlets.end());
+	 vertices.insert(vertices.end(),  rhs.vertices.begin(),  rhs.vertices.end());
+	 meshlets.insert(meshlets.end(),  rhs.meshlets.begin(),  rhs.meshlets.end());
 }

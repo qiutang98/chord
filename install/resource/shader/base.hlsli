@@ -315,13 +315,22 @@ Barycentrics calculateTriangleBarycentrics(float2 PixelClip, float4 PointClip0, 
 
 // https://stackoverflow.com/questions/21648630/radius-of-projected-sphere-in-screen-space
 // return radius of pixel of current sphere project result.
+// return negative if eye in the sphere.
 float projectSphereToScreen(float4 sphere, float height, float fovy)
 {
     float halfFovy = 0.5 * fovy;
 
+    //
     const float d2 = dot(sphere.xyz, sphere.xyz);
-    const float r = sphere.w;
-    return height * 0.5 / tan(halfFovy) * r / sqrt(d2 - r * r);
+    const float r  = sphere.w;
+    const float r2 = r * r;
+    if (d2 <= r2)
+    {
+        return -1.0f; // eye in sphere.
+    }
+
+    //
+    return height * 0.5 / tan(halfFovy) * r / sqrt(d2 - r2);
 }
 
 #endif // !SHADER_BASE_HLSLI

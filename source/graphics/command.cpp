@@ -234,11 +234,11 @@ namespace chord::graphics
 		vkCmdClearColorImage(cmd->commandBuffer, image->get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, clear, rangeCount, ranges);
 	}
 
-	void GraphicsOrComputeQueue::clearUAV(PoolBufferRef buffer)
+	void GraphicsOrComputeQueue::clearUAV(PoolBufferRef buffer, uint32 data)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		transitionUAV(buffer);
-		vkCmdFillBuffer(cmd->commandBuffer, buffer->get(), 0, buffer->get().getSize(), 0u);
+		vkCmdFillBuffer(cmd->commandBuffer, buffer->get(), 0, buffer->get().getSize(), data);
 	}
 
 	void GraphicsQueue::clearDepthStencil(PoolTextureRef image, const VkClearDepthStencilValue* clear, VkImageAspectFlags flags)

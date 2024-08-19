@@ -241,19 +241,27 @@ namespace chord
 			addClearGbufferPass(graphics, gbuffers);
 			insertTimer("Clear GBuffers", graphics);
 
-			// Prepass stage0
-			const bool bShouldStage1GLTF = gltfVisibilityRenderingStage0(gltfRenderCtx);
-			insertTimer("GLTF Visibility Stage0", graphics);
-
-			// Prepass stage1
-			if (bShouldStage1GLTF)
+			if (shouldRenderGLTF(gltfRenderCtx))
 			{
-				auto tempHzbCtx = buildHZB(graphics, gbuffers.depthStencil);
-				insertTimer("BuildHZB Post Prepass Stage0", graphics);
+				instanceCulling(gltfRenderCtx);
+				insertTimer("GLTF Instance Culling", graphics);
 
-				gltfVisibilityRenderingStage1(gltfRenderCtx, tempHzbCtx);
-				insertTimer("GLTF Visibility Stage1", graphics);
+				// Prepass stage0
+				const bool bShouldStage1GLTF = gltfVisibilityRenderingStage0(gltfRenderCtx);
+				insertTimer("GLTF Visibility Stage0", graphics);
+
+				// Prepass stage1
+				if (bShouldStage1GLTF)
+				{
+					auto tempHzbCtx = buildHZB(graphics, gbuffers.depthStencil);
+					insertTimer("BuildHZB Post Prepass Stage0", graphics);
+
+					gltfVisibilityRenderingStage1(gltfRenderCtx, tempHzbCtx);
+					insertTimer("GLTF Visibility Stage1", graphics);
+				}
 			}
+
+
 
 			hzbCtx = buildHZB(graphics, gbuffers.depthStencil);
 			insertTimer("BuildHZB", graphics);

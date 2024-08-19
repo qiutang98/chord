@@ -3,6 +3,7 @@
 #include <utils/utils.h>
 #include <asset/meshoptimizer/meshoptimizer.h>
 #include <asset/gltf/gltf.h>
+#include <shader/gltf.h>
 
 namespace chord::nanite
 {
@@ -17,7 +18,6 @@ namespace chord::nanite
 		float4 color0;
 	};
 	static_assert(sizeof(Vertex) == 21 * 4);
-
 
 	struct Meshlet
 	{
@@ -54,6 +54,9 @@ namespace chord::nanite
 
 		// 
 		std::vector<Meshlet> meshlets;
+
+		std::vector<GPUBVHNode> bvhNodes;
+		std::vector<uint32> bvhLeafMeshletIndices;
 
 		void merge(MeshletContainer&& rhs);
 	};

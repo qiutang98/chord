@@ -150,6 +150,12 @@ namespace chord
 	using GLTFMaterialAssetRef = std::shared_ptr<GLTFMaterialAsset>;
 	using GLTFMaterialAssetWeak = std::weak_ptr<GLTFMaterialAsset>;
 
+	struct GLTFBVHNode
+	{
+		ARCHIVE_DECLARE;
+		GPUBVHNode data;
+	};
+
 	struct GLTFMeshlet
 	{
 		ARCHIVE_DECLARE;
@@ -169,7 +175,10 @@ namespace chord
 
 		//
 		uint32 meshletOffset = 0;
-		uint32 meshletCount  = 0;
+		uint32 lod0meshletCount  = 0;
+
+		uint32 bvhNodeOffset = 0;
+		uint32 bvhMeshletIndicesOffset = 0;
 
 		uint32 vertexOffset = 0; // used for required attributes.
 		uint32 vertexCount  = 0;
@@ -226,6 +235,9 @@ namespace chord
 			std::vector<GLTFMeshlet> meshlets;
 			std::vector<uint32> meshletDatas;
 
+			std::vector<GLTFBVHNode> bvhNodes;
+			std::vector<uint32> bvhLeafMeshletIndices;
+
 			// required.
 			std::vector<math::vec3> positions;
 			std::vector<math::vec3> normals;
@@ -249,7 +261,9 @@ namespace chord
 					+ sizeofV(colors0)
 					+ sizeofV(smoothNormals) 
 					+ sizeofV(meshlets)
-					+ sizeofV(meshletDatas);
+					+ sizeofV(meshletDatas)
+					+ sizeofV(bvhNodes)
+					+ sizeofV(bvhLeafMeshletIndices);
 			}
 		} primitiveData;
 	};

@@ -10,7 +10,7 @@ namespace chord
 	{
 		bool bGenerateSmoothNormal = false;
 		bool bFuse = false;
-		float fuseRelativeDistance = 1e-5f;
+		float fuseRelativeDistance = 1e-7f;
 
 		float meshletConeWeight = 0.7f;
 	};
@@ -54,6 +54,8 @@ namespace chord
 		std::unique_ptr<ComponentBuffer> tangents = nullptr;
 		std::unique_ptr<ComponentBuffer> meshlet = nullptr;
 		std::unique_ptr<ComponentBuffer> meshletData = nullptr;
+		std::unique_ptr<ComponentBuffer> bvhNodeData = nullptr;
+		std::unique_ptr<ComponentBuffer> bvhMeshletIndicesData = nullptr;
 
 		// Optional
 		std::unique_ptr<ComponentBuffer> colors = nullptr;

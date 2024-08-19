@@ -1200,6 +1200,8 @@ namespace chord
 
 					// Meshlet offset.
 					primitiveMesh.meshletOffset = gltfBin.primitiveData.meshlets.size();
+					primitiveMesh.bvhMeshletIndicesOffset = gltfBin.primitiveData.bvhLeafMeshletIndices.size();
+					primitiveMesh.bvhNodeOffset = gltfBin.primitiveData.bvhNodes.size();
 
 					// Position min, max and average.
 					primitiveMesh.posMin = meshPosMin;
@@ -1209,6 +1211,16 @@ namespace chord
 					nanite::NaniteBuilder builder(std::move(rawIndices), std::move(rawVertices), config->bFuse ? config->fuseRelativeDistance : -1.0f, config->meshletConeWeight);
 					{
 						auto meshletCtx = builder.build();
+
+						gltfBin.primitiveData.bvhLeafMeshletIndices.insert(
+							gltfBin.primitiveData.bvhLeafMeshletIndices.end(),
+							meshletCtx.bvhLeafMeshletIndices.begin(), 
+							meshletCtx.bvhLeafMeshletIndices.end());
+
+						gltfBin.primitiveData.bvhNodes.insert(
+							gltfBin.primitiveData.bvhNodes.end(),
+							meshletCtx.bvhNodes.begin(),
+							meshletCtx.bvhNodes.end());
 
 						for (const auto& meshlet : meshletCtx.meshlets)
 						{
@@ -1238,7 +1250,11 @@ namespace chord
 							gltfBin.primitiveData.meshlets.push_back(meshlet.getGLTFMeshlet(dataOffset));
 						}
 
-						primitiveMesh.meshletCount = meshletCtx.meshlets.size();
+						primitiveMesh.lod0meshletCount = 0;
+						for (const auto& meshlet : meshletCtx.meshlets)
+						{
+							if (meshlet.lod == 0) { primitiveMesh.lod0meshletCount ++; }
+						}
 					}
 
 					const std::vector<nanite::Vertex>& builderVertices = builder.getVertices();
@@ -1415,7 +1431,9 @@ namespace chord
 			+ getValidSize(uv1s)
 			+ getValidSize(smoothNormals)
 			+ getValidSize(meshlet)
-			+ getValidSize(meshletData);
+			+ getValidSize(meshletData)
+			+ getValidSize(bvhNodeData)
+			+ getValidSize(bvhMeshletIndicesData);
 	}
 
 	inline uint64 getPrimitiveDetailHash(uint64 GPUSceneHash, uint32 meshId, uint32 primitiveId)
@@ -1445,6 +1463,8 @@ namespace chord
 			ASSIGN_DATA(smoothNormals, smoothNormalsBuffer);
 			ASSIGN_DATA(meshlet, meshletBuffer);
 			ASSIGN_DATA(meshletData, meshletDataBuffer);
+			ASSIGN_DATA(bvhNodeData, bvhNodeBuffer);
+			ASSIGN_DATA(bvhMeshletIndicesData, bvhMeshletIndicesBuffer);
 		}
 		#undef ASSIGN_DATA
 
@@ -1476,17 +1496,18 @@ namespace chord
 				// Fill upload content.
 				GLTFPrimitiveBuffer primitiveBufferData{};
 				{
-					primitiveBufferData.posMin                 = primitiveInfo.posMin;
-					primitiveBufferData.primitiveDatasBufferId = m_gpuSceneGLTFPrimitiveAssetId;
-					primitiveBufferData.posMax                 = primitiveInfo.posMax;
-					primitiveBufferData.vertexOffset           = primitiveInfo.vertexOffset;
-					primitiveBufferData.posAverage             = primitiveInfo.posAverage;
-					primitiveBufferData.vertexCount            = primitiveInfo.vertexCount;
-					primitiveBufferData.color0Offset           = primitiveInfo.colors0Offset;
-					primitiveBufferData.smoothNormalOffset     = primitiveInfo.smoothNormalOffset;
-					primitiveBufferData.textureCoord1Offset    = primitiveInfo.textureCoord1Offset;
-					primitiveBufferData.meshletOffset          = primitiveInfo.meshletOffset;
-					primitiveBufferData.meshletCount           = primitiveInfo.meshletCount;
+					primitiveBufferData.posMin                  = primitiveInfo.posMin;
+					primitiveBufferData.primitiveDatasBufferId  = m_gpuSceneGLTFPrimitiveAssetId;
+					primitiveBufferData.posMax                  = primitiveInfo.posMax;
+					primitiveBufferData.vertexOffset            = primitiveInfo.vertexOffset;
+					primitiveBufferData.posAverage              = primitiveInfo.posAverage;
+					primitiveBufferData.vertexCount             = primitiveInfo.vertexCount;
+					primitiveBufferData.color0Offset            = primitiveInfo.colors0Offset;
+					primitiveBufferData.smoothNormalOffset      = primitiveInfo.smoothNormalOffset;
+					primitiveBufferData.textureCoord1Offset     = primitiveInfo.textureCoord1Offset;
+					primitiveBufferData.meshletOffset           = primitiveInfo.meshletOffset;
+					primitiveBufferData.bvhNodeOffset           = primitiveInfo.bvhNodeOffset;
+					primitiveBufferData.bvhMeshletIndicesOffset = primitiveInfo.bvhMeshletIndicesOffset;
 				}
 
 				std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};

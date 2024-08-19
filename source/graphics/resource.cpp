@@ -8,7 +8,7 @@ namespace chord::graphics
 	GPUResource::GPUResource(const std::string& name, VkDeviceSize size)
 		: m_size(size)
 	{
-		setName(name);
+		setName(name, true);
 	}
 
 	GPUResource::~GPUResource()
@@ -16,9 +16,9 @@ namespace chord::graphics
 	
 	}
 
-	bool GPUResource::setName(const std::string& name)
+	bool GPUResource::setName(const std::string& name, bool bForce)
 	{
-		if (m_setNameFrame != getFrameCounter())
+		if (bForce || m_setNameFrame != getFrameCounter())
 		{
 			m_names.clear();
 

@@ -38,7 +38,7 @@ namespace chord::graphics
 
 		// Use actually memory size.
 		GPUResource::setSize(memRequirements.size);
-		rename(name);
+		rename(name, true);
 
 		sTotalGPUTextureDeviceSize += getSize();
 		if (bGraphicsTextureLifeLogTraceEnable)
@@ -97,9 +97,9 @@ namespace chord::graphics
 		}
 	}
 
-	void GPUTexture::rename(const std::string& name)
+	void GPUTexture::rename(const std::string& name, bool bForce)
 	{
-		if (setName(name))
+		if (setName(name, bForce))
 		{
 			setResourceName(VK_OBJECT_TYPE_IMAGE, (uint64)m_image, getName().c_str());
 		}

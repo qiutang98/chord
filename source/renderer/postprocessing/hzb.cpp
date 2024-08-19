@@ -42,7 +42,7 @@ namespace chord
             "hzb downsample count buffer",
             sizeof(uint),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-        queue.clearUAV(countBuffer);
+        queue.clearUAV(countBuffer, 0);
 
         HZBPushConst pushConst{ };
         for (uint i = 0; i < ci.mipLevels; i++)

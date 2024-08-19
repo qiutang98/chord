@@ -118,7 +118,7 @@ namespace chord::graphics
 			std::swap(freeTextures.front(), freeTextures.back()); // Use the oldest gay.
 
 			texture = freeTextures.back().texture;
-			texture->rename(name);
+			texture->rename(name, false);
 			freeTextures.pop_back();
 
 			// Current type texture use this frame, may exist a lot of chance reuse later.
