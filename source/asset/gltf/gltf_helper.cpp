@@ -1200,7 +1200,8 @@ namespace chord
 
 					// Meshlet offset.
 					primitiveMesh.meshletOffset = gltfBin.primitiveData.meshlets.size();
-					primitiveMesh.bvhMeshletIndicesOffset = gltfBin.primitiveData.bvhLeafMeshletIndices.size();
+					primitiveMesh.meshletGroupOffset = gltfBin.primitiveData.meshletGroups.size();
+					primitiveMesh.meshletGroupIndicesOffset = gltfBin.primitiveData.meshletGroupIndices.size();
 					primitiveMesh.bvhNodeOffset = gltfBin.primitiveData.bvhNodes.size();
 
 					// Position min, max and average.
@@ -1212,15 +1213,11 @@ namespace chord
 					{
 						auto meshletCtx = builder.build();
 
-						gltfBin.primitiveData.bvhLeafMeshletIndices.insert(
-							gltfBin.primitiveData.bvhLeafMeshletIndices.end(),
-							meshletCtx.bvhLeafMeshletIndices.begin(), 
-							meshletCtx.bvhLeafMeshletIndices.end());
+						primitiveMesh.bvhNodeCount = meshletCtx.bvhNodes[0].bvhNodeCount;
 
-						gltfBin.primitiveData.bvhNodes.insert(
-							gltfBin.primitiveData.bvhNodes.end(),
-							meshletCtx.bvhNodes.begin(),
-							meshletCtx.bvhNodes.end());
+						gltfBin.primitiveData.meshletGroups.insert(gltfBin.primitiveData.meshletGroups.end(), meshletCtx.meshletGroups.begin(), meshletCtx.meshletGroups.end());
+						gltfBin.primitiveData.meshletGroupIndices.insert(gltfBin.primitiveData.meshletGroupIndices.end(), meshletCtx.meshletGroupIndices.begin(), meshletCtx.meshletGroupIndices.end());
+						gltfBin.primitiveData.bvhNodes.insert(gltfBin.primitiveData.bvhNodes.end(), meshletCtx.bvhNodes.begin(), meshletCtx.bvhNodes.end());
 
 						for (const auto& meshlet : meshletCtx.meshlets)
 						{
@@ -1255,6 +1252,8 @@ namespace chord
 						{
 							if (meshlet.lod == 0) { primitiveMesh.lod0meshletCount ++; }
 						}
+
+
 					}
 
 					const std::vector<nanite::Vertex>& builderVertices = builder.getVertices();
@@ -1409,154 +1408,5 @@ namespace chord
 			// Free buffer bindless index.
 			graphics::getContext().getBindlessManger().freeStorageBuffer(bindless, fallback);
 		}
-	}
-
-	uint32 GPUGLTFPrimitiveAsset::getSize() const
-	{
-		auto getValidSize = [](const std::unique_ptr<ComponentBuffer>& buffer) -> uint32 
-		{ 
-			if (buffer != nullptr) 
-			{ 
-				return buffer->buffer->getSize(); 
-			} 
-			return 0;
-		};
-
-		return 
-			  getValidSize(positions) 
-			+ getValidSize(normals) 
-			+ getValidSize(uv0s) 
-			+ getValidSize(tangents)
-			+ getValidSize(colors)
-			+ getValidSize(uv1s)
-			+ getValidSize(smoothNormals)
-			+ getValidSize(meshlet)
-			+ getValidSize(meshletData)
-			+ getValidSize(bvhNodeData)
-			+ getValidSize(bvhMeshletIndicesData);
-	}
-
-	inline uint64 getPrimitiveDetailHash(uint64 GPUSceneHash, uint32 meshId, uint32 primitiveId)
-	{
-		uint64 pack = (uint64(meshId) << 32) | primitiveId;
-		return hashCombine(pack, GPUSceneHash);
-	}
-
-	void GPUGLTFPrimitiveAsset::updateGPUScene()
-	{
-		check(isInMainThread());
-		freeGPUScene();
-
-		auto& gltfPrimitiveAssetPool = Application::get().getGPUScene().getGLTFPrimitiveDataPool();
-		m_gpuSceneGLTFPrimitiveAssetId = gltfPrimitiveAssetPool.requireId(GPUSceneHash());
-
-		GLTFPrimitiveDatasBuffer uploadData { };
-
-		#define ASSIGN_DATA(A, B) if(A != nullptr) { uploadData.B = A->bindless.get(); } else { uploadData.B = ~0; }
-		{
-			ASSIGN_DATA(positions, positionBuffer);
-			ASSIGN_DATA(normals, normalBuffer);
-			ASSIGN_DATA(uv0s, textureCoord0Buffer);
-			ASSIGN_DATA(tangents, tangentBuffer);
-			ASSIGN_DATA(colors, color0Buffer);
-			ASSIGN_DATA(uv1s, textureCoord1Buffer);
-			ASSIGN_DATA(smoothNormals, smoothNormalsBuffer);
-			ASSIGN_DATA(meshlet, meshletBuffer);
-			ASSIGN_DATA(meshletData, meshletDataBuffer);
-			ASSIGN_DATA(bvhNodeData, bvhNodeBuffer);
-			ASSIGN_DATA(bvhMeshletIndicesData, bvhMeshletIndicesBuffer);
-		}
-		#undef ASSIGN_DATA
-
-		{
-			std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDataFloat4Count> uploadDatas{};
-			memcpy(uploadDatas.data(), &uploadData, sizeof(uploadData));
-
-			gltfPrimitiveAssetPool.updateId(m_gpuSceneGLTFPrimitiveAssetId, uploadDatas);
-		}
-
-		//
-		auto assetRef = m_gltfAssetWeak.lock();
-		m_gpuSceneGLTFPrimitiveDetailAssetId.resize(assetRef->getMeshes().size());
-
-		auto& gltfPrimitiveDetailPool = Application::get().getGPUScene().getGLTFPrimitiveDetailPool();
-		for (uint32 meshId = 0; meshId < assetRef->getMeshes().size(); meshId++)
-		{
-			auto& meshPrimitiveIds = m_gpuSceneGLTFPrimitiveDetailAssetId[meshId];
-			const auto& meshInfo = assetRef->getMeshes().at(meshId);
-			meshPrimitiveIds.resize(meshInfo.primitives.size());
-			for (uint32 primitiveId = 0; primitiveId < meshInfo.primitives.size(); primitiveId++)
-			{
-				// Require GPU scene id.
-				const auto primitiveHash = getPrimitiveDetailHash(GPUSceneHash(), meshId, primitiveId);
-				meshPrimitiveIds[primitiveId] = gltfPrimitiveDetailPool.requireId(primitiveHash);
-
-				const auto& primitiveInfo = meshInfo.primitives[primitiveId];
-
-				// Fill upload content.
-				GLTFPrimitiveBuffer primitiveBufferData{};
-				{
-					primitiveBufferData.posMin                  = primitiveInfo.posMin;
-					primitiveBufferData.primitiveDatasBufferId  = m_gpuSceneGLTFPrimitiveAssetId;
-					primitiveBufferData.posMax                  = primitiveInfo.posMax;
-					primitiveBufferData.vertexOffset            = primitiveInfo.vertexOffset;
-					primitiveBufferData.posAverage              = primitiveInfo.posAverage;
-					primitiveBufferData.vertexCount             = primitiveInfo.vertexCount;
-					primitiveBufferData.color0Offset            = primitiveInfo.colors0Offset;
-					primitiveBufferData.smoothNormalOffset      = primitiveInfo.smoothNormalOffset;
-					primitiveBufferData.textureCoord1Offset     = primitiveInfo.textureCoord1Offset;
-					primitiveBufferData.meshletOffset           = primitiveInfo.meshletOffset;
-					primitiveBufferData.bvhNodeOffset           = primitiveInfo.bvhNodeOffset;
-					primitiveBufferData.bvhMeshletIndicesOffset = primitiveInfo.bvhMeshletIndicesOffset;
-				}
-
-				std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};
-				memcpy(uploadDatas.data(), &primitiveBufferData, sizeof(primitiveBufferData));
-
-				// Updata to GPUScene.
-				gltfPrimitiveDetailPool.updateId(meshPrimitiveIds[primitiveId], uploadDatas);
-			}
-		}
-
-		enqueueGPUSceneUpdate();
-	}
-
-	void GPUGLTFPrimitiveAsset::freeGPUScene()
-	{
-		check(isInMainThread());
-
-		if (m_gpuSceneGLTFPrimitiveAssetId != -1)
-		{
-			auto& gltfPrimitiveAssetPool = Application::get().getGPUScene().getGLTFPrimitiveDataPool();
-
-			uint32 id = gltfPrimitiveAssetPool.free(GPUSceneHash());
-			check(id == m_gpuSceneGLTFPrimitiveAssetId);
-
-			m_gpuSceneGLTFPrimitiveAssetId = -1;
-		}
-
-		auto& gltfPrimitiveDetailPool = Application::get().getGPUScene().getGLTFPrimitiveDetailPool();
-		for (uint32 meshId = 0; meshId < m_gpuSceneGLTFPrimitiveDetailAssetId.size(); meshId++)
-		{
-			const auto& primitiveInfos = m_gpuSceneGLTFPrimitiveDetailAssetId[meshId];
-			for (uint32 primitiveId = 0; primitiveId < primitiveInfos.size(); primitiveId++)
-			{
-				const auto hash = getPrimitiveDetailHash(GPUSceneHash(), meshId, primitiveId);
-
-				uint32 freeId = gltfPrimitiveDetailPool.free(hash);
-				check(freeId == primitiveInfos[primitiveId]);
-			}
-		}
-		m_gpuSceneGLTFPrimitiveDetailAssetId.clear();
-	}
-
-	uint32 GPUGLTFPrimitiveAsset::getGPUSceneId() const
-	{
-		return m_gpuSceneGLTFPrimitiveAssetId;
-	}
-
-	uint32 GPUGLTFPrimitiveAsset::getGPUScenePrimitiveDetailId(uint32 meshId, uint32 primitiveId) const
-	{
-		return m_gpuSceneGLTFPrimitiveDetailAssetId.at(meshId).at(primitiveId);
 	}
 }

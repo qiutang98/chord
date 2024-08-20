@@ -228,6 +228,8 @@ enum class EShadingType
 #define kNaniteMeshletMaxVertices 64
 #define kNaniteMeshletMaxTriangle 126
 #define kNaniteMaxLODCount        8
+#define kNaniteMaxBVHLevelCount   14
+#define kNaniteBVHLevelNodeCount  8
 
 struct NaniteShadingMeshlet
 {

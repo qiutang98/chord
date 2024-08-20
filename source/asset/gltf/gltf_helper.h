@@ -55,7 +55,8 @@ namespace chord
 		std::unique_ptr<ComponentBuffer> meshlet = nullptr;
 		std::unique_ptr<ComponentBuffer> meshletData = nullptr;
 		std::unique_ptr<ComponentBuffer> bvhNodeData = nullptr;
-		std::unique_ptr<ComponentBuffer> bvhMeshletIndicesData = nullptr;
+		std::unique_ptr<ComponentBuffer> meshletGroup = nullptr;
+		std::unique_ptr<ComponentBuffer> meshletGroupIndices = nullptr;
 
 		// Optional
 		std::unique_ptr<ComponentBuffer> colors = nullptr;

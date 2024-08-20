@@ -156,6 +156,12 @@ namespace chord
 		GPUBVHNode data;
 	};
 
+	struct GLTFMeshletGroup
+	{
+		ARCHIVE_DECLARE;
+		GPUGLTFMeshletGroup data;
+	};
+
 	struct GLTFMeshlet
 	{
 		ARCHIVE_DECLARE;
@@ -176,9 +182,11 @@ namespace chord
 		//
 		uint32 meshletOffset = 0;
 		uint32 lod0meshletCount  = 0;
+		uint32 bvhNodeCount = 0;
 
 		uint32 bvhNodeOffset = 0;
-		uint32 bvhMeshletIndicesOffset = 0;
+		uint32 meshletGroupOffset = 0;
+		uint32 meshletGroupIndicesOffset = 0;
 
 		uint32 vertexOffset = 0; // used for required attributes.
 		uint32 vertexCount  = 0;
@@ -236,7 +244,9 @@ namespace chord
 			std::vector<uint32> meshletDatas;
 
 			std::vector<GLTFBVHNode> bvhNodes;
-			std::vector<uint32> bvhLeafMeshletIndices;
+			std::vector<GLTFMeshletGroup> meshletGroups;
+			std::vector<uint32> meshletGroupIndices;
+
 
 			// required.
 			std::vector<math::vec3> positions;
@@ -263,7 +273,8 @@ namespace chord
 					+ sizeofV(meshlets)
 					+ sizeofV(meshletDatas)
 					+ sizeofV(bvhNodes)
-					+ sizeofV(bvhLeafMeshletIndices);
+					+ sizeofV(meshletGroups)
+					+ sizeofV(meshletGroupIndices);
 			}
 		} primitiveData;
 	};

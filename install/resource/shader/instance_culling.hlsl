@@ -129,20 +129,14 @@ void instanceCullingCS(uint threadId : SV_DispatchThreadID)
 
 // One pixel threshold.
 #define kErrorPixelThreshold 1.0f
+#define kErrorRadiusRoot     3e38f
 
 bool isNodeVisible(
-    bool bRootNode,
     in const PerframeCameraView perView, 
     in const GPUObjectGLTFPrimitive objectInfo,
     in const float4x4 localToView,
     float4 sphere)
 {
-    if (bRootNode)
-    {
-        // Root node always visible, leaves store final lod meshlets.
-        return true;
-    }
-
     float4 viewSphere = transformSphere(sphere, localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
 
     // Project sphere to screen get error.
@@ -158,24 +152,21 @@ bool isNodeVisible(
     return parentError > kErrorPixelThreshold;
 }
 
-bool isMeshletVisible(
-    bool bRootNode,
+// Meshlet group. 
+bool isMeshletGroupVisibile(
     in const PerframeCameraView perView, 
     in const GPUObjectGLTFPrimitive objectInfo,
     in const float4x4 localToTranslatedWorld,
     in const float4x4 localToView,
     in const float4x4 localToClip,
-    in const GPUGLTFMeshlet meshlet,
-    in const GLTFMaterialGPUData materialInfo)
+    in const GPUGLTFMeshletGroup meshletGroup)
 {
-    const float3 posMin    = meshlet.posMin;
-    const float3 posMax    = meshlet.posMax;
-    const float3 posCenter = 0.5 * (posMin + posMax);
-    const float3 extent    = posMax - posCenter;
+    const bool bFinalLod = (meshletGroup.parentError > kErrorRadiusRoot);
+    const bool bFirstlOD = (meshletGroup.error < -0.5f);
 
-    if (!bRootNode)
+    if (!bFinalLod)
     {
-        float4 sphere = transformSphere(float4(meshlet.parentPosCenter, meshlet.parentError), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
+        float4 sphere = transformSphere(float4(meshletGroup.parentPosCenter, meshletGroup.parentError), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
         float parentError = projectSphereToScreen(sphere, perView.renderDimension.y, perView.camMiscInfo.x);
         if (parentError > 0.0f && parentError <= kErrorPixelThreshold) 
         { 
@@ -184,9 +175,9 @@ bool isMeshletVisible(
         }
     }
 
-    if (meshlet.lod != 0)
+    if (!bFirstlOD)
     {
-        float4 sphere = transformSphere(float4(meshlet.clusterPosCenter, meshlet.error), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
+        float4 sphere = transformSphere(float4(meshletGroup.clusterPosCenter, meshletGroup.error), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
         float error = projectSphereToScreen(sphere, perView.renderDimension.y, perView.camMiscInfo.x);
         if (error < 0.0f || error > kErrorPixelThreshold) 
         { 
@@ -195,6 +186,18 @@ bool isMeshletVisible(
         }
     }
 
+    return true;
+}
+
+bool isMeshletVisible(
+    in const PerframeCameraView perView, 
+    in const GPUObjectGLTFPrimitive objectInfo,
+    in const float4x4 localToTranslatedWorld,
+    in const float4x4 localToView,
+    in const float4x4 localToClip,
+    in const GPUGLTFMeshlet meshlet,
+    in const GLTFMaterialGPUData materialInfo)
+{
     // Do cone culling before frustum culling, it compute faster.
     if ((materialInfo.bTwoSided == 0) && shaderHasFlag(pushConsts.switchFlags, kMeshletConeCullEnableBit))
     {
@@ -204,6 +207,11 @@ bool isMeshletVisible(
             return false;
         }
     }
+
+    const float3 posMin    = meshlet.posMin;
+    const float3 posMax    = meshlet.posMax;
+    const float3 posCenter = 0.5 * (posMin + posMax);
+    const float3 extent    = posMax - posCenter;
 
     // Frustum visible culling: use obb.
     if (shaderHasFlag(pushConsts.switchFlags, kFrustumCullingEnableBit))
@@ -224,11 +232,6 @@ void bvhTraverseCS(uint groupIndex : SV_GroupIndex, uint threadId : SV_DispatchT
     const GPUBasicData scene = perView.basicData;  
 
     const uint kMaxNodeCount = rwCounterBuffer[kBVHNodeCheckNodeCountPos2];
-    
-    if (threadId >= kMaxNodeCount)
-    {
-        return;
-    }
 
     //
     uint objectId = kUnvalidIdUint32;
@@ -290,8 +293,9 @@ void bvhTraverseCS(uint groupIndex : SV_GroupIndex, uint threadId : SV_DispatchT
         const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
         const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
         
-        ByteAddressBuffer meshletIndicesBuffer = ByteAddressBindless(primitiveDataInfo.bvhMeshletIndicesBuffer);
         ByteAddressBuffer meshletBuffer = ByteAddressBindless(primitiveDataInfo.meshletBuffer);
+        ByteAddressBuffer meshletGroupBuffer = ByteAddressBindless(primitiveDataInfo.meshletGroupBuffer);
+        ByteAddressBuffer meshletGroupIndicesBuffer = ByteAddressBindless(primitiveDataInfo.meshletGroupIndicesBuffer);
 
         const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
         const float4x4 localToView = mul(perView.translatedWorldToView, localToTranslatedWorld);
@@ -302,7 +306,8 @@ void bvhTraverseCS(uint groupIndex : SV_GroupIndex, uint threadId : SV_DispatchT
         const uint loadNodeId = nodeId + primitiveInfo.bvhNodeOffset;
         const GPUBVHNode node = BATL(GPUBVHNode, primitiveDataInfo.bvhNodeBuffer, loadNodeId);
 
-        const bool bNodeVisible = isNodeVisible(bRootNode, perView, objectInfo, localToView, node.sphere);
+        // Node visible state.
+        const bool bNodeVisible = bRootNode || isNodeVisible(perView, objectInfo, localToView, node.sphere);
 
         // Update check node count. 
         InterlockedAdd(rwCounterBuffer[kBVHNodeCheckNodeCountPos], bNodeVisible ? -1 : -node.bvhNodeCount);
@@ -310,44 +315,48 @@ void bvhTraverseCS(uint groupIndex : SV_GroupIndex, uint threadId : SV_DispatchT
         bChildContinue = false;
         if (bNodeVisible)
         {
-            // Current thread continue next node. 
-            if (node.left != kUnvalidIdUint32)
+            for (uint childId = 0; childId < kNaniteBVHLevelNodeCount; childId ++)
             {
-                bChildContinue = true;
-                nodeId = node.left;
-            }
-
-            // 
-            if (node.right != kUnvalidIdUint32)
-            {
-                if (bChildContinue)
+                if (node.children[childId] != kUnvalidIdUint32)
                 {
-                    int produceId;
-                    InterlockedAdd(rwCounterBuffer[kBVHNodeProduceCountPos], 1, produceId);
+                    if (!bChildContinue)
+                    {
+                        bChildContinue = true;
+                        nodeId = node.children[childId];
+                    }
+                    else
+                    {
+                        int produceId;
+                        InterlockedAdd(rwCounterBuffer[kBVHNodeProduceCountPos], 1, produceId);
 
-                    uint2 fillCmd;
-                    InterlockedExchange(rwBVHNodeIdBuffer[produceId].x,   objectId, fillCmd.x);
-                    InterlockedExchange(rwBVHNodeIdBuffer[produceId].y, node.right, fillCmd.y);
-                }
-                else
-                {
-                    bChildContinue = true;
-                    nodeId = node.right;
+                        uint2 fillCmd;
+                        InterlockedExchange(rwBVHNodeIdBuffer[produceId].x, objectId, fillCmd.x);
+                        InterlockedExchange(rwBVHNodeIdBuffer[produceId].y, node.children[childId], fillCmd.y);
+                    }
                 }
             }
 
             // Meshlet handle. 
-            for (uint i = 0; i < node.leafMeshletCount; i ++)
+            for (uint i = 0; i < node.leafMeshletGroupCount; i ++)
             {  
-                const uint loadIndex = primitiveInfo.bvhMeshletIndicesOffset + i + node.leafMeshletOffset;
-                const uint meshletIndex = primitiveInfo.meshletOffset + meshletIndicesBuffer.TypeLoad(uint, loadIndex);
-                const GPUGLTFMeshlet meshlet = meshletBuffer.TypeLoad(GPUGLTFMeshlet, meshletIndex);
-
-                if (isMeshletVisible(bRootNode, perView, objectInfo, localToTranslatedWorld, localToView, localToClip, meshlet, materialInfo))
+                const uint meshletGroupLoadIndex = primitiveInfo.meshletGroupOffset + i + node.leafMeshletGroupOffset;
+                const GPUGLTFMeshletGroup meshletGroup = meshletGroupBuffer.TypeLoad(GPUGLTFMeshletGroup, meshletGroupLoadIndex);
+                
+                if (isMeshletGroupVisibile(perView, objectInfo, localToTranslatedWorld, localToView, localToClip, meshletGroup))
                 {
-                    uint meshletStoreId = interlockedAddUint(pushConsts.drawedMeshletCountId);
-                    const uint2 drawCmd = uint2(objectId, meshletIndex);
-                    BATS(uint2, pushConsts.drawedMeshletCmdId, meshletStoreId, drawCmd);
+                    for (uint j = 0; j < meshletGroup.meshletCount; j ++)
+                    {
+                        const uint meshletIndicesLoadId = j + meshletGroup.meshletOffset + primitiveInfo.meshletGroupIndicesOffset;
+                        const uint meshletIndex = primitiveInfo.meshletOffset + meshletGroupIndicesBuffer.TypeLoad(uint, meshletIndicesLoadId);
+                        const GPUGLTFMeshlet meshlet = meshletBuffer.TypeLoad(GPUGLTFMeshlet, meshletIndex);
+
+                        if (isMeshletVisible(perView, objectInfo, localToTranslatedWorld, localToView, localToClip, meshlet, materialInfo))
+                        {
+                            uint meshletStoreId = interlockedAddUint(pushConsts.drawedMeshletCountId);
+                            const uint2 drawCmd = uint2(objectId, meshletIndex);
+                            BATS(uint2, pushConsts.drawedMeshletCmdId, meshletStoreId, drawCmd);
+                        }
+                    }
                 }
             }
         }

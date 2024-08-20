@@ -26,11 +26,20 @@ registerPODClassMember(GLTFTextureInfo)
 registerPODClassMember(GLTFBVHNode)
 {
 	ar(data.sphere);
-	ar(data.left);
-	ar(data.right);
-	ar(data.leafMeshletOffset);
-	ar(data.leafMeshletCount);
+	ar(data.children);
+	ar(data.leafMeshletGroupOffset);
+	ar(data.leafMeshletGroupCount);
 	ar(data.bvhNodeCount);
+}
+
+registerPODClassMember(GLTFMeshletGroup)
+{
+	ar(data.clusterPosCenter);
+	ar(data.parentError);
+	ar(data.parentPosCenter);
+	ar(data.error);
+	ar(data.meshletOffset);
+	ar(data.meshletCount);
 }
 
 registerPODClassMember(GLTFMeshlet)
@@ -42,10 +51,6 @@ registerPODClassMember(GLTFMeshlet)
 	ar(data.coneCutOff);
 	ar(data.coneAxis);
 	ar(data.coneApex);
-	ar(data.parentPosCenter);
-	ar(data.clusterPosCenter);
-	ar(data.error);
-	ar(data.parentError);
 	ar(data.lod);
 }
 
@@ -54,7 +59,7 @@ registerPODClassMember(GLTFPrimitive)
 	ar(name, material, vertexCount, vertexOffset);
 	ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
 	ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
-	ar(meshletOffset, lod0meshletCount, bvhNodeOffset, bvhMeshletIndicesOffset);
+	ar(meshletOffset, lod0meshletCount, bvhNodeOffset, meshletGroupOffset, meshletGroupIndicesOffset, bvhNodeCount);
 }
 
 registerPODClassMember(GLTFMesh)
@@ -84,7 +89,8 @@ registerPODClassMember(GLTFBinary)
 	ar(primitiveData.meshlets);
 	ar(primitiveData.meshletDatas);
 	ar(primitiveData.bvhNodes);
-	ar(primitiveData.bvhLeafMeshletIndices);
+	ar(primitiveData.meshletGroups);
+	ar(primitiveData.meshletGroupIndices);
 }
 
 registerClassMember(IAsset)

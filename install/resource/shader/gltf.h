@@ -12,13 +12,23 @@
 struct GPUBVHNode
 {
     float4 sphere;
-
-    uint left;
-    uint right;
-    uint leafMeshletOffset;
-    uint leafMeshletCount; 
+    uint children[kNaniteBVHLevelNodeCount];
 
     uint bvhNodeCount;
+    uint leafMeshletGroupOffset;
+    uint leafMeshletGroupCount; 
+};
+
+struct GPUGLTFMeshletGroup
+{
+    float3 clusterPosCenter;
+    float parentError;
+
+    float3 parentPosCenter; 
+    float error;
+
+    uint meshletOffset;
+    uint meshletCount;
 };
 
 struct GPUGLTFMeshlet
@@ -34,12 +44,6 @@ struct GPUGLTFMeshlet
 
     float3 coneApex;
     uint lod;
-
-    float3 clusterPosCenter;
-    float parentError;
-
-    float3 parentPosCenter; 
-    float error;
 };
 
 inline uint packVertexCountTriangleCount(uint vertexCount, uint triangleCount) { return (vertexCount & 0xff) | ((triangleCount & 0xff) << 8); }
@@ -64,8 +68,8 @@ struct GLTFPrimitiveBuffer
     uint textureCoord1Offset;
 
     uint bvhNodeOffset;
-    uint bvhMeshletIndicesOffset;
-    uint pad0;
+    uint meshletGroupOffset;
+    uint meshletGroupIndicesOffset;
     uint pad1;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveBuffer);
@@ -85,8 +89,8 @@ struct GLTFPrimitiveDatasBuffer
 
     uint meshletDataBuffer;
     uint bvhNodeBuffer;
-    uint bvhMeshletIndicesBuffer;
-    uint pad3;
+    uint meshletGroupBuffer;
+    uint meshletGroupIndicesBuffer;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveDatasBuffer);
 

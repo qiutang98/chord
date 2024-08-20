@@ -35,7 +35,7 @@ namespace chord::nanite
 		uint32 lod;
 
 		// LOD reduce relative mesh space error.
-		float error = 0.0f;
+		float error = -1.0f;
 
 		float parentError = std::numeric_limits<float>::max();
 		math::vec3 parentPosCenter;
@@ -54,9 +54,10 @@ namespace chord::nanite
 
 		// 
 		std::vector<Meshlet> meshlets;
-
+		std::vector<GPUGLTFMeshletGroup> meshletGroups;
+		std::vector<uint32> meshletGroupIndices;
 		std::vector<GPUBVHNode> bvhNodes;
-		std::vector<uint32> bvhLeafMeshletIndices;
+
 
 		void merge(MeshletContainer&& rhs);
 	};
