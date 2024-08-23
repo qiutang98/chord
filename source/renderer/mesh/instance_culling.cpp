@@ -73,6 +73,7 @@ public:
 IMPLEMENT_GLOBAL_SHADER(BVHhTraverseCS, "resource/shader/instance_culling.hlsl", "bvhTraverseCS", EShaderStage::Compute);
 
 PRIVATE_GLOBAL_SHADER(FillCullingParamCS, "resource/shader/instance_culling.hlsl", "fillCullingParamCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(PrepareBVHTraverseCS, "resource/shader/instance_culling.hlsl", "prepareBVHTraverseCS", EShaderStage::Compute);
 
 class HZBCullCS : public GlobalShader
 {
@@ -139,13 +140,30 @@ void chord::instanceCulling(GLTFRenderContext& ctx)
         asSRV(queue, bvhNodeIdBuffer);
     }
 
+    auto bvhTraveseCmdBuffer = getContext().getBufferPool().createGPUOnly("BVHTraverseParam", sizeof(uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    {
+        ScopePerframeMarker marker(queue, "PrepareBVHTraverseParam");
+
+        InstanceCullingPushConst push = pushTemplate;
+        push.bvhNodeCountBuffer = asUAV(queue, bvhNodeCountBuffer);
+        push.meshletCullCmdId   = asUAV(queue, bvhTraveseCmdBuffer);
+
+        auto computeShader = getContext().getShaderLibrary().getShader<PrepareBVHTraverseCS>();
+        addComputePass2(queue,
+            "InstanceCulling: BVHTraverseParam",
+            getContext().computePipe(computeShader, "InstanceCullingPipe: BVHTraverseParam"),
+            push,
+            math::uvec3(1, 1, 1));
+
+        asSRV(queue, bvhNodeCountBuffer);
+        asSRV(queue, bvhTraveseCmdBuffer);
+    }
+
     auto drawMeshletCountBuffer = pool.createGPUOnly("drawMeshletCountBuffer", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     auto drawMeshletCmdBuffer = pool.createGPUOnly("drawMeshletCmdBuffer", sizeof(uint2) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
     queue.clearUAV(drawMeshletCountBuffer);
     {
         ScopePerframeMarker marker(queue, "InstanceCulling: BVHTraverse");
-
-        constexpr uint32 threadGroupCount = 1024;
 
         InstanceCullingPushConst push = pushTemplate;
         push.drawedMeshletCountId = asUAV(queue, drawMeshletCountBuffer);
@@ -153,14 +171,14 @@ void chord::instanceCulling(GLTFRenderContext& ctx)
         // push.totalThreadCount     = threadGroupCount * 64;
 
         auto computeShader = getContext().getShaderLibrary().getShader<BVHhTraverseCS>();
-        addComputePass(queue,
+        addIndirectComputePass(queue,
             "InstanceCulling: BVHTraverse",
             getContext().computePipe(computeShader, "InstanceCullingPipe: BVHTraverse", {
                 getContext().descriptorFactoryBegin()
                 .buffer(0) // rwBVHNodeIdBuffer
                 .buffer(1) // rwCounterBuffer
                 .buildNoInfoPush() }),
-            { threadGroupCount, 1, 1 },
+            bvhTraveseCmdBuffer, 0,
             [&](GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)
             {
                 pipe->pushConst(cmd, push);

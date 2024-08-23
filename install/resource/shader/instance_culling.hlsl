@@ -41,10 +41,11 @@ CHORD_PUSHCONST(InstanceCullingPushConst, pushConsts);
 #include "debug.hlsli"
 #include "debug_line.hlsli"
 
-#define kBVHNodeProduceCountPos   0 
-#define kBVHNodeConsumeCountPos   1
-#define kBVHNodeCheckNodeCountPos 2
-#define kBVHNodeCheckNodeCountPos2 3
+#define kBVHNodeProduceCountPos    0 
+#define kBVHNodeConsumeCountPos    1
+#define kBVHNodeCheckNodeCountPos  2
+#define kBVHNodeMaxNodeCountPos    3
+
 [numthreads(64, 1, 1)]
 void instanceCullingCS(uint threadId : SV_DispatchThreadID)
 {
@@ -103,8 +104,6 @@ void instanceCullingCS(uint threadId : SV_DispatchThreadID)
         // Buffer[1] Total node count increment.
         uint totalCountStoreBseId;
         countBufferAcess.InterlockedAdd(kBVHNodeCheckNodeCountPos * 4, totalBVHNodeCount, totalCountStoreBseId);
-        countBufferAcess.InterlockedAdd(kBVHNodeCheckNodeCountPos2 * 4, totalBVHNodeCount, totalCountStoreBseId);
-        
 
         // Buffer[0] is node count.
         countBufferAcess.InterlockedAdd(kBVHNodeProduceCountPos * 4, visibleCount, storeBaseId);
@@ -122,10 +121,29 @@ void instanceCullingCS(uint threadId : SV_DispatchThreadID)
     }
 }
 
+[numthreads(1, 1, 1)]
+void prepareBVHTraverseCS()
+{
+    const uint kMaxNodeCount  = BATL(uint, pushConsts.bvhNodeCountBuffer, kBVHNodeCheckNodeCountPos);
+    const uint kRootNodeCount = BATL(uint, pushConsts.bvhNodeCountBuffer, kBVHNodeProduceCountPos);
 
+    // Store max 
+    BATS(uint, pushConsts.bvhNodeCountBuffer, kBVHNodeMaxNodeCountPos, kMaxNodeCount);
+
+    // Dispatch traverse count. 
+    uint4 dispatchParam;
+    dispatchParam.x = kRootNodeCount > 0 ? 1024 : 0; // 1024 warp. wave32
+    dispatchParam.y = 1;
+    dispatchParam.z = 1;
+    dispatchParam.w = 1;
+    BATS(uint4, pushConsts.meshletCullCmdId, 0, dispatchParam);
+}
 
 [[vk::binding(0, 1)]] globallycoherent RWStructuredBuffer<uint2> rwBVHNodeIdBuffer;
 [[vk::binding(1, 1)]] globallycoherent RWStructuredBuffer<int>  rwCounterBuffer;
+
+groupshared uint sharedNodeCount;
+groupshared uint sharedNodeId[kWaveSize];
 
 // One pixel threshold.
 #define kErrorPixelThreshold 1.0f
@@ -225,146 +243,230 @@ bool isMeshletVisible(
     return true;
 }
 
-[numthreads(64, 1, 1)]
-void bvhTraverseCS(uint groupIndex : SV_GroupIndex, uint threadId : SV_DispatchThreadID)
+
+#if kNaniteBVHLevelNodeCount != 8
+    #error "Expect bvh node count per node is 8."
+#endif
+
+[numthreads(kWaveSize, 1, 1)]
+void bvhTraverseCS(uint localThreadIndex : SV_GroupIndex)
 {
     const PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
     const GPUBasicData scene = perView.basicData;  
 
-    const uint kMaxNodeCount = rwCounterBuffer[kBVHNodeCheckNodeCountPos2];
+    // Get max node count.
+    const uint kMaxNodeCount = rwCounterBuffer[kBVHNodeMaxNodeCountPos];
 
-    //
-    uint objectId = kUnvalidIdUint32;
+    // Only for first lane.
+    uint consumeBVHNodeId = kUnvalidIdUint32; 
+    uint bvhNodeCountNeedCheck;
+
+    // 
+    uint objectId;
     uint nodeId   = kUnvalidIdUint32;
-    bool bChildContinue = false;
-    int checkId;
-    int consumeId = -1;
 
+    sharedNodeId[localThreadIndex] = kUnvalidIdUint32;
+    if (WaveIsFirstLane())
+    {
+        sharedNodeCount = 0;
+    }
+
+    // 
+    uint cacheObjectId = kUnvalidIdUint32;
+
+    // Load object always traverse meshlet and root node id. 
+    GPUObjectGLTFPrimitive   objectInfo;
+    GLTFPrimitiveBuffer      primitiveInfo;
+    GLTFPrimitiveDatasBuffer primitiveDataInfo;
+    GLTFMaterialGPUData      materialInfo;
+
+    float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
+    float4x4 localToView = mul(perView.translatedWorldToView, localToTranslatedWorld);
+    float4x4 localToClip = mul(perView.translatedWorldToClip, localToTranslatedWorld);
+
+    // Persistent thread body.
     while (true)
     {
-        InterlockedMax(rwCounterBuffer[kBVHNodeCheckNodeCountPos], 0, checkId);
-        if (checkId == 0)
+        if (WaveIsFirstLane())
+        {
+            InterlockedMax(rwCounterBuffer[kBVHNodeCheckNodeCountPos], 0, bvhNodeCountNeedCheck);
+        }
+        bvhNodeCountNeedCheck = WaveReadLaneFirst(bvhNodeCountNeedCheck);
+
+        // Reset object id if all node unvalid.
+        if (sharedNodeCount == 0)
+        {
+            objectId = kUnvalidIdUint32;
+        }
+
+        // When check id is zero, all node checked.
+        bool bAllBVHNodeChecked = (bvhNodeCountNeedCheck == 0);
+        if (bAllBVHNodeChecked)
         {
             break;
         }
 
-        // No valid node, consume.
-        if (objectId == kUnvalidIdUint32)
+        // Object no ready, load new one.
+        if (WaveIsFirstLane() && !bAllBVHNodeChecked && objectId == kUnvalidIdUint32)
         {
-            if (consumeId < 0)
-            {
-                // Allocate new consume id.
-                InterlockedAdd(rwCounterBuffer[kBVHNodeConsumeCountPos], 1, consumeId);
+            check(sharedNodeCount == 0);
 
-                if (consumeId >= kMaxNodeCount)
+            // Allocate a consume node id.
+            if (consumeBVHNodeId == kUnvalidIdUint32)
+            {
+                InterlockedAdd(rwCounterBuffer[kBVHNodeConsumeCountPos], 1, consumeBVHNodeId);
+            }
+
+            // 
+            if (consumeBVHNodeId < kMaxNodeCount)
+            {
+                uint2 cmd = kUnvalidIdUint32;
+                InterlockedExchange(rwBVHNodeIdBuffer[consumeBVHNodeId].x, kUnvalidIdUint32, cmd.x);
+                InterlockedExchange(rwBVHNodeIdBuffer[consumeBVHNodeId].y, kUnvalidIdUint32, cmd.y);
+
+                if (any(cmd != kUnvalidIdUint32))
                 {
-                    break;
+                    // Spinning until all ready.
+                    while (cmd.x == kUnvalidIdUint32) { InterlockedExchange(rwBVHNodeIdBuffer[consumeBVHNodeId].x, kUnvalidIdUint32, cmd.x); }
+                    while (cmd.y == kUnvalidIdUint32) { InterlockedExchange(rwBVHNodeIdBuffer[consumeBVHNodeId].y, kUnvalidIdUint32, cmd.y); }
+
+                    objectId = cmd.x;
+
+                    // Add node.
+                    sharedNodeId[sharedNodeCount] = cmd.y;
+                    sharedNodeCount ++;
+
+                    // Current already used id, reset for next allocate.
+                    consumeBVHNodeId  = kUnvalidIdUint32;
                 }
             }
-
-            uint2 cmd = kUnvalidIdUint32;
-            InterlockedExchange(rwBVHNodeIdBuffer[consumeId].x, kUnvalidIdUint32, cmd.x);
-            InterlockedExchange(rwBVHNodeIdBuffer[consumeId].y, kUnvalidIdUint32, cmd.y);
-
-            if (all(cmd == kUnvalidIdUint32))
-            {
-                continue;
-            }
-
-            while (cmd.x == kUnvalidIdUint32)
-            {
-                InterlockedExchange(rwBVHNodeIdBuffer[consumeId].x, kUnvalidIdUint32, cmd.x);
-            }
-            while (cmd.y == kUnvalidIdUint32)
-            {
-                InterlockedExchange(rwBVHNodeIdBuffer[consumeId].y, kUnvalidIdUint32, cmd.y);
-            }
-
-            objectId = cmd.x;
-            nodeId   = cmd.y;
-
-            // Current already used id, reset for next allocate.
-            consumeId = -1;
         }
 
-        // Load object always traverse meshlet and root node id. 
-        const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
-        const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
-        const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
-        const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
-        
-        ByteAddressBuffer meshletBuffer = ByteAddressBindless(primitiveDataInfo.meshletBuffer);
-        ByteAddressBuffer meshletGroupBuffer = ByteAddressBindless(primitiveDataInfo.meshletGroupBuffer);
-        ByteAddressBuffer meshletGroupIndicesBuffer = ByteAddressBindless(primitiveDataInfo.meshletGroupIndicesBuffer);
+        // Get object id and node id.
+        objectId = WaveReadLaneFirst(objectId);
+        nodeId   = (localThreadIndex < sharedNodeCount) ? sharedNodeId[localThreadIndex] : kUnvalidIdUint32;
 
-        const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
-        const float4x4 localToView = mul(perView.translatedWorldToView, localToTranslatedWorld);
-        const float4x4 localToClip = mul(perView.translatedWorldToClip, localToTranslatedWorld);
-
-        // Consume and produce node.
-        const bool bRootNode = (nodeId == 0);
-        const uint loadNodeId = nodeId + primitiveInfo.bvhNodeOffset;
-        const GPUBVHNode node = BATL(GPUBVHNode, primitiveDataInfo.bvhNodeBuffer, loadNodeId);
-
-        // Node visible state.
-        const bool bNodeVisible = bRootNode || isNodeVisible(perView, objectInfo, localToView, node.sphere);
-
-        // Update check node count. 
-        InterlockedAdd(rwCounterBuffer[kBVHNodeCheckNodeCountPos], bNodeVisible ? -1 : -node.bvhNodeCount);
-
-        bChildContinue = false;
-        if (bNodeVisible)
+        // Reset shared node count. 
+        if (WaveIsFirstLane())
         {
-            for (uint childId = 0; childId < kNaniteBVHLevelNodeCount; childId ++)
+            sharedNodeCount = 0;
+        }
+
+        // Load object info.
+        if (cacheObjectId != objectId)
+        {
+            cacheObjectId = objectId;
+
+            // Load object always traverse meshlet and root node id. 
+            objectInfo        = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
+            primitiveInfo     = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
+            primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
+            materialInfo      = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
+
+            localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
+            localToView = mul(perView.translatedWorldToView, localToTranslatedWorld);
+            localToClip = mul(perView.translatedWorldToClip, localToTranslatedWorld);
+        }
+
+        // Object valid.
+        if (!bAllBVHNodeChecked && objectId != kUnvalidIdUint32)
+        {
+            ByteAddressBuffer meshletBuffer             = ByteAddressBindless(primitiveDataInfo.meshletBuffer);
+            ByteAddressBuffer meshletGroupBuffer        = ByteAddressBindless(primitiveDataInfo.meshletGroupBuffer);
+            ByteAddressBuffer meshletGroupIndicesBuffer = ByteAddressBindless(primitiveDataInfo.meshletGroupIndicesBuffer);
+
+            if (nodeId != kUnvalidIdUint32)
             {
-                if (node.children[childId] != kUnvalidIdUint32)
+                // Consume and produce node.
+                const bool bRootNode = (nodeId == 0);
+                const uint loadNodeId = nodeId + primitiveInfo.bvhNodeOffset;
+                const GPUBVHNode node = BATL(GPUBVHNode, primitiveDataInfo.bvhNodeBuffer, loadNodeId);
+        
+                // Node visible state.
+                const bool bNodeVisible = bRootNode || isNodeVisible(perView, objectInfo, localToView, node.sphere);
+
+                // Update check node count. 
+                InterlockedAdd(rwCounterBuffer[kBVHNodeCheckNodeCountPos], bNodeVisible ? -1 : -node.bvhNodeCount);
+                if (bNodeVisible)
                 {
-                    if (!bChildContinue)
+                    uint childNode[kNaniteBVHLevelNodeCount];
+                    uint produceNewNodeCount = 0;
+
+                    for (uint childId = 0; childId < kNaniteBVHLevelNodeCount; childId ++)
                     {
-                        bChildContinue = true;
-                        nodeId = node.children[childId];
+                        const uint child = node.children[childId];
+                        if (child == kUnvalidIdUint32)
+                        {
+                            continue;
+                        }
+
+                        childNode[produceNewNodeCount] = child;
+                        produceNewNodeCount ++;
                     }
-                    else
+
+                    int vramCount = produceNewNodeCount;
+                    const uint awakeNewThreadCount = kWaveSize; 
+                    uint sharedBaseId = 0;
+                    if (produceNewNodeCount > 0)
                     {
+                        InterlockedAdd(sharedNodeCount, produceNewNodeCount, sharedBaseId);
+
+                        if (sharedBaseId < awakeNewThreadCount)
+                        {
+                            uint objectCount = min(sharedBaseId + produceNewNodeCount, awakeNewThreadCount);
+                            for (uint i = sharedBaseId; i < objectCount; i ++)
+                            {
+                                sharedNodeId[i] = childNode[i - sharedBaseId];
+                            }   
+
+                            vramCount = (sharedBaseId + produceNewNodeCount) > awakeNewThreadCount ? (sharedBaseId + produceNewNodeCount - awakeNewThreadCount) : 0;
+                            sharedBaseId = objectCount - sharedBaseId;
+                        }
+                        else
+                        {
+                            sharedBaseId = 0;
+                        }
+                    }
+
+                    if (vramCount > 0)
+                    {
+                        // Produce new node.
                         int produceId;
-                        InterlockedAdd(rwCounterBuffer[kBVHNodeProduceCountPos], 1, produceId);
+                        InterlockedAdd(rwCounterBuffer[kBVHNodeProduceCountPos], vramCount, produceId);
 
                         uint2 fillCmd;
-                        InterlockedExchange(rwBVHNodeIdBuffer[produceId].x, objectId, fillCmd.x);
-                        InterlockedExchange(rwBVHNodeIdBuffer[produceId].y, node.children[childId], fillCmd.y);
-                    }
-                }
-            }
-
-            // Meshlet handle. 
-            for (uint i = 0; i < node.leafMeshletGroupCount; i ++)
-            {  
-                const uint meshletGroupLoadIndex = primitiveInfo.meshletGroupOffset + i + node.leafMeshletGroupOffset;
-                const GPUGLTFMeshletGroup meshletGroup = meshletGroupBuffer.TypeLoad(GPUGLTFMeshletGroup, meshletGroupLoadIndex);
-                
-                if (isMeshletGroupVisibile(perView, objectInfo, localToTranslatedWorld, localToView, localToClip, meshletGroup))
-                {
-                    for (uint j = 0; j < meshletGroup.meshletCount; j ++)
-                    {
-                        const uint meshletIndicesLoadId = j + meshletGroup.meshletOffset + primitiveInfo.meshletGroupIndicesOffset;
-                        const uint meshletIndex = primitiveInfo.meshletOffset + meshletGroupIndicesBuffer.TypeLoad(uint, meshletIndicesLoadId);
-                        const GPUGLTFMeshlet meshlet = meshletBuffer.TypeLoad(GPUGLTFMeshlet, meshletIndex);
-
-                        if (isMeshletVisible(perView, objectInfo, localToTranslatedWorld, localToView, localToClip, meshlet, materialInfo))
+                        for (uint newNodeId = 0; newNodeId < vramCount; newNodeId ++)
                         {
-                            uint meshletStoreId = interlockedAddUint(pushConsts.drawedMeshletCountId);
-                            const uint2 drawCmd = uint2(objectId, meshletIndex);
-                            BATS(uint2, pushConsts.drawedMeshletCmdId, meshletStoreId, drawCmd);
+                            InterlockedExchange(rwBVHNodeIdBuffer[newNodeId + produceId].x, objectId, fillCmd.x);
+                            InterlockedExchange(rwBVHNodeIdBuffer[newNodeId + produceId].y, childNode[sharedBaseId + newNodeId], fillCmd.y);
+                        }
+                    }
+
+                    // Meshlet handle. 
+                    for (uint i = 0; i < node.leafMeshletGroupCount; i ++)
+                    {  
+                        const uint meshletGroupLoadIndex = primitiveInfo.meshletGroupOffset + i + node.leafMeshletGroupOffset;
+                        const GPUGLTFMeshletGroup meshletGroup = meshletGroupBuffer.TypeLoad(GPUGLTFMeshletGroup, meshletGroupLoadIndex);
+                        
+                        if (isMeshletGroupVisibile(perView, objectInfo, localToTranslatedWorld, localToView, localToClip, meshletGroup))
+                        {
+                            for (uint j = 0; j < meshletGroup.meshletCount; j ++)
+                            {
+                                const uint meshletIndicesLoadId = j + meshletGroup.meshletOffset + primitiveInfo.meshletGroupIndicesOffset;
+                                const uint meshletIndex = primitiveInfo.meshletOffset + meshletGroupIndicesBuffer.TypeLoad(uint, meshletIndicesLoadId);
+                                const GPUGLTFMeshlet meshlet = meshletBuffer.TypeLoad(GPUGLTFMeshlet, meshletIndex);
+
+                                if (isMeshletVisible(perView, objectInfo, localToTranslatedWorld, localToView, localToClip, meshlet, materialInfo))
+                                {
+                                    uint meshletStoreId = interlockedAddUint(pushConsts.drawedMeshletCountId);
+                                    const uint2 drawCmd = uint2(objectId, meshletIndex);
+                                    BATS(uint2, pushConsts.drawedMeshletCmdId, meshletStoreId, drawCmd);
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-
-        if (!bChildContinue)
-        {
-            objectId = kUnvalidIdUint32;
-            nodeId   = kUnvalidIdUint32;
         }
     }
 }
