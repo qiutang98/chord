@@ -89,6 +89,31 @@ namespace chord
 		RTs.endRendering(queue);
 	}
 
+	void addMeshIndirectDrawPass(
+		graphics::GraphicsQueue& queue, 
+		const std::string& name, 
+		graphics::GraphicsPipelineRef pipe,
+		RenderTargets& RTs, 
+		graphics::PoolBufferRef cmdBuffer, 
+		VkDeviceSize offset, 
+		uint32_t stride, 
+		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
+	{
+		queue.checkRecording();
+		ScopePerframeMarker marker(queue, name.c_str());
+		queue.transition(cmdBuffer, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
+
+		auto& cmd = queue.getActiveCmd()->commandBuffer;
+
+		RTs.beginRendering(queue);
+		{
+			pipe->bind(cmd);
+			lambda(queue, pipe, cmd);
+			vkCmdDrawMeshTasksIndirectEXT(cmd, cmdBuffer->get(), offset, 1, stride);
+		}
+		RTs.endRendering(queue);
+	}
+
 	void addIndirectDrawPass(
 		graphics::GraphicsQueue& queue, 
 		const std::string& name, 

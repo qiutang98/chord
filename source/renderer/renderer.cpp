@@ -218,6 +218,11 @@ namespace chord
 		// 
 		auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
 
+		auto insertTimer = [&](const std::string& label, GraphicsOrComputeQueue& queue)
+		{
+			m_rendererTimer.getTimeStamp(queue.getActiveCmd()->commandBuffer, label.c_str());
+		};
+
 		GLTFRenderContext gltfRenderCtx(
 			&perframe,
 			gltfObjectCount,
@@ -226,14 +231,12 @@ namespace chord
 			graphics,
 			gbuffers,
 			m_rendererHistory);
+		gltfRenderCtx.timerLambda = [&](const std::string& label, GraphicsOrComputeQueue& queue) { insertTimer(label, queue); };
 
 		debugLineCtx.prepareForRender(graphics);
 
 		HZBContext hzbCtx { };
-		auto insertTimer = [&](const std::string& label, GraphicsOrComputeQueue& queue)
-		{
-			m_rendererTimer.getTimeStamp(queue.getActiveCmd()->commandBuffer, label.c_str());
-		};
+
 		{
 			insertTimer("FrameBegin", graphics);
 
@@ -253,7 +256,7 @@ namespace chord
 				// Prepass stage1
 				if (bShouldStage1GLTF)
 				{
-					auto tempHzbCtx = buildHZB(graphics, gbuffers.depthStencil);
+					auto tempHzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, false);
 					insertTimer("BuildHZB Post Prepass Stage0", graphics);
 
 					gltfVisibilityRenderingStage1(gltfRenderCtx, tempHzbCtx);
@@ -261,16 +264,17 @@ namespace chord
 				}
 			}
 
-
-
-			hzbCtx = buildHZB(graphics, gbuffers.depthStencil);
+			hzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, true);
 			insertTimer("BuildHZB", graphics);
 
-			auto visibilityCtx = visibilityMark(graphics, gbuffers.visibility);
-			insertTimer("Visibility Tile Marker", graphics);
+			if (shouldRenderGLTF(gltfRenderCtx))
+			{
+				auto visibilityCtx = visibilityMark(graphics, viewGPUId, gltfRenderCtx.postBasicCullingCtx.meshletCmdBuffer, gbuffers.visibility);
+				insertTimer("Visibility Tile Marker", graphics);
 
-			lighting(graphics, gbuffers, viewGPUId, visibilityCtx);
-			insertTimer("lighting Tile", graphics);
+				lighting(graphics, gbuffers, viewGPUId, gltfRenderCtx.postBasicCullingCtx.meshletCmdBuffer, visibilityCtx);
+				insertTimer("lighting Tile", graphics);
+			}
 
 			check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 			check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);

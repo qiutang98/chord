@@ -16,7 +16,11 @@ namespace chord
 	PRIVATE_GLOBAL_SHADER(VisibilityTilePrepareCS, "resource/shader/visibility_tile.hlsl", "tilePrepareCS", EShaderStage::Compute);
 	PRIVATE_GLOBAL_SHADER(VisibilityTileCmdFillCS, "resource/shader/visibility_tile.hlsl", "prepareTileParamCS", EShaderStage::Compute);
 
-	VisibilityTileMarkerContext visibilityMark(GraphicsQueue& queue, PoolTextureRef visibilityImage)
+	VisibilityTileMarkerContext visibilityMark(
+		GraphicsQueue& queue, 
+		uint cameraViewId,
+		PoolBufferGPUOnlyRef drawMeshletCmdBuffer,
+		PoolTextureRef visibilityImage)
 	{
 		VisibilityTileMarkerContext ctx{};
 		ctx.visibilityTexture = visibilityImage;
@@ -32,10 +36,12 @@ namespace chord
 		VisibilityTilePushConsts pushConst { };
 
 		pushConst.visibilityTexelSize = math::vec2(1.0f) / math::vec2(ctx.visibilityDim);
-		pushConst.markerDim       = ctx.markerDim;
-		pushConst.visibilityId    = asSRV(queue, visibilityImage);
-		pushConst.markerTextureId = asUAV(queue, ctx.markerTexture);
-		pushConst.gatherSampler   = getContext().getSamplerManager().pointClampEdge().index.get();
+		pushConst.markerDim           = ctx.markerDim;
+		pushConst.visibilityId        = asSRV(queue, visibilityImage);
+		pushConst.markerTextureId     = asUAV(queue, ctx.markerTexture);
+		pushConst.gatherSampler       = getContext().getSamplerManager().pointClampEdge().index.get();
+		pushConst.cameraViewId        = cameraViewId;
+		pushConst.drawedMeshletCmdId  = asSRV(queue, drawMeshletCmdBuffer);
 		auto computeShader = getContext().getShaderLibrary().getShader<VisibilityTileMarkerCS>();
 		addComputePass2(
 			queue, 

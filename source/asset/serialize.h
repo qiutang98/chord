@@ -59,7 +59,7 @@ registerPODClassMember(GLTFPrimitive)
 	ar(name, material, vertexCount, vertexOffset);
 	ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
 	ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
-	ar(meshletOffset, lod0meshletCount, bvhNodeOffset, meshletGroupOffset, meshletGroupIndicesOffset, bvhNodeCount);
+	ar(meshletOffset, lod0meshletCount, bvhNodeOffset, meshletGroupOffset, meshletGroupIndicesOffset, bvhNodeCount, meshletGroupCount);
 }
 
 registerPODClassMember(GLTFMesh)
@@ -122,6 +122,7 @@ registerClassMemberInherit(GLTFMaterialAsset, IAsset)
 	ar(normalTextureScale);
 	ar(bExistOcclusion);
 	ar(occlusionTextureStrength);
+	ARCHIVE_ENUM_CLASS(shadingType);
 }}
 
 registerClassMemberInherit(GLTFAsset, IAsset)

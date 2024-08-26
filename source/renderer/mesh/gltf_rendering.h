@@ -33,6 +33,7 @@ namespace chord
 		graphics::GraphicsQueue& queue;
 		GBufferTextures& gbuffers;
 		const DeferredRendererHistory& history;
+		std::function<void(const std::string&, graphics::GraphicsOrComputeQueue& queue)> timerLambda = nullptr;
 
 		GLTFRenderContext(
 			const PerframeCollected* inPerframeCollected,
@@ -55,12 +56,12 @@ namespace chord
 	};
 
 	extern bool shouldRenderGLTF(GLTFRenderContext& renderCtx);
+	extern bool enableGLTFHZBCulling();
 	extern void instanceCulling(GLTFRenderContext& ctx);
 
 	namespace detail
 	{
 		extern graphics::PoolBufferGPUOnlyRef fillIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, graphics::PoolBufferGPUOnlyRef countBuffer);
-	
 		using CountAndCmdBuffer = std::pair<graphics::PoolBufferGPUOnlyRef, graphics::PoolBufferGPUOnlyRef>;
 		extern CountAndCmdBuffer hzbCulling(GLTFRenderContext& renderCtx, bool bFirstStage, graphics::PoolBufferGPUOnlyRef inCountBuffer, graphics::PoolBufferGPUOnlyRef inCmdBuffer, CountAndCmdBuffer& outBuffer);
 	

@@ -49,7 +49,7 @@
     T_BINDLESS_DECLARE(Type, Binding, int   ) \
     T_BINDLESS_DECLARE(Type, Binding, int2  ) \
     T_BINDLESS_DECLARE(Type, Binding, int3  ) \
-    T_BINDLESS_DECLARE(Type, Binding, int4  )
+    T_BINDLESS_DECLARE(Type, Binding, int4  ) 
 
 T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture2D,   (int)chord::EBindingType::BindlessSampledImage)
 T_BINDLESS_TEXTURE_FORMAT_DECLARE(Texture3D,   (int)chord::EBindingType::BindlessSampledImage)

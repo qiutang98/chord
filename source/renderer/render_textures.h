@@ -9,10 +9,9 @@ namespace chord
 	// Scene gbuffer textures, render resolution.
 	struct GBufferTextures
 	{
-		// Visibility: .x = encodeObjectInfo(ShadingType, ObjectId)
-		//             .y = triangle id.
+		// Visibility: .x = encodeTriangleIdInstanceId(primitiveId, instanceId)
 		graphics::PoolTextureRef visibility = nullptr;
-		static auto visibilityFormat() { return VK_FORMAT_R32G32_UINT; }
+		static auto visibilityFormat() { return VK_FORMAT_R32_UINT; }
 
 		// Color: .xyz = Store emissive in base pass, lighting color in lighting pass.
 		// 

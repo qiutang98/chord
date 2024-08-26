@@ -690,7 +690,7 @@ namespace chord
 					}
 				}
 
-				if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialTransmission)))
+				if (0 && material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialTransmission)))
 				{
 					const auto& ext = material.extensions[getGLTFExtension(EKHRGLTFExtension::MaterialTransmission)];
 					int32 texture;
@@ -1203,6 +1203,7 @@ namespace chord
 					primitiveMesh.meshletGroupOffset = gltfBin.primitiveData.meshletGroups.size();
 					primitiveMesh.meshletGroupIndicesOffset = gltfBin.primitiveData.meshletGroupIndices.size();
 					primitiveMesh.bvhNodeOffset = gltfBin.primitiveData.bvhNodes.size();
+					primitiveMesh.meshletGroupCount = gltfBin.primitiveData.meshletGroups.size();
 
 					// Position min, max and average.
 					primitiveMesh.posMin = meshPosMin;
@@ -1214,6 +1215,7 @@ namespace chord
 						auto meshletCtx = builder.build();
 
 						primitiveMesh.bvhNodeCount = meshletCtx.bvhNodes[0].bvhNodeCount;
+						primitiveMesh.meshletGroupCount = meshletCtx.meshletGroups.size();
 
 						gltfBin.primitiveData.meshletGroups.insert(gltfBin.primitiveData.meshletGroups.end(), meshletCtx.meshletGroups.begin(), meshletCtx.meshletGroups.end());
 						gltfBin.primitiveData.meshletGroupIndices.insert(gltfBin.primitiveData.meshletGroupIndices.end(), meshletCtx.meshletGroupIndices.begin(), meshletCtx.meshletGroupIndices.end());

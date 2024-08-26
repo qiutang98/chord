@@ -2,6 +2,7 @@
 #include <asset/gltf/gltf_helper.h>
 #include <asset/serialize.h>
 #include <renderer/gpu_scene.h>
+#include <shader/base.h>
 
 namespace chord
 {
@@ -334,7 +335,7 @@ namespace chord
 		uploadData.normalSampler            = reference->normalTexture.sampler.getSampler();
 		uploadData.metallicRoughnessSampler = reference->metallicRoughnessTexture.sampler.getSampler();
 		uploadData.emissiveSampler          = reference->emissiveTexture.sampler.getSampler();
-
+		uploadData.materialType             = (uint)reference->shadingType;
 
 
 
@@ -365,6 +366,8 @@ namespace chord
 	uint32 GLTFSampler::getSampler() const
 	{
 		SamplerCreateInfo ci = buildBasicSamplerCreateInfo();
+		ci.anisotropyEnable = VK_TRUE;
+		ci.maxAnisotropy    = 8.0f;
 
 		switch (minFilter)
 		{
@@ -561,6 +564,7 @@ namespace chord
 					primitiveBufferData.bvhNodeOffset             = primitiveInfo.bvhNodeOffset;
 					primitiveBufferData.meshletGroupOffset        = primitiveInfo.meshletGroupOffset;
 					primitiveBufferData.meshletGroupIndicesOffset = primitiveInfo.meshletGroupIndicesOffset;
+					primitiveBufferData.meshletGroupCount         = primitiveInfo.meshletGroupCount;
 				}
 
 				std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};

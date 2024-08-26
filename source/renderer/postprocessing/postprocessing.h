@@ -32,5 +32,9 @@ namespace chord
 		const DebugLineCtx& ctx,
 		graphics::PoolTextureRef depthImage,
 		graphics::PoolTextureRef outImage);
-	extern HZBContext buildHZB(graphics::GraphicsQueue& queue, graphics::PoolTextureRef depthImage);
+	extern HZBContext buildHZB(
+		graphics::GraphicsQueue& queue, 
+		graphics::PoolTextureRef depthImage,
+		bool bBuildMin,
+		bool bBuildMax);
 }

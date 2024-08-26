@@ -45,11 +45,16 @@ static AutoCVarRef cVarInstanceCullingShaderDebugMode(
     "  1. draw visible meshlet bounds box."
 );
 
+bool chord::enableGLTFHZBCulling()
+{
+    return sInstanceCullingEnableHZBCulling != 0;
+}
+
 static inline uint32 getInstanceCullingSwitchFlags()
 {
     uint32 result = 0;
-    if (sInstanceCullingEnableFrustumCulling != 0) { result = shaderSetFlag(result, kFrustumCullingEnableBit); }
-    if (sInstanceCullingEnableHZBCulling != 0) { result = shaderSetFlag(result, kHZBCullingEnableBit); }
+    if (sInstanceCullingEnableFrustumCulling != 0)     { result = shaderSetFlag(result, kFrustumCullingEnableBit); }
+    if (enableGLTFHZBCulling())                        { result = shaderSetFlag(result, kHZBCullingEnableBit); }
     if (sInstanceCullingEnableMeshletConeCulling != 0) { result = shaderSetFlag(result, kMeshletConeCullEnableBit); }
     return result;
 }
@@ -60,20 +65,8 @@ static inline bool shouldPrintDebugBox()
 }
 
 PRIVATE_GLOBAL_SHADER(InstanceCullingCS, "resource/shader/instance_culling.hlsl", "instanceCullingCS", EShaderStage::Compute);
-
-class BVHhTraverseCS : public GlobalShader
-{
-public:
-    DECLARE_SUPER_TYPE(GlobalShader);
-    static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId) 
-    { 
-        o.enableDebugSource();
-    }
-};
-IMPLEMENT_GLOBAL_SHADER(BVHhTraverseCS, "resource/shader/instance_culling.hlsl", "bvhTraverseCS", EShaderStage::Compute);
-
+PRIVATE_GLOBAL_SHADER(ClusterGroupCullingCS, "resource/shader/instance_culling.hlsl", "clusterGroupCullingCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(FillCullingParamCS, "resource/shader/instance_culling.hlsl", "fillCullingParamCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(PrepareBVHTraverseCS, "resource/shader/instance_culling.hlsl", "prepareBVHTraverseCS", EShaderStage::Compute);
 
 class HZBCullCS : public GlobalShader
 {
@@ -96,6 +89,26 @@ public:
 };
 IMPLEMENT_GLOBAL_SHADER(FillPipelineDrawParamCS, "resource/shader/instance_culling.hlsl", "fillPipelineDrawParamCS", EShaderStage::Compute);
 
+PoolBufferGPUOnlyRef chord::detail::fillIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, PoolBufferGPUOnlyRef countBuffer)
+{
+    auto meshletCullCmdBuffer = getContext().getBufferPool().createGPUOnly(name, sizeof(uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    {
+        InstanceCullingPushConst push{ };
+        push.drawedMeshletCountId = asSRV(renderCtx.queue, countBuffer);
+        push.meshletCullCmdId = asUAV(renderCtx.queue, meshletCullCmdBuffer);
+
+        auto computeShader = getContext().getShaderLibrary().getShader<FillCullingParamCS>();
+        addComputePass2(renderCtx.queue,
+            name,
+            getContext().computePipe(computeShader, name),
+            push,
+            math::uvec3(1, 1, 1));
+    }
+
+    return meshletCullCmdBuffer;
+};
+
+
 void chord::instanceCulling(GLTFRenderContext& ctx)
 {
     if (!shouldRenderGLTF(ctx))
@@ -110,23 +123,23 @@ void chord::instanceCulling(GLTFRenderContext& ctx)
     uint32 cameraView = ctx.cameraView;
     const uint objectCount = ctx.gltfObjectCount;
     const uint lod0MeshletCount = ctx.perframeCollect->gltfLod0MeshletCount;
+    const uint clusterGroupCount = ctx.perframeCollect->gltfMeshletGroupCount;
 
     check(objectCount == ctx.perframeCollect->gltfPrimitives.size());
-    check(lod0MeshletCount > 0);
+    check(lod0MeshletCount > 0 && clusterGroupCount > 0);
     queue.checkRecording();
 
     const InstanceCullingPushConst pushTemplate { .cameraViewId = cameraView, .switchFlags = getInstanceCullingSwitchFlags() };
 
-    auto bvhNodeCountBuffer = pool.createGPUOnly("bvhNodeCountBuffer", sizeof(uint) * 4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    auto bvhNodeIdBuffer = pool.createGPUOnly("bvhNodeIdBuffer", sizeof(uint2) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    queue.clearUAV(bvhNodeCountBuffer);
-    queue.clearUAV(bvhNodeIdBuffer, kUnvalidIdUint32);
+    auto clusterGroupCountBuffer = pool.createGPUOnly("clusterGroupCountBuffer", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    auto clusterGroupIdBuffer = pool.createGPUOnly("clusterGroupIdBuffer", sizeof(uint2) * clusterGroupCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    queue.clearUAV(clusterGroupCountBuffer);
     {
         ScopePerframeMarker marker(queue, "InstanceCulling: PerObject");
 
         InstanceCullingPushConst push = pushTemplate;
-        push.bvhNodeCountBuffer   = asUAV(queue, bvhNodeCountBuffer);
-        push.bvhNodeIdBuffer      = asUAV(queue, bvhNodeIdBuffer);
+        push.clusterGroupCountBuffer = asUAV(queue, clusterGroupCountBuffer);
+        push.clusterGroupIdBuffer    = asUAV(queue, clusterGroupIdBuffer);
 
         auto computeShader = getContext().getShaderLibrary().getShader<InstanceCullingCS>();
 
@@ -134,63 +147,39 @@ void chord::instanceCulling(GLTFRenderContext& ctx)
             "InstanceCulling: PerObject",
             getContext().computePipe(computeShader, "InstanceCullingPipe: PerObject"),
             push,
-            math::uvec3(divideRoundingUp(objectCount, 64U), 1, 1));
-
-        asSRV(queue, bvhNodeCountBuffer);
-        asSRV(queue, bvhNodeIdBuffer);
+            math::uvec3(objectCount, 1, 1));
     }
 
-    auto bvhTraveseCmdBuffer = getContext().getBufferPool().createGPUOnly("BVHTraverseParam", sizeof(uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    if (ctx.timerLambda)
     {
-        ScopePerframeMarker marker(queue, "PrepareBVHTraverseParam");
-
-        InstanceCullingPushConst push = pushTemplate;
-        push.bvhNodeCountBuffer = asUAV(queue, bvhNodeCountBuffer);
-        push.meshletCullCmdId   = asUAV(queue, bvhTraveseCmdBuffer);
-
-        auto computeShader = getContext().getShaderLibrary().getShader<PrepareBVHTraverseCS>();
-        addComputePass2(queue,
-            "InstanceCulling: BVHTraverseParam",
-            getContext().computePipe(computeShader, "InstanceCullingPipe: BVHTraverseParam"),
-            push,
-            math::uvec3(1, 1, 1));
-
-        asSRV(queue, bvhNodeCountBuffer);
-        asSRV(queue, bvhTraveseCmdBuffer);
+        ctx.timerLambda("GLTF Object Culling", queue);
     }
+
+
+    // Indirect dispatch parameter.
+    auto clusterGroupCullCmdBuffer = chord::detail::fillIndirectDispatchCmd(ctx, "ClusterGroupCullParam", clusterGroupCountBuffer);
 
     auto drawMeshletCountBuffer = pool.createGPUOnly("drawMeshletCountBuffer", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    auto drawMeshletCmdBuffer = pool.createGPUOnly("drawMeshletCmdBuffer", sizeof(uint2) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    auto drawMeshletCmdBuffer   = pool.createGPUOnly("drawMeshletCmdBuffer",   sizeof(uint3) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
     queue.clearUAV(drawMeshletCountBuffer);
     {
         ScopePerframeMarker marker(queue, "InstanceCulling: BVHTraverse");
 
         InstanceCullingPushConst push = pushTemplate;
-        push.drawedMeshletCountId = asUAV(queue, drawMeshletCountBuffer);
-        push.drawedMeshletCmdId   = asUAV(queue, drawMeshletCmdBuffer);
-        // push.totalThreadCount     = threadGroupCount * 64;
+        push.clusterGroupCountBuffer  = asSRV(queue, clusterGroupCountBuffer);
+        push.clusterGroupIdBuffer     = asSRV(queue, clusterGroupIdBuffer);
+        push.drawedMeshletCountId     = asUAV(queue, drawMeshletCountBuffer);
+        push.drawedMeshletCmdId       = asUAV(queue, drawMeshletCmdBuffer);
 
-        auto computeShader = getContext().getShaderLibrary().getShader<BVHhTraverseCS>();
-        addIndirectComputePass(queue,
-            "InstanceCulling: BVHTraverse",
-            getContext().computePipe(computeShader, "InstanceCullingPipe: BVHTraverse", {
-                getContext().descriptorFactoryBegin()
-                .buffer(0) // rwBVHNodeIdBuffer
-                .buffer(1) // rwCounterBuffer
-                .buildNoInfoPush() }),
-            bvhTraveseCmdBuffer, 0,
-            [&](GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)
-            {
-                pipe->pushConst(cmd, push);
-
-                PushSetBuilder(queue, cmd)
-                    .addUAV(bvhNodeIdBuffer)      // rwBVHNodeIdBuffer
-                    .addUAV(bvhNodeCountBuffer)   // rwCounterBuffer
-                    .push(pipe, 1); // Push set 1.
-            });
+        auto computeShader = getContext().getShaderLibrary().getShader<ClusterGroupCullingCS>();
+        addIndirectComputePass2(queue,
+            "InstanceCulling: ClusterGroupCulling",
+            getContext().computePipe(computeShader, "InstanceCullingPipe: ClusterGroupCulling"),
+            push,
+            clusterGroupCullCmdBuffer);
     }
 
-    ctx.postBasicCullingCtx.meshletCmdBuffer = drawMeshletCmdBuffer;
+    ctx.postBasicCullingCtx.meshletCmdBuffer   = drawMeshletCmdBuffer;
     ctx.postBasicCullingCtx.meshletCountBuffer = drawMeshletCountBuffer;
 }
 
@@ -211,26 +200,9 @@ static void fillHZBPushParam(GLTFRenderContext& renderCtx, InstanceCullingPushCo
     push.hzbMip0Height = inHzb.dimension.y;
 };
 
-PoolBufferGPUOnlyRef chord::detail::fillIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, PoolBufferGPUOnlyRef countBuffer)
-{
-    auto meshletCullCmdBuffer = getContext().getBufferPool().createGPUOnly(name, sizeof(uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-    {
-        InstanceCullingPushConst push { };
-        push.drawedMeshletCountId = asSRV(renderCtx.queue, countBuffer);
-        push.meshletCullCmdId     = asUAV(renderCtx.queue, meshletCullCmdBuffer);
 
-        auto computeShader = getContext().getShaderLibrary().getShader<FillCullingParamCS>();
-        addComputePass2(renderCtx.queue,
-            name,
-            getContext().computePipe(computeShader, name),
-            push,
-            math::uvec3(1, 1, 1));
-    }
-
-    return meshletCullCmdBuffer;
-};
-
-chord::detail::CountAndCmdBuffer chord::detail::hzbCulling(GLTFRenderContext& renderCtx, bool bFirstStage, PoolBufferGPUOnlyRef inCountBuffer, PoolBufferGPUOnlyRef inCmdBuffer, CountAndCmdBuffer& outBuffer)
+chord::detail::CountAndCmdBuffer chord::detail::hzbCulling(
+    GLTFRenderContext& renderCtx, bool bFirstStage, PoolBufferGPUOnlyRef inCountBuffer, PoolBufferGPUOnlyRef inCmdBuffer, CountAndCmdBuffer& outBuffer)
 {
     const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
@@ -241,19 +213,19 @@ chord::detail::CountAndCmdBuffer chord::detail::hzbCulling(GLTFRenderContext& re
     PoolBufferGPUOnlyRef cmdBufferStage1 = nullptr;
 
     // Indirect dispatch parameter.
-    auto meshletCullCmdBuffer = chord::detail::fillIndirectDispatchCmd(renderCtx, "meshletCullCmdBuffer Stage#0", renderCtx.postBasicCullingCtx.meshletCountBuffer);
+    auto meshletCullCmdBuffer = chord::detail::fillIndirectDispatchCmd(renderCtx, "meshletCullCmdBufferParam", inCountBuffer);
 
     // Count and cmd.
-    auto countBuffer = pool.createGPUOnly("CountBufferStage#0", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    auto drawMeshletCmdBuffer = pool.createGPUOnly("CmdBufferStage#0", sizeof(uint2) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    auto countBuffer = pool.createGPUOnly("CountBuffer", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    auto drawMeshletCmdBuffer = pool.createGPUOnly("CmdBuffer", sizeof(uint3) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
     
     // Clear count buffer.
     queue.clearUAV(countBuffer);
 
     if (bFirstStage)
     {
-        countBufferStage1 = pool.createGPUOnly("CountBufferStage#1", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-        cmdBufferStage1 = pool.createGPUOnly("CmdBufferStage#1", sizeof(uint2) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+        countBufferStage1 = pool.createGPUOnly("CountBufferStage", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+        cmdBufferStage1 = pool.createGPUOnly("CmdBufferStage", sizeof(uint3) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
         
         // Clear count buffer.
         queue.clearUAV(countBufferStage1);
@@ -270,7 +242,7 @@ chord::detail::CountAndCmdBuffer chord::detail::hzbCulling(GLTFRenderContext& re
     if (bFirstStage)
     {
         pushConst.drawedMeshletCountId_2 = asUAV(queue, countBufferStage1);
-        pushConst.drawedMeshletCmdId_2 = asUAV(queue, cmdBufferStage1);
+        pushConst.drawedMeshletCmdId_2   = asUAV(queue, cmdBufferStage1);
     }
 
     HZBCullCS::Permutation permutation;
@@ -297,10 +269,10 @@ chord::detail::CountAndCmdBuffer chord::detail::filterPipeForVisibility(bool bMe
     auto& pool = getContext().getBufferPool();
 
     // Cmd stripe for different shader mode.
-    const uint32 cmdStripeSize = bMeshShader ? sizeof(uint2) : sizeof(GLTFMeshletDrawCmd);
+    const uint32 cmdStripeSize = bMeshShader ? sizeof(uint3) : sizeof(GLTFMeshletDrawCmd);
 
     auto countBuffer = pool.createGPUOnly("CountPostFilter", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    auto cmdBuffer   = pool.createGPUOnly("CmdBufferStage#1", cmdStripeSize * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    auto cmdBuffer   = pool.createGPUOnly("CmdBufferStage", cmdStripeSize * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
     queue.clearUAV(countBuffer);
 

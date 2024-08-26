@@ -70,7 +70,7 @@ struct GLTFPrimitiveBuffer
     uint bvhNodeOffset;
     uint meshletGroupOffset;
     uint meshletGroupIndicesOffset;
-    uint pad1;
+    uint meshletGroupCount;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveBuffer);
 
@@ -103,8 +103,8 @@ struct GLTFMaterialGPUData
 
     float4 baseColorFactor;
 
-    uint emissiveTexture;
     float3 emissiveFactor;
+    uint emissiveTexture;
 
     float metallicFactor;
     float roughnessFactor;
@@ -119,7 +119,7 @@ struct GLTFMaterialGPUData
     float normalFactorScale;
     uint bExistOcclusion;
     float occlusionTextureStrength;
-    float pad0;
+    uint materialType;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFMaterialGPUData);
 

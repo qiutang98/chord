@@ -16,6 +16,9 @@ struct VisibilityTilePushConsts
     uint tileDrawCmdId;
 
     uint gatherSampler;
+
+    uint cameraViewId;
+    uint drawedMeshletCmdId;
 };
 CHORD_PUSHCONST(VisibilityTilePushConsts, pushConsts);
 
@@ -30,12 +33,39 @@ groupshared uint sTileMarkerG[8][8];
 groupshared uint sTileMarkerB[8][8];
 groupshared uint sTileMarkerA[8][8];
 
+uint getShadingType(uint packID, in const PerframeCameraView perView, in const GPUBasicData scene)
+{
+    // No instance id valid, meaning no pixel here, just return. 
+    if (packID == 0)
+    {
+        return kLightingType_None;
+    }
+    
+    uint triangleId;
+    uint instanceId;
+    decodeTriangleIdInstanceId(packID, triangleId, instanceId);
+
+    // Load draw command. 
+    const uint3 drawCmd = BATL(uint3, pushConsts.drawedMeshletCmdId, instanceId);
+    uint objectId = drawCmd.x;
+    check(drawCmd.z == instanceId);
+
+    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
+    const GLTFMaterialGPUData materialInfo  = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
+
+    // Use material type.
+    return materialInfo.materialType;
+}
+
 [numthreads(64, 1, 1)]
 void tilerMarkerCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupIndex)
 {
-    Texture2D<uint2> visibilityTexture = TBindless(Texture2D, uint2, pushConsts.visibilityId);
-    RWTexture2D<uint4> rwTileMarker = TBindless(RWTexture2D, uint4, pushConsts.markerTextureId);
-    SamplerState gatherSampler = Bindless(SamplerState, pushConsts.gatherSampler);
+    PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
+    const GPUBasicData scene = perView.basicData;
+
+    Texture2D<uint> visibilityTexture = TBindless(Texture2D, uint, pushConsts.visibilityId);
+    RWTexture2D<uint4> rwTileMarker   = TBindless(RWTexture2D, uint4, pushConsts.markerTextureId);
+    SamplerState gatherSampler        =  Bindless(SamplerState, pushConsts.gatherSampler);
 
     uint2 remapId = remap8x8(localThreadIndex);
 
@@ -49,14 +79,14 @@ void tilerMarkerCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Gr
         [unroll(2)]
         for (uint x = 0; x < 2; x ++)
         {
-            uint2 gatherPos = workGroupId * 32 + 4 * remapId + 2 * uint2(x, y);
-            float2 gatherUv = (gatherPos + 1.0) * pushConsts.visibilityTexelSize;
-            uint4 shadingType4 = getShadingType4(visibilityTexture.Gather(gatherSampler, gatherUv));
+            const uint2  gatherPos = workGroupId * 32 + 4 * remapId + 2 * uint2(x, y);
+            const float2 gatherUv = (gatherPos + 1.0) * pushConsts.visibilityTexelSize;
+            const uint4  gatherPackIDx4 = visibilityTexture.Gather(gatherSampler, gatherUv);
 
             [unroll(4)]
             for (uint i = 0; i < 4; i ++)
             {
-                uint shadingType = shadingType4[i];
+                uint shadingType = getShadingType(gatherPackIDx4[i], perView, scene);
                 shadingTileMarker[shadingType / 32] |= 1U << (shadingType % 32);
             }
         }
@@ -141,20 +171,30 @@ void tilePrepareCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Gr
         }
     }
 
+    // Wave interlock add.
+    uint tileCountWaveSum = WaveActiveSum(tileCount);
+    uint storeBaseId;
+    if (WaveIsFirstLane())
+    {
+        storeBaseId = interlockedAddUint(pushConsts.tileBufferCountId, tileCountWaveSum);
+    }
+    storeBaseId = WaveReadLaneFirst(storeBaseId);
+
+    // 
+    const uint relativeOffset = storeBaseId + WavePrefixSum(tileCount);
+
     [branch]
     if (tileCount > 0)
     {
         RWByteAddressBuffer rwCmdBuffer = RWByteAddressBindless(pushConsts.tileBufferCmdId);
 
         uint offset = 0;
-        uint baseId = interlockedAddUint(pushConsts.tileBufferCountId, tileCount);
-
         [unroll(4)]
         for (uint i = 0; i < 4; i ++)
         {
             if (tile[i].x != ~0)
             {
-                rwCmdBuffer.TypeStore(uint2, offset + baseId, tile[i]);
+                rwCmdBuffer.TypeStore(uint2, offset + relativeOffset, tile[i]);
                 offset ++;
             }
         }

@@ -20,7 +20,8 @@ namespace chord
 
     struct PerframeCollected
     {
-        std::atomic_uint32_t gltfLod0MeshletCount = 0;
+        std::atomic_uint32_t gltfLod0MeshletCount  = 0;
+        std::atomic_uint32_t gltfMeshletGroupCount = 0;
         std::vector<GPUObjectGLTFPrimitive> gltfPrimitives;
 
         DebugLineCtx* debugLineCtx = nullptr;

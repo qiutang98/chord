@@ -137,6 +137,7 @@ namespace chord
 		GLTFTextureInfo emissiveTexture;
 		math::vec3 emissiveFactor = {0.0f, 0.0f, 0.0f};
 
+		EShadingType shadingType = EShadingType::GLTF_MetallicRoughnessPBR;
 		EAlphaMode alphaMode = EAlphaMode::Opaque;
 
 		float alphaCoutoff = 0.5f;
@@ -183,6 +184,7 @@ namespace chord
 		uint32 meshletOffset = 0;
 		uint32 lod0meshletCount  = 0;
 		uint32 bvhNodeCount = 0;
+		uint32 meshletGroupCount = 0;
 
 		uint32 bvhNodeOffset = 0;
 		uint32 meshletGroupOffset = 0;

@@ -7,6 +7,7 @@
 #define kInvertPI (1.0 / kPI)
 #define KPIOver2  (kPI / 2.0)
 #define KPIOver4  (kPI / 4.0)
+#define kNaN asfloat(0x7FC00000)
 
 /**
     Gather pattern
@@ -63,8 +64,7 @@ float3 projectPosToUVz(float3 pos, in const float4x4 projectMatrix)
     posHS.xyz /= posHS.w; // xy is -1 to 1
 
     // NDC convert. 
-    posHS.xy = 0.5 * posHS.xy + 0.5;
-    posHS.y  = 1.0 - posHS.y;
+    posHS.xy =  posHS.xy * float2(0.5, -0.5) + 0.5;
 
     // Final project UVz.
     return posHS.xyz;
@@ -223,6 +223,9 @@ uint2 remap16x16(uint tid)
 float min4(float4 v) { return min(min(min(v.x, v.y), v.z), v.w); }
 float max4(float4 v) { return max(max(max(v.x, v.y), v.z), v.w); }
 
+half min4(half4 v) { return min(min(min(v.x, v.y), v.z), v.w); }
+half max4(half4 v) { return max(max(max(v.x, v.y), v.z), v.w); }
+
 float max2(float2 v) { return max(v.x, v.y); }
 
 uint2 convert2d(uint id, uint dim)
@@ -230,36 +233,16 @@ uint2 convert2d(uint id, uint dim)
     return uint2(id % 2, id / 2);
 }
 
-uint encodeShadingMeshlet(uint shadingType, uint meshletId)
+uint encodeTriangleIdInstanceId(uint triangleId, uint instanceId)
 {
-    return ((meshletId & kMaxMeshletCount) << 7) | (shadingType & kMaxShadingType);
+    uint nextInstanceId = instanceId + 1;
+    return ((nextInstanceId & kMaxInstanceIdCount) << 8) | (triangleId & 0xFF);
 }
 
-void decodeShadingMeshlet(uint pack, out uint shadingType, out uint meshletId)
-{
-    shadingType = (pack & kMaxShadingType);
-    meshletId = (pack >> 7) & kMaxMeshletCount;
-}
-
-uint encodeTriangleIdObjectId(uint triangleId, uint objectId)
-{
-    return ((objectId & kMaxObjectCount) << 8) | (triangleId & 0xFF);
-}
-
-void decodeTriangleIdObjectId(uint pack, out uint triangleId, out uint objectId)
+void decodeTriangleIdInstanceId(uint pack, out uint triangleId, out uint instanceId)
 {
     triangleId = (pack & 0xFF);
-    objectId   = (pack >> 8) & kMaxObjectCount;
-}
-
-uint4 getShadingType4(uint4 pack4)
-{
-    return pack4 & kMaxShadingType;
-}
-
-uint getShadingType(uint pack)
-{
-    return pack & kMaxShadingType;
+    instanceId = ((pack >> 8) & kMaxInstanceIdCount) - 1;
 }
 
 struct Barycentrics

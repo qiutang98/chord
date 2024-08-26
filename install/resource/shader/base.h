@@ -200,11 +200,8 @@ inline float4 shaderUnpackColor(uint packData)
 // HZB mipmap count max 12, meaning from 4096 - 1.
 #define kHZBMaxMipmapCount 12
 
-// 24 bit for max object id count.
-#define kMaxObjectCount 0xFFFFFF
-
-// 25 bit for max meshlet id count.
-#define kMaxMeshletCount 0x1FFFFFF
+// 24 bit for max instance id count.
+#define kMaxInstanceIdCount 0xFFFFFF
 
 // Max shading type is 127.
 #define kMaxShadingType  0x7F
@@ -214,11 +211,8 @@ enum class EShadingType
 {
     None = 0,
     GLTF_MetallicRoughnessPBR = 1,
-
     MAX
 };
-
-// LIGHTING_TYPE
 #define kLightingType_None 0
 #define kLightingType_GLTF_MetallicRoughnessPBR 1
 
@@ -230,6 +224,11 @@ enum class EShadingType
 #define kNaniteMaxLODCount        8
 #define kNaniteMaxBVHLevelCount   14
 #define kNaniteBVHLevelNodeCount  8
+
+
+// NV 3070Ti, see VkPhysicalDeviceLimits::subpixelPrecisionBits
+#define subpixelPrecisionBits  8
+#define subpixelPrecisionCount (1 << subpixelPrecisionBits)
 
 struct NaniteShadingMeshlet
 {
@@ -252,6 +251,7 @@ struct GLTFMeshletDrawCmd
     uint firstInstance;
     uint objectId;
     uint meshletId;
+    uint instanceId;
 };
 
 #endif // !SHADER_BASE_H

@@ -19,12 +19,17 @@ namespace chord
 
 
 
-	extern VisibilityTileMarkerContext visibilityMark(graphics::GraphicsQueue& queue, graphics::PoolTextureRef visibilityImage);
+	extern VisibilityTileMarkerContext visibilityMark(
+		graphics::GraphicsQueue& queue, 
+		uint cameraViewId,
+		graphics::PoolBufferGPUOnlyRef drawMeshletCmdBuffer,
+		graphics::PoolTextureRef visibilityImage);
 
 	struct VisibilityTileContxt
 	{
 		graphics::PoolBufferGPUOnlyRef tileCmdBuffer;
 		graphics::PoolBufferGPUOnlyRef dispatchIndirectBuffer;
 	};
-	VisibilityTileContxt prepareShadingTileParam(graphics::GraphicsQueue& queue, EShadingType shadingType, const VisibilityTileMarkerContext& marker);
+	VisibilityTileContxt prepareShadingTileParam(
+		graphics::GraphicsQueue& queue, EShadingType shadingType, const VisibilityTileMarkerContext& marker);
 }

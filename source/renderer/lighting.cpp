@@ -20,13 +20,15 @@ namespace chord
 	};
 	IMPLEMENT_GLOBAL_SHADER(LightingCS, "resource/shader/lighting.hlsl", "mainCS", EShaderStage::Compute);
 
-	void chord::lighting(GraphicsQueue& queue, GBufferTextures& gbuffers, uint32 cameraViewId, const VisibilityTileMarkerContext& marker)
+	void chord::lighting(GraphicsQueue& queue, GBufferTextures& gbuffers, uint32 cameraViewId, PoolBufferGPUOnlyRef drawMeshletCmdBuffer, const VisibilityTileMarkerContext& marker)
 	{
 		uint sceneColorUAV = asUAV(queue, gbuffers.color);
 		uint2 dispatchDim = divideRoundingUp(marker.visibilityDim, uint2(8));
 
 		for (uint i = 0; i < uint(EShadingType::MAX); i++)
 		{
+			if (i == kLightingType_None) { continue; }
+
 			auto lightingTileCtx = prepareShadingTileParam(queue, EShadingType(i), marker);
 
 			LightingPushConsts pushConst{};
@@ -36,6 +38,7 @@ namespace chord
 			pushConst.tileBufferCmdId = asSRV(queue, lightingTileCtx.tileCmdBuffer);
 			pushConst.visibilityId = asSRV(queue, marker.visibilityTexture);
 			pushConst.sceneColorId = sceneColorUAV;
+			pushConst.drawedMeshletCmdId = asSRV(queue, drawMeshletCmdBuffer);
 
 			LightingCS::Permutation CSPermutation;
 			CSPermutation.set<LightingCS::SV_ShadingType>(EShadingType(i));

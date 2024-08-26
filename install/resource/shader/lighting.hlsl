@@ -1,6 +1,6 @@
 #include "gltf.h"
 
-
+#define ENABLE_WAVE_LOCAL_SHUFFLE 1
 
 struct LightingPushConsts
 {
@@ -12,6 +12,8 @@ struct LightingPushConsts
     uint tileBufferCmdId;
     uint visibilityId;
     uint sceneColorId;
+
+    uint drawedMeshletCmdId;
 };
 CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 
@@ -21,86 +23,152 @@ CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 #include "base.hlsli"
 #include "debug.hlsli"
 
-float3 gltfMetallicRoughnessPBR(uint objectId, uint meshletId, uint triangleId, uint2 dispatchPos)
-{
-    PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
-    const GPUBasicData scene = perView.basicData;
+#if ENABLE_WAVE_LOCAL_SHUFFLE
+    groupshared uint sharedPackId[64];
+#endif
 
-    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
-    const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
+struct TriangleMiscInfo
+{
+    float2 uv[3];
+    float4 positionHS[3];
+};
+
+void getTriangleMiscInfo(
+    in const PerframeCameraView perView,
+    in const GPUBasicData scene,
+    in const GPUObjectGLTFPrimitive objectInfo,
+    in const float4x4 localToClip,
+    in const uint meshletId, 
+    in const uint triangleId,
+    out TriangleMiscInfo outTriangle)
+{
+    const GLTFPrimitiveBuffer primitiveInfo          = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
     const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
-    const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
+    const GPUGLTFMeshlet meshlet                     = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
 
     ByteAddressBuffer meshletDataBuffer = ByteAddressBindless(primitiveDataInfo.meshletDataBuffer);
-    uint verticesCount = unpackVertexCount(meshlet.vertexTriangleCount);
-    uint triangleIndicesSampleOffset = (meshlet.dataOffset + verticesCount + triangleId) * 4;
-    uint indexTri = meshletDataBuffer.Load(triangleIndicesSampleOffset);
-
-    uint verticesSampleOffset_0 = (meshlet.dataOffset + ((indexTri >> (0 * 8)) & 0xff)) * 4;
-    uint verticesSampleOffset_1 = (meshlet.dataOffset + ((indexTri >> (1 * 8)) & 0xff)) * 4;
-    uint verticesSampleOffset_2 = (meshlet.dataOffset + ((indexTri >> (2 * 8)) & 0xff)) * 4;
-
-    uint verticesIndex_0 = meshletDataBuffer.Load(verticesSampleOffset_0);
-    uint verticesIndex_1 = meshletDataBuffer.Load(verticesSampleOffset_1);
-    uint verticesIndex_2 = meshletDataBuffer.Load(verticesSampleOffset_2);
-
-    const uint indicesId_0 = primitiveInfo.vertexOffset + verticesIndex_0;
-    const uint indicesId_1 = primitiveInfo.vertexOffset + verticesIndex_1;
-    const uint indicesId_2 = primitiveInfo.vertexOffset + verticesIndex_2;
+    uint verticesCount                  = unpackVertexCount(meshlet.vertexTriangleCount);
+    uint triangleIndicesSampleOffset    = (meshlet.dataOffset + verticesCount + triangleId) * 4;
+    uint indexTri                       = meshletDataBuffer.Load(triangleIndicesSampleOffset);
 
     ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
     ByteAddressBuffer uvDataBuffer = ByteAddressBindless(primitiveDataInfo.textureCoord0Buffer);
 
-    const float3 positionLS_0 = positionDataBuffer.TypeLoad(float3, indicesId_0);
-    const float3 positionLS_1 = positionDataBuffer.TypeLoad(float3, indicesId_1);
-    const float3 positionLS_2 = positionDataBuffer.TypeLoad(float3, indicesId_2);
+    [unroll(3)]
+    for(uint i = 0; i < 3; i ++)
+    {
+        const uint verticesSampleOffset = (meshlet.dataOffset + ((indexTri >> (i * 8)) & 0xff)) * 4;
+        const uint indicesId = primitiveInfo.vertexOffset + meshletDataBuffer.Load(verticesSampleOffset);
 
-    float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
-    float4x4 translatedWorldToClip = perView.translatedWorldToClip;
-    float4x4 localToClip = mul(translatedWorldToClip, localToTranslatedWorld);
+        // position load and projection.
+        const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
+        outTriangle.positionHS[i] = mul(localToClip, float4(positionLS, 1.0));
 
-    const float2 uv_0 = uvDataBuffer.TypeLoad(float2, indicesId_0);
-    const float2 uv_1 = uvDataBuffer.TypeLoad(float2, indicesId_1);
-    const float2 uv_2 = uvDataBuffer.TypeLoad(float2, indicesId_2);
+        //  uv load. 
+        outTriangle.uv[i] = uvDataBuffer.TypeLoad(float2, indicesId);
+    }
+}
 
-    const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
 
-    const float2 UV = (dispatchPos + 0.5) * pushConsts.visibilityTexelSize;
 
-    float4 positionCS_0 = mul(localToClip, float4(positionLS_0, 1.0));
-    float4 positionCS_1 = mul(localToClip, float4(positionLS_1, 1.0));
-    float4 positionCS_2 = mul(localToClip, float4(positionLS_2, 1.0));
+float3 gltfMetallicRoughnessPBR(
+    in const PerframeCameraView perView,
+    in const GPUBasicData scene,
+    in const GPUObjectGLTFPrimitive objectInfo,
+    in const GLTFMaterialGPUData materialInfo,
+    in const uint sharedIdOffset,
+    in const uint packId,
+    in const uint meshletId, 
+    in const uint triangleId, 
+    in const uint2 dispatchPos)
+{
+    const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
+    const float4x4 translatedWorldToClip  = perView.translatedWorldToClip;
+    const float4x4 localToClip            = mul(translatedWorldToClip, localToTranslatedWorld);
 
-    Barycentrics barycentricCtx = calculateTriangleBarycentrics(screenUvToNdcUv(UV), positionCS_0, positionCS_1, positionCS_2, pushConsts.visibilityTexelSize);
+    TriangleMiscInfo triangleInfo;
+#if ENABLE_WAVE_LOCAL_SHUFFLE
+    const uint currentLaneIndex = WaveGetLaneIndex();
+    uint targetLaneIndex;
+
+    uint activeMask = WaveActiveBallot(true).x;
+    while (activeMask != 0)
+    {
+        targetLaneIndex = firstbitlow(activeMask);
+        if (targetLaneIndex >= currentLaneIndex)
+        {
+            break; // Reach edge. 
+        }
+                     
+        // WaveReadLaneAt in loop never work.
+        const uint targetPackId = sharedPackId[sharedIdOffset + targetLaneIndex];
+        if (targetPackId == packId)
+        {
+            break; // Found reuse.
+        }
+
+        // Step next.
+        activeMask ^= (1U << targetLaneIndex);
+    }
+
+    // Load triangle info.
+
+    [branch]
+    if (currentLaneIndex == targetLaneIndex)
+    {
+        getTriangleMiscInfo(perView, scene, objectInfo, localToClip, meshletId, triangleId, triangleInfo);
+    }
+
+    [unroll(3)] 
+    for (uint i = 0; i < 3; i ++)
+    {
+        triangleInfo.uv[i] = WaveReadLaneAt(triangleInfo.uv[i], targetLaneIndex);
+        triangleInfo.positionHS[i] = WaveReadLaneAt(triangleInfo.positionHS[i], targetLaneIndex);
+    }
+#else 
+    getTriangleMiscInfo(perView, scene, objectInfo, localToClip, meshletId, triangleId, triangleInfo);
+#endif
+
+    
+
+    // Screen uv. 
+    const float2 screenUV = (dispatchPos + 0.5) * pushConsts.visibilityTexelSize;
+
+    //
+    Barycentrics barycentricCtx = calculateTriangleBarycentrics(
+        screenUvToNdcUv(screenUV), 
+        triangleInfo.positionHS[0], 
+        triangleInfo.positionHS[1], 
+        triangleInfo.positionHS[2], 
+        pushConsts.visibilityTexelSize);
+
     const float3 barycentric = barycentricCtx.interpolation;
     const float3 ddx = barycentricCtx.ddx;
     const float3 ddy = barycentricCtx.ddy;
 
-    float2 meshUv = uv_0 * barycentric.x + uv_1 * barycentric.y + uv_2 * barycentric.z;
-    float2 meshUv_ddx = uv_0 * ddx.x + uv_1 * ddx.y + uv_2 * ddx.z;
-    float2 meshUv_ddy = uv_0 * ddy.x + uv_1 * ddy.y + uv_2 * ddy.z;
+    float2 meshUv     = triangleInfo.uv[0] * barycentric.x + triangleInfo.uv[1] * barycentric.y + triangleInfo.uv[2] * barycentric.z;
+    float2 meshUv_ddx = triangleInfo.uv[0] * ddx.x         + triangleInfo.uv[1] * ddx.y         + triangleInfo.uv[2] * ddx.z;
+    float2 meshUv_ddy = triangleInfo.uv[0] * ddy.x         + triangleInfo.uv[1] * ddy.y         + triangleInfo.uv[2] * ddy.z;
 
+#if 0
     Texture2D<float4> baseColorTexture = TBindless(Texture2D, float4, materialInfo.baseColorId);
-    SamplerState baseColorSampler = Bindless(SamplerState, materialInfo.baseColorSampler);
+    SamplerState baseColorSampler      = Bindless(SamplerState, materialInfo.baseColorSampler);
 
     float4 sampleColor = baseColorTexture.SampleGrad(baseColorSampler, meshUv, meshUv_ddx, meshUv_ddy) * materialInfo.baseColorFactor * 1.5;
 
-#if 0
-    if(meshlet.lod == 0) { return float3(1.0, 0.0, 0.0); }
+    if(meshlet.lod == 0) { return float3(1.0, 0.0, 0.0); } 
     if(meshlet.lod == 1) { return float3(1.0, 0.0, 1.0); }
     if(meshlet.lod == 2) { return float3(0.0, 0.0, 1.0); }
     if(meshlet.lod == 3) { return float3(0.0, 1.0, 1.0); }
     if(meshlet.lod == 4) { return float3(1.0, 1.0, 0.0); }
     if(meshlet.lod == 5) { return float3(0.0, 1.0, 0.0); }
-#endif
-    return sampleColor.xyz;
-    // return simpleHashColor(triangleId);
-    return simpleHashColor(meshletId);// sampleColor.xyz;
-}
 
-float3 noneShading(uint objectId, uint triangleId, uint2 dispatchPos)
-{
-    return 0;
+    return sampleColor.xyz;
+#endif
+
+
+    // return simpleHashColor(triangleId);
+    return abs(barycentric);// sampleColor.xyz; 
 }
 
 void storeColor(uint2 pos, float3 c)
@@ -117,30 +185,47 @@ void mainCS(
     uint2 dispatchPos = tileOffset + remap8x8(localThreadIndex);
 
     // Edge return.
-    if (any(dispatchPos >= pushConsts.visibilityDim))
+    uint packID = 0;
+    if (all(dispatchPos <= pushConsts.visibilityDim))
     {
-        return;
+        Texture2D<uint> visibilityTexture = TBindless(Texture2D, uint, pushConsts.visibilityId);
+        packID = visibilityTexture[dispatchPos];
     }
 
-    Texture2D<uint2> visibilityTexture = TBindless(Texture2D, uint2, pushConsts.visibilityId);
-    const uint2 packIDs = visibilityTexture[dispatchPos];
+    const uint sharedIdOffset = (localThreadIndex / 32) * 32;
+    const uint sharedId = WaveGetLaneIndex() + sharedIdOffset;
+
+#if ENABLE_WAVE_LOCAL_SHUFFLE
+    sharedPackId[sharedId] = packID;
+    GroupMemoryBarrierWithGroupSync();
+#endif
+
+    if (packID == 0) { return; }
+
+    PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
+    const GPUBasicData scene = perView.basicData;
 
     uint triangleId;
-    uint objectId;
-    uint shadingType;
-    uint meshletId;
-    decodeShadingMeshlet(packIDs.x, shadingType, meshletId);
-    decodeTriangleIdObjectId(packIDs.y, triangleId, objectId);
+    uint instanceId;
+    decodeTriangleIdInstanceId(packID, triangleId, instanceId);
 
-    #if LIGHTING_TYPE == kLightingType_None
-    {
-        if (shadingType != kLightingType_None) { return; }
-        storeColor(dispatchPos, noneShading(objectId, triangleId, dispatchPos));
-    }
-    #elif LIGHTING_TYPE == kLightingType_GLTF_MetallicRoughnessPBR
+    const uint3 drawCmd = BATL(uint3, pushConsts.drawedMeshletCmdId, instanceId);
+    check(drawCmd.z == instanceId);
+
+    uint objectId  = drawCmd.x;
+    uint meshletId = drawCmd.y;
+
+    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
+    const GLTFMaterialGPUData materialInfo  = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
+
+    //
+    const uint shadingType = materialInfo.materialType;
+
+    #if LIGHTING_TYPE == kLightingType_GLTF_MetallicRoughnessPBR
     {
         if (shadingType != kLightingType_GLTF_MetallicRoughnessPBR) { return; }
-        storeColor(dispatchPos, gltfMetallicRoughnessPBR(objectId, meshletId, triangleId, dispatchPos));
+        
+        storeColor(dispatchPos, gltfMetallicRoughnessPBR(perView, scene, objectInfo, materialInfo, sharedIdOffset, packID, meshletId, triangleId, dispatchPos));
     }
     #endif 
 }

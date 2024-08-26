@@ -5,6 +5,8 @@
 #include <utils/log.h>
 #include <utils/cityhash.h>
 
+#include <shader/instance_culling.hlsl>
+
 using namespace chord;
 using namespace chord::nanite;
 
@@ -343,7 +345,15 @@ static void buildBVHTree(
 			{
 				if (errorSphereGroupMap.contains(hashInGroupMap))
 				{
-					parentValidMeshlet[errorSphereGroupMap[hashInGroupMap]].meshletIndices.push_back(i);
+					if (parentValidMeshlet[errorSphereGroupMap[hashInGroupMap]].meshletIndices.size() >= kClusterGroupMergeMaxCount)
+					{
+						errorSphereGroupMap[hashInGroupMap] = parentValidMeshlet.size();
+						parentValidMeshlet.push_back(std::move(newGroup));
+					}
+					else
+					{
+						parentValidMeshlet[errorSphereGroupMap[hashInGroupMap]].meshletIndices.push_back(i);
+					}
 				}
 				else
 				{
@@ -358,7 +368,16 @@ static void buildBVHTree(
 			{
 				if (rootSphereGroupMap.contains(hashInGroupMap))
 				{
-					bvh.root->leaves[rootSphereGroupMap[hashInGroupMap]].meshletIndices.push_back(i);
+					if (bvh.root->leaves[rootSphereGroupMap[hashInGroupMap]].meshletIndices.size() >= kClusterGroupMergeMaxCount)
+					{
+						rootSphereGroupMap[hashInGroupMap] = bvh.root->leaves.size();
+						bvh.root->leaves.push_back(std::move(newGroup));
+					}
+					else
+					{
+						bvh.root->leaves[rootSphereGroupMap[hashInGroupMap]].meshletIndices.push_back(i);
+					}
+
 				}
 				else
 				{
@@ -386,6 +405,11 @@ static void buildBVHTree(
 	
 	// 2. Flatten bvh.
 	flattenBVH(ctx, *bvh.root, meshletGroups, flattenNode, meshletGroupIndices);
+
+	for (const auto& group : meshletGroups)
+	{
+		check(group.meshletCount <= kClusterGroupMergeMaxCount);
+	}
 	check(flattenNode[0].bvhNodeCount == flattenNode.size());
 }
 
