@@ -7,7 +7,7 @@
 
 这是一个简洁的，模仿UE5代码风格的渲染引擎，用来做一些快速图形原型开发迭代。API风格和UE类似，便于测试完成后立刻移植到UE5引擎中（没有人想在UE5里不停的等待编译和等待加载 :D）。
 
-一个简单Pass在Chord中的声明和使用非常简洁：
+Chord中Pass的声明和使用非常简洁：
 
 ```C++
 PRIVATE_GLOBAL_SHADER(TonemappingPS, "resource/shader/tonemapping.hlsl", "mainPS", EShaderStage::Pixel);
