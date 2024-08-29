@@ -461,20 +461,9 @@ void WidgetOutliner::acceptDragdrop(bool bRoot)
 							};
 
 
-							for (int i = -0; i <= 0; i++)
-							{
-								for (int j = -0; j <= 0; j++)
-								{
-									float2 offset = float2(i, j) * 1.7f;
-
-									auto sceneRootNode = activeScene->createNode(m_sceneManagerUI->addUniqueIdForName(u16str("GLTFScene: " + gltfScene.name)), targetNode);
-									buildNodeRecursive(sceneRootNode, gltfScene.nodes);
-
-									sceneRootNode->getTransform()->setTranslation(dvec3(offset.x, 0, offset.y));
-								}
-							}
+							auto sceneRootNode = activeScene->createNode(m_sceneManagerUI->addUniqueIdForName(u16str("GLTFScene: " + gltfScene.name)), targetNode);
+							buildNodeRecursive(sceneRootNode, gltfScene.nodes);
 						}
-
 					}
 
 				}
