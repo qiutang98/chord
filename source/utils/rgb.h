@@ -24,5 +24,6 @@ namespace chord
 		static const RGBA kBlack;
 		static const RGBA kWhite;
 		static const RGBA kTransparent;
+		static const RGBA kNormal;
 	};
 }

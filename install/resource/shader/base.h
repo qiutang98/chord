@@ -229,6 +229,7 @@ enum class EShadingType
 // NV 3070Ti, see VkPhysicalDeviceLimits::subpixelPrecisionBits
 #define subpixelPrecisionBits  8
 #define subpixelPrecisionCount (1 << subpixelPrecisionBits)
+#define subpixel
 
 struct NaniteShadingMeshlet
 {

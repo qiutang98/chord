@@ -272,10 +272,12 @@ namespace chord
 
 	void GLTFMaterialProxy::init(std::shared_ptr<GLTFMaterialProxy> proxy)
 	{
-		auto fallbackImage = getContext().getBuiltinTextures().white;
+		auto whiteTex = getContext().getBuiltinTextures().white;
+		auto transparentTex = getContext().getBuiltinTextures().transparent;
+		auto normalTex = getContext().getBuiltinTextures().normal;
 		std::weak_ptr<GLTFMaterialProxy> weakPtr = proxy;
 
-		auto proxyLoadTexture = [&](const auto& materialTex, auto& tex)
+		auto proxyLoadTexture = [&](const auto& materialTex, auto& tex, GPUTextureAssetRef fallback)
 		{
 			if (materialTex.isValid())
 			{
@@ -291,15 +293,15 @@ namespace chord
 			}
 			else
 			{
-				tex = fallbackImage;
+				tex = fallback;
 			}
 		};
 
 		// Load all needed texture.
-		proxyLoadTexture(proxy->reference->baseColorTexture, proxy->baseColorTexture);
-		proxyLoadTexture(proxy->reference->metallicRoughnessTexture, proxy->metallicRoughnessTexture);
-		proxyLoadTexture(proxy->reference->emissiveTexture, proxy->emissiveTexture);
-		proxyLoadTexture(proxy->reference->normalTexture, proxy->normalTexture);
+		proxyLoadTexture(proxy->reference->baseColorTexture, proxy->baseColorTexture, whiteTex);
+		proxyLoadTexture(proxy->reference->metallicRoughnessTexture, proxy->metallicRoughnessTexture, whiteTex);
+		proxyLoadTexture(proxy->reference->emissiveTexture, proxy->emissiveTexture, transparentTex);
+		proxyLoadTexture(proxy->reference->normalTexture, proxy->normalTexture, normalTex);
 
 		// Require gpu scene space.
 		proxy->m_gpuSceneGLTFMaterialAssetId = Application::get().getGPUScene().getGLTFMaterialPool().requireId(proxy->m_proxyId);
@@ -308,7 +310,11 @@ namespace chord
 
 	void GLTFMaterialProxy::updateGPUScene(bool bForceUpload)
 	{
-		const bool bAllTextureFinish = baseColorTexture->isReady() && emissiveTexture->isReady() && normalTexture->isReady() && metallicRoughnessTexture->isReady();
+		const bool bAllTextureFinish = 
+			baseColorTexture->isReady() && 
+			emissiveTexture->isReady()  && 
+			normalTexture->isReady()    && 
+			metallicRoughnessTexture->isReady();
 
 		if (!bForceUpload && !bAllTextureFinish)
 		{
@@ -380,6 +386,7 @@ namespace chord
 		case EMinMagFilter::LINEAR_MIPMAP_NEAREST:
 		case EMinMagFilter::LINEAR_MIPMAP_LINEAR:
 			ci.minFilter = VK_FILTER_LINEAR;
+			break;
 		default:
 			checkEntry();
 			break;
@@ -396,6 +403,7 @@ namespace chord
 		case EMinMagFilter::NEAREST_MIPMAP_LINEAR:
 		case EMinMagFilter::LINEAR_MIPMAP_LINEAR:
 			ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			break;
 		default:
 			checkEntry();
 			break;

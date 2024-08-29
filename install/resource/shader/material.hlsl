@@ -23,11 +23,10 @@ CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 
 struct TriangleMiscInfo
 {
-    float4  positionHS[3];
-    float3   tangentRS[3];
-    float3 bitangentRS[3];
-    float3    normalRS[3];
-    float2          uv[3];
+    float4 positionHS[3];
+    float4 tangent[3];
+    float3 normal[3];
+    float2 uv[3];
 };
 
 void getTriangleMiscInfo(
@@ -49,9 +48,7 @@ void getTriangleMiscInfo(
     uint indexTri                       = meshletDataBuffer.Load(triangleIndicesSampleOffset);
 
     ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
-    ByteAddressBuffer normalBuffer  = ByteAddressBindless(primitiveDataInfo.normalBuffer);
-    ByteAddressBuffer uvDataBuffer  = ByteAddressBindless(primitiveDataInfo.textureCoord0Buffer);
-    ByteAddressBuffer tangentBuffer = ByteAddressBindless(primitiveDataInfo.tangentBuffer);
+    ByteAddressBuffer uvDataBuffer = ByteAddressBindless(primitiveDataInfo.textureCoord0Buffer);
 
     [unroll(3)]
     for(uint i = 0; i < 3; i ++)
@@ -60,39 +57,15 @@ void getTriangleMiscInfo(
         const uint indicesId = primitiveInfo.vertexOffset + meshletDataBuffer.Load(verticesSampleOffset);
 
         // position load and projection.
-        {
-            const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
-            outTriangle.positionHS[i] = mul(localToClip, float4(positionLS, 1.0));
-        }
+        const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
+        outTriangle.positionHS[i] = mul(localToClip, float4(positionLS, 1.0));
 
-        // Non-uniform scale need invert local to world matrix's transpose.
-        // see http://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/.
-        {
-            const float3 normalLS = normalBuffer.TypeLoad(float3, indicesId);
-            outTriangle.normalRS[i] = normalize(mul(float4(normalLS, 0.0), objectInfo.basicData.translatedWorldToLocal).xyz);
-        }
-
-        // Tangent direction don't care about non-uniform scale.
-        // see http://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/.
-        const float4 tangentLS = tangentBuffer.TypeLoad(float4, indicesId);
-        outTriangle.tangentRS[i] = mul(objectInfo.basicData.localToTranslatedWorld, float4(tangentLS.xyz, 0.0)).xyz;
-
-        // Gram-Schmidt re-orthogonalize. https://learnopengl.com/Advanced-Lighting/Normal-Mapping
-        outTriangle.tangentRS[i] = normalize(outTriangle.tangentRS[i] - dot(outTriangle.tangentRS[i], outTriangle.normalRS[i]) * outTriangle.normalRS[i]);
-
-        // Load uv. 
-        outTriangle.uv[i] =  uvDataBuffer.TypeLoad(float2, indicesId);
-
-        // Hiding latency...
-
-        // Then it's easy to compute bitangent now.
-        // tangentLS.w = sign(dot(normalize(bitangent), normalize(cross(normal, tangent))));
-        outTriangle.bitangentRS[i] = cross(outTriangle.normalRS[i], outTriangle.tangentRS[i]) * tangentLS.w;
+        //  uv load. 
+        outTriangle.uv[i] = uvDataBuffer.TypeLoad(float2, indicesId);
     }
 }
 
 float3 gltfMetallicRoughnessPBR(
-    bool bColor,
     in const PerframeCameraView perView,
     in const GPUBasicData scene,
     in const GPUObjectGLTFPrimitive objectInfo,
@@ -115,34 +88,14 @@ float3 gltfMetallicRoughnessPBR(
     const float3 ddx = barycentricCtx.ddx;
     const float3 ddy = barycentricCtx.ddy;
 
-
     float2 meshUv     = triangleInfo.uv[0] * barycentric.x + triangleInfo.uv[1] * barycentric.y + triangleInfo.uv[2] * barycentric.z;
     float2 meshUv_ddx = triangleInfo.uv[0] * ddx.x         + triangleInfo.uv[1] * ddx.y         + triangleInfo.uv[2] * ddx.z;
     float2 meshUv_ddy = triangleInfo.uv[0] * ddy.x         + triangleInfo.uv[1] * ddy.y         + triangleInfo.uv[2] * ddy.z;
 
-    float4 baseColor;
-    {
-        Texture2D<float4> baseColorTexture = TBindless(Texture2D, float4, materialInfo.baseColorId);
-        SamplerState baseColorSampler      = Bindless(SamplerState, materialInfo.baseColorSampler);
-        baseColor = baseColorTexture.SampleGrad(baseColorSampler, meshUv, meshUv_ddx, meshUv_ddy) * materialInfo.baseColorFactor;
-    }
+    Texture2D<float4> baseColorTexture = TBindless(Texture2D, float4, materialInfo.baseColorId);
+    SamplerState baseColorSampler      = Bindless(SamplerState, materialInfo.baseColorSampler);
 
-    float3 normalRS;
-    {
-        float3 tangentRS     =   triangleInfo.tangentRS[0] * barycentric.x +   triangleInfo.tangentRS[1] * barycentric.y +   triangleInfo.tangentRS[2] * barycentric.z;
-        float3 bitangentRS   = triangleInfo.bitangentRS[0] * barycentric.x + triangleInfo.bitangentRS[1] * barycentric.y + triangleInfo.bitangentRS[2] * barycentric.z;
-        float3 vertNormalRS  =    triangleInfo.normalRS[0] * barycentric.x +    triangleInfo.normalRS[1] * barycentric.y +    triangleInfo.normalRS[2] * barycentric.z;
-
-        const float3x3 TBN = float3x3(tangentRS, bitangentRS, vertNormalRS);
-
-        Texture2D<float2> normalTexture = TBindless(Texture2D, float2, materialInfo.normalTexture);
-        SamplerState normalSampler      = Bindless(SamplerState, materialInfo.normalSampler);
-        const float2 xy                 = normalTexture.SampleGrad(normalSampler, meshUv, meshUv_ddx, meshUv_ddy) * 2.0 - 1.0; // Remap to [-1, 1].
-        const float  z                  = sqrt(1.0 - dot(xy, xy)); // Construct z.
-
-        normalRS = mul(float3(xy, z), TBN);
-    }
-
+    float4 sampleColor = baseColorTexture.SampleGrad(baseColorSampler, meshUv, meshUv_ddx, meshUv_ddy) * materialInfo.baseColorFactor;
 #if 0
 
     if(meshlet.lod == 0) { return float3(1.0, 0.0, 0.0); } 
@@ -152,8 +105,8 @@ float3 gltfMetallicRoughnessPBR(
     if(meshlet.lod == 4) { return float3(1.0, 1.0, 0.0); }
     if(meshlet.lod == 5) { return float3(0.0, 1.0, 0.0); }
 #endif
-    
-    return bColor ? baseColor.xyz : dot(normalRS, normalize(float3(0.4, 1.0, 0.0)));// baseColor.xyz;
+
+    return sampleColor.xyz;
 }
 
 void storeColor(uint2 pos, float3 c)
@@ -193,30 +146,28 @@ void mainCS(
             packID = visibilityTexture[dispatchPos];
         }
 
-        uint meshletId;
-        uint instanceId;
-        uint objectId;
         [branch]
         if (packID != 0 && cachePackId != packID)
         {
             uint triangleId;
+            uint instanceId;
             decodeTriangleIdInstanceId(packID, triangleId, instanceId);
 
             const uint3 drawCmd = BATL(uint3, pushConsts.drawedMeshletCmdId, instanceId);
             check(drawCmd.z == instanceId);
 
-            objectId  = drawCmd.x;
-            meshletId = drawCmd.y;
+            const uint objectId  = drawCmd.x;
+            const uint meshletId = drawCmd.y;
 
             objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
             materialInfo  = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
+
 
             const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
             const float4x4 translatedWorldToClip  = perView.translatedWorldToClip;
             const float4x4 localToClip            = mul(translatedWorldToClip, localToTranslatedWorld);
             getTriangleMiscInfo(perView, scene, objectInfo, localToClip, meshletId, triangleId, triangleInfo);
 
-            // Update cache pack id.
             cachePackId = packID;
         }
 
@@ -225,8 +176,7 @@ void mainCS(
         [branch]
         if (packID != 0 && materialInfo.materialType == kLightingType_GLTF_MetallicRoughnessPBR)
         {
-            float3 c = gltfMetallicRoughnessPBR(objectId == 0, perView, scene, objectInfo, materialInfo, triangleInfo, dispatchPos);
-            storeColor(dispatchPos, c);
+            storeColor(dispatchPos, gltfMetallicRoughnessPBR(perView, scene, objectInfo, materialInfo, triangleInfo, dispatchPos));
         }
     #endif 
     }

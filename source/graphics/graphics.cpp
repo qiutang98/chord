@@ -1097,6 +1097,14 @@ namespace chord::graphics
 
 			m_builtinTextures.black = std::make_shared<GPUTextureAsset>(black);
 		}
+		{
+			auto normal = std::make_shared<GPUTexture>("Builtin::Normal", imageCI1x1, uploadVMACI);
+
+			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kNormal.getData());
+			syncUploadTexture(*normal, buffer1x1);
+
+			m_builtinTextures.normal = std::make_shared<GPUTextureAsset>(normal);
+		}
 	}
 
 	void Context::syncUploadTexture(GPUTexture& texture, SizedBuffer data)

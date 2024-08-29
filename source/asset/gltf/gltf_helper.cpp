@@ -98,7 +98,7 @@ namespace chord
 	void uiDrawImportConfig(GLTFAssetImportConfigRef config)
 	{
 		ImGui::Checkbox("##SmoothNormal", &config->bGenerateSmoothNormal); ImGui::SameLine(); ImGui::Text("Generate Smooth Normal");
-		ImGui::Checkbox("##Fuse", &config->bFuse); ImGui::SameLine(); ImGui::Text("Fuse Close Vertex");
+		ImGui::Checkbox("##Fuse", &config->bFuse); ImGui::SameLine(); ImGui::Text("Fuse Close Vertices When Found Loose Geometry");
 		if (config->bFuse)
 		{
 			ImGui::DragFloat("Fuse Relative Distance", &config->fuseRelativeDistance, 1e-5f, 1e-5f, 1e-3f);
@@ -1021,10 +1021,10 @@ namespace chord
 					info.textureCoord = b.texCoord;
 
 
-					info.sampler.minFilter = (sampler.minFilter == -1) ? GLTFSampler::EMinMagFilter::NEAREST : GLTFSampler::EMinMagFilter(info.sampler.minFilter);
-					info.sampler.magFilter = (sampler.magFilter == -1) ? GLTFSampler::EMinMagFilter::NEAREST : GLTFSampler::EMinMagFilter(info.sampler.magFilter);
-					info.sampler.wrapS = (sampler.wrapS == -1) ? GLTFSampler::EWrap::REPEAT : GLTFSampler::EWrap(info.sampler.wrapS);
-					info.sampler.wrapT = (sampler.wrapT == -1) ? GLTFSampler::EWrap::REPEAT : GLTFSampler::EWrap(info.sampler.wrapT);
+					info.sampler.minFilter = (sampler.minFilter == -1) ? GLTFSampler::EMinMagFilter::NEAREST : GLTFSampler::EMinMagFilter(sampler.minFilter);
+					info.sampler.magFilter = (sampler.magFilter == -1) ? GLTFSampler::EMinMagFilter::NEAREST : GLTFSampler::EMinMagFilter(sampler.magFilter);
+					info.sampler.wrapS = (sampler.wrapS == -1) ? GLTFSampler::EWrap::REPEAT : GLTFSampler::EWrap(sampler.wrapS);
+					info.sampler.wrapT = (sampler.wrapT == -1) ? GLTFSampler::EWrap::REPEAT : GLTFSampler::EWrap(sampler.wrapT);
 				};
 
 				auto& pbr = material.pbrMetallicRoughness;

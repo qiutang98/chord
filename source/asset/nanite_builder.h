@@ -10,9 +10,11 @@ namespace chord::nanite
 	struct Vertex
 	{
 		float3 position;
-		float2 uv0;
+
+		float2 uv0; // uv0 must continue with normal and tangent ...!!!!!!!!!!!!!! for simplify
 		float3 normal;
 		float4 tangent;
+
 		float3 smoothNormal;
 		float2 uv1;
 		float4 color0;

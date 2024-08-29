@@ -12,7 +12,7 @@ using namespace chord::nanite;
 
 // Group-merge-simplify-split parameters.
 constexpr uint32 kMinNumMeshletPerGroup = 2;
-constexpr uint32 kMaxNumMeshletPerGroup = 8;
+constexpr uint32 kMaxNumMeshletPerGroup = 4;
 constexpr uint32 kNumGroupSplitAfterSimplify = 2;
 constexpr float  kGroupSimplifyThreshold = 1.0f / float(kNumGroupSplitAfterSimplify);
 
@@ -804,13 +804,26 @@ void NaniteBuilder::MeshletsGMSS(
 			const auto targetIndicesCount = groupMergeVertices.size() * kGroupSimplifyThreshold;
 			uint32 options = meshopt_SimplifyLockBorder | meshopt_SimplifySparse | meshopt_SimplifyErrorAbsolute;
 
-			simplifiedVertices.resize(meshopt_simplify(
-				simplifiedVertices.data(),
-				groupMergeVertices.data(),
-				groupMergeVertices.size(),
-				&m_vertices[0].position.x,
-				m_vertices.size(),
-				sizeof(m_vertices[0]),
+			constexpr uint32 kAttributeCount = 9;
+			static const float attributeWeights[kAttributeCount] =
+			{
+				0.05f, 0.05f, // uv
+				0.5f, 0.5f, 0.5f, // normal
+				0.001f, 0.001f, 0.001f, 0.05f // tangent, .w is sign, weight bigger.
+			};
+
+			simplifiedVertices.resize(meshopt_simplifyWithAttributes(
+				simplifiedVertices.data(), // destination
+				groupMergeVertices.data(), // indices
+				groupMergeVertices.size(), // index_count
+				&m_vertices[0].position.x, // vertex_positions
+				m_vertices.size(),         // vertex_count
+				sizeof(m_vertices[0]),     // vertex_positions_stride
+				&m_vertices[0].uv0.x,      // vertex_attributes
+				sizeof(m_vertices[0]),     // vertex_attributes_stride
+				attributeWeights,          // attribute_weights
+				kAttributeCount,           // attribute_count
+				NULL,                      // vertex_lock
 				targetIndicesCount,
 				targetError,
 				options,
@@ -902,8 +915,10 @@ struct FuseVertex
 
 void fuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices, float fuseDistance)
 {
+	// Do nothing when fuse distance is negative. 
 	if (fuseDistance < 0.0f) { return; }
 
+	//
 
 }
 
@@ -919,10 +934,7 @@ NaniteBuilder::NaniteBuilder(
 	const bool bInputIsLooseGeometry = isLooseGeometry(m_indices, m_vertices);
 	if (bInputIsLooseGeometry)
 	{
-		LOG_TRACE("Nanite builder find loose geometry input, fusing vertex...");
-
-		// Fuse vertices first.
-		fuseVertices(m_indices, m_vertices, fuseDistance);
+		LOG_TRACE("Nanite builder find loose geometry input, you must fused vertex before import.");
 	}
 
 	size_t indexCount = m_indices.size();

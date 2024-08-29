@@ -207,7 +207,7 @@ void prepareTileParamCS()
     const uint tileCount = BATL(uint, pushConsts.tileBufferCountId, 0);
 
     uint4 cmdParameter;
-    cmdParameter.x = tileCount;
+    cmdParameter.x = (tileCount + 3) / 4;
     cmdParameter.y = 1;
     cmdParameter.z = 1;
     cmdParameter.w = 1;
