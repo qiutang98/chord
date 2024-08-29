@@ -92,7 +92,6 @@ void getTriangleMiscInfo(
 }
 
 float3 gltfMetallicRoughnessPBR(
-    bool bColor,
     in const PerframeCameraView perView,
     in const GPUBasicData scene,
     in const GPUObjectGLTFPrimitive objectInfo,
@@ -153,7 +152,7 @@ float3 gltfMetallicRoughnessPBR(
     if(meshlet.lod == 5) { return float3(0.0, 1.0, 0.0); }
 #endif
     
-    return bColor ? baseColor.xyz : dot(normalRS, normalize(float3(0.4, 1.0, 0.0)));// baseColor.xyz;
+    return dot(normalRS, normalize(float3(0.4, 1.0, 0.0)));// baseColor.xyz;
 }
 
 void storeColor(uint2 pos, float3 c)
@@ -225,8 +224,8 @@ void mainCS(
         [branch]
         if (packID != 0 && materialInfo.materialType == kLightingType_GLTF_MetallicRoughnessPBR)
         {
-            float3 c = gltfMetallicRoughnessPBR(objectId == 0, perView, scene, objectInfo, materialInfo, triangleInfo, dispatchPos);
-            storeColor(dispatchPos, c);
+            float3 c = gltfMetallicRoughnessPBR(perView, scene, objectInfo, materialInfo, triangleInfo, dispatchPos);
+            storeColor(dispatchPos, (c + 0.1) * simpleHashColor(meshletId));
         }
     #endif 
     }
