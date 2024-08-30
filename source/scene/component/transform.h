@@ -41,9 +41,19 @@ namespace chord
 		const math::dmat4& getWorldMatrix() const { return m_worldMatrix; }
 
 		// Get last tick world matrix result.
-		const math::dmat4& getPrevWorldMatrix() const { return m_prevWorldMatrix; }
+		const math::dmat4& getPrevWorldMatrix() const 
+		{ 
+			[[unlikely]] 
+			if (m_prevWorldMatrix[0][0] == std::numeric_limits<double>::quiet_NaN())
+			{ 
+				return m_worldMatrix; 
+			}
+
+			return m_prevWorldMatrix; 
+		}
 
 		void updateWorldTransform();
+
 	private:
 		static UIComponentDrawDetails createComponentUIDrawDetails();
 
@@ -59,11 +69,11 @@ namespace chord
 		math::dmat4 m_worldMatrix = math::dmat4(1.0);
 
 		// Prev-frame world matrix.
-		math::dmat4 m_prevWorldMatrix = math::dmat4(1.0);
+		math::dmat4 m_prevWorldMatrix = math::dmat4(std::numeric_limits<double>::quiet_NaN());
 
 	protected:
-		math::dvec3 m_translation = { .0, .0, .0 };
-		math::dvec3 m_rotation = { .0, .0, .0 };
-		math::dvec3 m_scale = { 1., 1., 1. };
+		math::dvec3 m_translation = { 0.0, 0.0, 0.0 };
+		math::dvec3 m_rotation    = { 0.0, 0.0, 0.0 };
+		math::dvec3 m_scale       = { 1.0, 1.0, 1.0 };
 	};
 }

@@ -323,7 +323,6 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
     const float3 posCenter = (posMin + posMax) * 0.5;
     const float3 extent = posMax - posCenter;
 
-
     bool bVisible = true;
     if (shaderHasFlag(pushConsts.switchFlags, kHZBCullingEnableBit))
     {
@@ -348,11 +347,12 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
 
         if (maxUVz.z < 1.0f && minUVz.z > 0.0f) // No cross near or far plane.
         {
-            // Clamp min&max uv.
+            // Clamp min & max uv.
             minUVz.xy = saturate(minUVz.xy);
             maxUVz.xy = saturate(maxUVz.xy);
 
             // UV convert to hzb space.
+            // NOTE: It cause float error here, so we must do 4x4 sample hzb later. :(
             maxUVz.x *= pushConsts.uv2HzbX;
             maxUVz.y *= pushConsts.uv2HzbY;
             minUVz.x *= pushConsts.uv2HzbX;
@@ -373,13 +373,31 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
                 // Load hzb texture.
                 Texture2D<float> hzbTexture = TBindless(Texture2D, float, pushConsts.hzb);
 
-                const uint2 minPos = uint2(minUVz.xy * mipSize);
-                const uint2 maxPos = uint2(maxUVz.xy * mipSize);
+                const int2 minPos = uint2(minUVz.xy * mipSize);
+                const int2 maxPos = uint2(maxUVz.xy * mipSize);
 
-                float zMin = hzbTexture.Load(int3(minPos, mipLevel));
-                                            zMin = min(zMin, hzbTexture.Load(int3(maxPos, mipLevel)));
-                if (maxPos.x != minPos.x) { zMin = min(zMin, hzbTexture.Load(int3(maxPos.x, minPos.y, mipLevel))); }
-                if (maxPos.y != minPos.y) { zMin = min(zMin, hzbTexture.Load(int3(minPos.x, maxPos.y, mipLevel))); }
+                    float zMin = hzbTexture.Load(int3(minPos.x, maxPos.y, mipLevel));
+                zMin = min(zMin, hzbTexture.Load(int3(maxPos.x, minPos.y, mipLevel)));
+                zMin = min(zMin, hzbTexture.Load(int3(maxPos, mipLevel)));
+                zMin = min(zMin, hzbTexture.Load(int3(minPos, mipLevel)));
+
+                #if 1 // Avoid float uv precision cause sample error.
+                {
+                    zMin = min(zMin, hzbTexture.Load(int3(minPos + int2(-1, -1), mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(minPos + int2(-1,  0), mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(minPos + int2( 0, -1), mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(maxPos + int2( 1,  1), mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(maxPos + int2( 1,  0), mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(maxPos + int2( 0,  1), mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(maxPos.x + 1, minPos.y + 0, mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(maxPos.x + 0, minPos.y - 1, mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(maxPos.x + 1, minPos.y - 1, mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(minPos.x - 1, maxPos.y + 1, mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(minPos.x - 1, maxPos.y + 0, mipLevel)));
+                    zMin = min(zMin, hzbTexture.Load(int3(minPos.x + 0, maxPos.y + 1, mipLevel)));
+                }
+                #endif
+
                 if (zMin > maxUVz.z)
                 {
                     // Occluded by hzb.

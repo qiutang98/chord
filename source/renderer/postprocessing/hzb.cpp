@@ -40,7 +40,7 @@ namespace chord
         uint32 depthWdith = depthImage->get().getExtent().width;
         uint32 depthHeight = depthImage->get().getExtent().height;
 
-        uint32 targetWidth = getNextPOT(depthWdith) / 2;
+        uint32 targetWidth  = getNextPOT(depthWdith)  / 2;
         uint32 targetHeight = getNextPOT(depthHeight) / 2;
 
         PoolTextureCreateInfo ci{};
