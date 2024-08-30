@@ -23,21 +23,9 @@ static AutoCVarRef cVarGLTFRenderingEnable(
     "Enable gltf rendering or not."
 );
 
-static uint32 sGLTFRenderingMeshShaderEnable = 1;
-static AutoCVarRef cVarGLTFRenderingMeshShaderEnable(
-    "r.gltf.rendering.meshshader",
-    sGLTFRenderingMeshShaderEnable,
-    "Enable gltf rendering use mesh shader or not."
-);
-
 bool chord::shouldRenderGLTF(GLTFRenderContext& renderCtx)
 {
     return (renderCtx.gltfObjectCount != 0) && (sGLTFRenderingEnable != 0);
-}
-
-static inline bool shouldUseMeshShader()
-{
-    return sGLTFRenderingMeshShaderEnable != 0;
 }
 
 class SV_bMaskedMaterial : SHADER_VARIANT_BOOL("DIM_MASKED_MATERIAL");
@@ -50,14 +38,6 @@ public:
     using Permutation = TShaderVariantVector<SV_bMaskedMaterial, SV_bTwoSide>;
 };
 IMPLEMENT_GLOBAL_SHADER(VisibilityBufferMS, "resource/shader/visibility_buffer.hlsl", "visibilityPassMS", EShaderStage::Mesh);
-
-class VisibilityBufferVS : public GlobalShader
-{
-public:
-    DECLARE_SUPER_TYPE(GlobalShader);
-    using Permutation = TShaderVariantVector<SV_bMaskedMaterial, SV_bTwoSide>;
-};
-IMPLEMENT_GLOBAL_SHADER(VisibilityBufferVS, "resource/shader/visibility_buffer.hlsl", "visibilityPassVS", EShaderStage::Vertex);
 
 class VisibilityBufferPS : public GlobalShader
 {
@@ -111,75 +91,41 @@ static inline void renderVisibilityPipe(
         EDepthStencilOp::DepthWrite_StencilWrite,
         ERenderTargetLoadStoreOp::Load_Store); // Already clear.
 
+    VisibilityBufferMS::Permutation MSPermutation;
+    MSPermutation.set<SV_bMaskedMaterial>(bMaskedMaterial);
+    MSPermutation.set<SV_bTwoSide>(bTwoSide);
+    auto meshShader = getContext().getShaderLibrary().getShader<VisibilityBufferMS>(MSPermutation);
+
     VisibilityBufferPS::Permutation PSPermutation;
     PSPermutation.set<SV_bMaskedMaterial>(bMaskedMaterial);
     PSPermutation.set<SV_bTwoSide>(bTwoSide);
     auto pixelShader = getContext().getShaderLibrary().getShader<VisibilityBufferPS>(PSPermutation);
 
-    if (shouldUseMeshShader())
-    {
-        VisibilityBufferMS::Permutation MSPermutation;
-        MSPermutation.set<SV_bMaskedMaterial>(bMaskedMaterial);
-        MSPermutation.set<SV_bTwoSide>(bTwoSide);
-        auto meshShader = getContext().getShaderLibrary().getShader<VisibilityBufferMS>(MSPermutation);
+    GraphicsPipelineRef pipeline = getContext().graphicsMeshShadingPipe(
+        nullptr, // amplifyShader
+        meshShader, 
+        pixelShader,
+        bMaskedMaterial ? "Visibility: Masked" : "Visibility",
+        std::move(RTs.getRTsFormats()),
+        RTs.getDepthStencilFormat(),
+        RTs.getDepthStencilFormat());
 
-        GraphicsPipelineRef pipeline = getContext().graphicsMeshShadingPipe(
-            nullptr, // amplifyShader
-            meshShader, 
-            pixelShader,
-            bMaskedMaterial ? "Visibility: Masked" : "Visibility",
-            std::move(RTs.getRTsFormats()),
-            RTs.getDepthStencilFormat(),
-            RTs.getDepthStencilFormat());
+    auto clusterCmdBuffer = fillMeshIndirectDispatchCmd(renderCtx, "VisibilityCmd", countBuffer);
 
-        auto clusterCmdBuffer = fillMeshIndirectDispatchCmd(renderCtx, "VisibilityCmd", countBuffer);
+    addMeshIndirectDrawPass(
+        queue,
+        "GLTF Visibility: Raster",
+        pipeline,
+        RTs,
+        clusterCmdBuffer, 0, sizeof(uint4), 1,
+        [&](graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)
+        {
+            vkCmdSetCullMode(cmd, cullMode);
+            pipe->pushConst(cmd, pushConst);
 
-        
-        addMeshIndirectDrawPass(
-            queue,
-            "GLTF Visibility: Raster",
-            pipeline,
-            RTs,
-            clusterCmdBuffer, 0, sizeof(uint2),
-            [&](graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)
-            {
-                vkCmdSetCullMode(cmd, cullMode);
-                pipe->pushConst(cmd, pushConst);
-
-                // Visibility pass enable depth write and depth test.
-                helper::enableDepthTestDepthWrite(cmd);
-            });
-    }
-    else
-    {
-        VisibilityBufferVS::Permutation VSPermutation;
-        VSPermutation.set<SV_bMaskedMaterial>(bMaskedMaterial);
-        VSPermutation.set<SV_bTwoSide>(bTwoSide);
-        auto vertexShader = getContext().getShaderLibrary().getShader<VisibilityBufferVS>(VSPermutation);
-
-        GraphicsPipelineRef pipeline = getContext().graphicsPipe(
-            vertexShader, pixelShader,
-            bMaskedMaterial ? "Visibility: Masked" : "Visibility",
-            std::move(RTs.getRTsFormats()),
-            RTs.getDepthStencilFormat(),
-            RTs.getDepthStencilFormat());
-
-        addIndirectDrawPass(
-            queue,
-            "GLTF Visibility: Raster",
-            pipeline, 
-            RTs,
-            cmdBuffer, 0, countBuffer, 0,
-            lod0MeshletCount, sizeof(GLTFMeshletDrawCmd),
-            [&](graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)
-            {
-                vkCmdSetCullMode(cmd, cullMode);
-                pipe->pushConst(cmd, pushConst);
-
-                // Visibility pass enable depth write and depth test.
-                helper::enableDepthTestDepthWrite(cmd);
-            });
-    }
+            // Visibility pass enable depth write and depth test.
+            helper::enableDepthTestDepthWrite(cmd);
+        });
 }
 
 static inline void renderVisibility(GLTFRenderContext& renderCtx, PoolBufferGPUOnlyRef inCmdBuffer, PoolBufferGPUOnlyRef inCountBuffer)
@@ -198,7 +144,7 @@ static inline void renderVisibility(GLTFRenderContext& renderCtx, PoolBufferGPUO
         {
             // Fill cmd for indirect.
             auto [filteredCountBuffer, filteredCmdBuffer] = 
-                chord::detail::filterPipeForVisibility(shouldUseMeshShader(), renderCtx, filterCmd, inCmdBuffer, inCountBuffer, alphaMode, bTwoside);
+                chord::detail::filterPipeForVisibility(renderCtx, filterCmd, inCmdBuffer, inCountBuffer, alphaMode, bTwoside);
         
 
             // Now rendering.
@@ -226,7 +172,7 @@ bool chord::gltfVisibilityRenderingStage0(GLTFRenderContext& renderCtx)
         {
             bShouldInvokeStage1 = true;
 
-            chord::detail::CountAndCmdBuffer countAndCmdBuffers;
+            chord::CountAndCmdBuffer countAndCmdBuffers;
             auto [countBufferStage1, cmdBufferStage1] =
                 detail::hzbCulling(renderCtx, true, renderCtx.postBasicCullingCtx.meshletCountBuffer, renderCtx.postBasicCullingCtx.meshletCmdBuffer, countAndCmdBuffers);
 
@@ -253,7 +199,7 @@ void chord::gltfVisibilityRenderingStage1(GLTFRenderContext& renderCtx, const HZ
     auto& gbuffers = renderCtx.gbuffers;
     auto& queue = renderCtx.queue;
 
-    chord::detail::CountAndCmdBuffer countAndCmdBuffers;
+    chord::CountAndCmdBuffer countAndCmdBuffers;
     detail::hzbCulling(renderCtx, false, countBufferStage1, cmdBufferStage1, countAndCmdBuffers);
 
     renderVisibility(renderCtx, countAndCmdBuffers.second, countAndCmdBuffers.first);

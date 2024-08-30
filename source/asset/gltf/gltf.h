@@ -71,10 +71,25 @@ namespace chord
 		constexpr static uint32 kGPUSceneDataFloat4Count =
 			CHORD_DIVIDE_AND_ROUND_UP(sizeof(GLTFMaterialGPUData), sizeof(float) * 4);
 
-		graphics::GPUTextureAssetRef baseColorTexture = nullptr;
-		graphics::GPUTextureAssetRef metallicRoughnessTexture = nullptr;
-		graphics::GPUTextureAssetRef emissiveTexture = nullptr;
-		graphics::GPUTextureAssetRef normalTexture = nullptr;
+		struct TextureInfo
+		{
+			bool bExist = false;
+			graphics::GPUTextureAssetRef texture = nullptr;
+
+			// Check current texture is ready or not.
+			bool isLoadingReady() const
+			{
+				checkMsgf(texture != nullptr, "Texture must create before check loading state.");
+				return texture->isReady();
+			}
+
+			uint32 requireSRV(bool bReturnUnValidIfNoExist = false) const;
+		};
+
+		TextureInfo baseColorTexture {};
+		TextureInfo metallicRoughnessTexture {};
+		TextureInfo emissiveTexture {};
+		TextureInfo normalTexture {};
 
 		std::shared_ptr<GLTFMaterialAsset> reference = nullptr;
 

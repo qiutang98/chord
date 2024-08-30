@@ -34,6 +34,7 @@ void getTriangleMiscInfo(
     in const PerframeCameraView perView,
     in const GPUBasicData scene,
     in const GPUObjectGLTFPrimitive objectInfo,
+    in const bool bExistNormalTexture,
     in const float4x4 localToClip,
     in const uint meshletId, 
     in const uint triangleId,
@@ -65,29 +66,29 @@ void getTriangleMiscInfo(
             outTriangle.positionHS[i] = mul(localToClip, float4(positionLS, 1.0));
         }
 
-        // Non-uniform scale need invert local to world matrix's transpose.
-        // see http://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/.
-        {
-            const float3 normalLS = normalBuffer.TypeLoad(float3, indicesId);
-            outTriangle.normalRS[i] = normalize(mul(float4(normalLS, 0.0), objectInfo.basicData.translatedWorldToLocal).xyz);
-        }
-
-        // Tangent direction don't care about non-uniform scale.
-        // see http://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/.
-        const float4 tangentLS = tangentBuffer.TypeLoad(float4, indicesId);
-        outTriangle.tangentRS[i] = mul(objectInfo.basicData.localToTranslatedWorld, float4(tangentLS.xyz, 0.0)).xyz;
-
-        // Gram-Schmidt re-orthogonalize. https://learnopengl.com/Advanced-Lighting/Normal-Mapping
-        outTriangle.tangentRS[i] = normalize(outTriangle.tangentRS[i] - dot(outTriangle.tangentRS[i], outTriangle.normalRS[i]) * outTriangle.normalRS[i]);
-
         // Load uv. 
         outTriangle.uv[i] =  uvDataBuffer.TypeLoad(float2, indicesId);
 
-        // Hiding latency...
+        // Non-uniform scale need invert local to world matrix's transpose.
+        // see http://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/.
+        const float3 normalLS = normalBuffer.TypeLoad(float3, indicesId);
+        outTriangle.normalRS[i] = normalize(mul(float4(normalLS, 0.0), objectInfo.basicData.translatedWorldToLocal).xyz);
 
-        // Then it's easy to compute bitangent now.
-        // tangentLS.w = sign(dot(normalize(bitangent), normalize(cross(normal, tangent))));
-        outTriangle.bitangentRS[i] = cross(outTriangle.normalRS[i], outTriangle.tangentRS[i]) * tangentLS.w;
+        [branch]
+        if (bExistNormalTexture)
+        {
+            // Tangent direction don't care about non-uniform scale.
+            // see http://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/.
+            const float4 tangentLS = tangentBuffer.TypeLoad(float4, indicesId);
+            outTriangle.tangentRS[i] = mul(objectInfo.basicData.localToTranslatedWorld, float4(tangentLS.xyz, 0.0)).xyz;
+
+            // Gram-Schmidt re-orthogonalize. https://learnopengl.com/Advanced-Lighting/Normal-Mapping
+            outTriangle.tangentRS[i] = normalize(outTriangle.tangentRS[i] - dot(outTriangle.tangentRS[i], outTriangle.normalRS[i]) * outTriangle.normalRS[i]);
+
+            // Then it's easy to compute bitangent now.
+            // tangentLS.w = sign(dot(normalize(bitangent), normalize(cross(normal, tangent))));
+            outTriangle.bitangentRS[i] = cross(outTriangle.normalRS[i], outTriangle.tangentRS[i]) * tangentLS.w;
+        }
     }
 }
 
@@ -97,6 +98,7 @@ float3 gltfMetallicRoughnessPBR(
     in const GPUObjectGLTFPrimitive objectInfo,
     in const GLTFMaterialGPUData materialInfo,
     in const TriangleMiscInfo triangleInfo,
+    in const bool bExistNormalTexture,
     in const uint2 dispatchPos)
 {
     // Screen uv. 
@@ -126,11 +128,15 @@ float3 gltfMetallicRoughnessPBR(
         baseColor = baseColorTexture.SampleGrad(baseColorSampler, meshUv, meshUv_ddx, meshUv_ddy) * materialInfo.baseColorFactor;
     }
 
+    // Vertex normal.
+    const float3 vertNormalRS = triangleInfo.normalRS[0] * barycentric.x + triangleInfo.normalRS[1] * barycentric.y + triangleInfo.normalRS[2] * barycentric.z;
+
     float3 normalRS;
+    [branch]
+    if (bExistNormalTexture)
     {
         float3 tangentRS     =   triangleInfo.tangentRS[0] * barycentric.x +   triangleInfo.tangentRS[1] * barycentric.y +   triangleInfo.tangentRS[2] * barycentric.z;
         float3 bitangentRS   = triangleInfo.bitangentRS[0] * barycentric.x + triangleInfo.bitangentRS[1] * barycentric.y + triangleInfo.bitangentRS[2] * barycentric.z;
-        float3 vertNormalRS  =    triangleInfo.normalRS[0] * barycentric.x +    triangleInfo.normalRS[1] * barycentric.y +    triangleInfo.normalRS[2] * barycentric.z;
 
         const float3x3 TBN = float3x3(tangentRS, bitangentRS, vertNormalRS);
 
@@ -140,6 +146,10 @@ float3 gltfMetallicRoughnessPBR(
         const float  z                  = sqrt(1.0 - dot(xy, xy)); // Construct z.
 
         normalRS = mul(float3(xy, z), TBN);
+    }
+    else
+    {
+        normalRS = vertNormalRS;
     }
 
 #if 0
@@ -178,9 +188,11 @@ void mainCS(
     GLTFMaterialGPUData    materialInfo;
     TriangleMiscInfo       triangleInfo;
 
+    // Exist normal texture or not.
+    bool bExistNormalTexture;
+
     const uint  sampleGroup = workGroupId * 4 + localThreadIndex / 16;
     const uint2 tileOffset  = BATL(uint2, pushConsts.tileBufferCmdId, sampleGroup);
-
     [unroll(4)]
     for (uint i = 0; i < 4; i ++)
     {
@@ -192,28 +204,31 @@ void mainCS(
             packID = visibilityTexture[dispatchPos];
         }
 
-        uint meshletId;
-        uint instanceId;
-        uint objectId;
+
         [branch]
         if (packID != 0 && cachePackId != packID)
         {
             uint triangleId;
+            uint instanceId;
             decodeTriangleIdInstanceId(packID, triangleId, instanceId);
 
             const uint3 drawCmd = BATL(uint3, pushConsts.drawedMeshletCmdId, instanceId);
             check(drawCmd.z == instanceId);
 
-            objectId  = drawCmd.x;
-            meshletId = drawCmd.y;
+            const uint objectId  = drawCmd.x;
+            const uint meshletId = drawCmd.y;
 
             objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
             materialInfo  = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
 
+            // Update state. 
+            bExistNormalTexture = (materialInfo.normalTexture != kUnvalidIdUint32);
+
+            // Load triangle infos.
             const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
             const float4x4 translatedWorldToClip  = perView.translatedWorldToClip;
             const float4x4 localToClip            = mul(translatedWorldToClip, localToTranslatedWorld);
-            getTriangleMiscInfo(perView, scene, objectInfo, localToClip, meshletId, triangleId, triangleInfo);
+            getTriangleMiscInfo(perView, scene, objectInfo, bExistNormalTexture, localToClip, meshletId, triangleId, triangleInfo);
 
             // Update cache pack id.
             cachePackId = packID;
@@ -224,8 +239,8 @@ void mainCS(
         [branch]
         if (packID != 0 && materialInfo.materialType == kLightingType_GLTF_MetallicRoughnessPBR)
         {
-            float3 c = gltfMetallicRoughnessPBR(perView, scene, objectInfo, materialInfo, triangleInfo, dispatchPos);
-            storeColor(dispatchPos, (c + 0.1) * simpleHashColor(meshletId));
+            float3 c = gltfMetallicRoughnessPBR(perView, scene, objectInfo, materialInfo, triangleInfo, bExistNormalTexture, dispatchPos);
+            storeColor(dispatchPos, (c + 0.5) );
         }
     #endif 
     }

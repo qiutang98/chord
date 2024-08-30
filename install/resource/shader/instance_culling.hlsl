@@ -323,7 +323,7 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
     const float3 posCenter = (posMin + posMax) * 0.5;
     const float3 extent = posMax - posCenter;
 
-    // Project to prev frame and do some occlusion culling. 
+
     bool bVisible = true;
     if (shaderHasFlag(pushConsts.switchFlags, kHZBCullingEnableBit))
     {
@@ -332,6 +332,7 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
 
         const float4x4 mvp = 
         #if DIM_HZB_CULLING_PHASE_0
+            // Project to prev frame and do some occlusion culling. 
             mul(perView.translatedWorldToClipLastFrame, objectInfo.basicData.localToTranslatedWorldLastFrame);
         #else
             mul(perView.translatedWorldToClip, localToTranslatedWorld);
@@ -493,21 +494,7 @@ void fillPipelineDrawParamCS(uint threadId : SV_DispatchThreadID)
     {
         // Now get local draw cmd id.
         const uint drawCmdId = storeBaseId + localIndex;
-
-    #if DIM_MESH_SHADER
         BATS(uint3, pushConsts.drawedMeshletCmdId_1, drawCmdId, drawCmd);
-    #else 
-        // Vertex shader fallback. 
-        GLTFMeshletDrawCmd visibleDrawCmd;
-        visibleDrawCmd.vertexCount    = unpackTriangleCount(meshlet.vertexTriangleCount) * 3;
-        visibleDrawCmd.instanceCount  = 1;
-        visibleDrawCmd.firstVertex    = 0;
-        visibleDrawCmd.firstInstance  = drawCmdId;
-        visibleDrawCmd.objectId       = drawCmd.x;
-        visibleDrawCmd.meshletId      = drawCmd.y;
-        visibleDrawCmd.instanceId     = drawCmd.z;
-        BATS(GLTFMeshletDrawCmd, pushConsts.drawedMeshletCmdId_1, drawCmdId, visibleDrawCmd);
-    #endif
     }
 }
 

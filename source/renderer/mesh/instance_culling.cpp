@@ -64,9 +64,10 @@ static inline bool shouldPrintDebugBox()
     return sInstanceCullingShaderDebugMode == 1;
 }
 
-PRIVATE_GLOBAL_SHADER(InstanceCullingCS, "resource/shader/instance_culling.hlsl", "instanceCullingCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(ClusterGroupCullingCS, "resource/shader/instance_culling.hlsl", "clusterGroupCullingCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(FillCullingParamCS, "resource/shader/instance_culling.hlsl", "fillCullingParamCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(InstanceCullingCS,       "resource/shader/instance_culling.hlsl", "instanceCullingCS",       EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(ClusterGroupCullingCS,   "resource/shader/instance_culling.hlsl", "clusterGroupCullingCS",   EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(FillCullingParamCS,      "resource/shader/instance_culling.hlsl", "fillCullingParamCS",      EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(FillPipelineDrawParamCS, "resource/shader/instance_culling.hlsl", "fillPipelineDrawParamCS", EShaderStage::Compute);
 
 class HZBCullCS : public GlobalShader
 {
@@ -79,15 +80,6 @@ public:
 };
 IMPLEMENT_GLOBAL_SHADER(HZBCullCS, "resource/shader/instance_culling.hlsl", "HZBCullingCS", EShaderStage::Compute);
 
-class FillPipelineDrawParamCS : public GlobalShader
-{
-public:
-    DECLARE_SUPER_TYPE(GlobalShader);
-
-    class SV_bMeshShader : SHADER_VARIANT_BOOL("DIM_MESH_SHADER");
-    using Permutation = TShaderVariantVector<SV_bMeshShader>;
-};
-IMPLEMENT_GLOBAL_SHADER(FillPipelineDrawParamCS, "resource/shader/instance_culling.hlsl", "fillPipelineDrawParamCS", EShaderStage::Compute);
 
 PoolBufferGPUOnlyRef chord::detail::fillIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, PoolBufferGPUOnlyRef countBuffer)
 {
@@ -107,7 +99,6 @@ PoolBufferGPUOnlyRef chord::detail::fillIndirectDispatchCmd(GLTFRenderContext& r
 
     return meshletCullCmdBuffer;
 };
-
 
 void chord::instanceCulling(GLTFRenderContext& ctx)
 {
@@ -200,8 +191,7 @@ static void fillHZBPushParam(GLTFRenderContext& renderCtx, InstanceCullingPushCo
     push.hzbMip0Height = inHzb.dimension.y;
 };
 
-
-chord::detail::CountAndCmdBuffer chord::detail::hzbCulling(
+chord::CountAndCmdBuffer chord::detail::hzbCulling(
     GLTFRenderContext& renderCtx, bool bFirstStage, PoolBufferGPUOnlyRef inCountBuffer, PoolBufferGPUOnlyRef inCmdBuffer, CountAndCmdBuffer& outBuffer)
 {
     const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
@@ -262,17 +252,15 @@ chord::detail::CountAndCmdBuffer chord::detail::hzbCulling(
     return { countBufferStage1, cmdBufferStage1 };
 }
 
-chord::detail::CountAndCmdBuffer chord::detail::filterPipeForVisibility(bool bMeshShader, GLTFRenderContext& renderCtx, PoolBufferGPUOnlyRef dispatchCmd, PoolBufferGPUOnlyRef inCmdBuffer, PoolBufferGPUOnlyRef inCountBuffer, uint alphaMode, uint bTwoSide)
+chord::CountAndCmdBuffer chord::detail::filterPipeForVisibility(GLTFRenderContext& renderCtx, PoolBufferGPUOnlyRef dispatchCmd, PoolBufferGPUOnlyRef inCmdBuffer, PoolBufferGPUOnlyRef inCountBuffer, uint alphaMode, uint bTwoSide)
 {
     const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
+    
     auto& queue = renderCtx.queue;
     auto& pool = getContext().getBufferPool();
 
-    // Cmd stripe for different shader mode.
-    const uint32 cmdStripeSize = bMeshShader ? sizeof(uint3) : sizeof(GLTFMeshletDrawCmd);
-
     auto countBuffer = pool.createGPUOnly("CountPostFilter", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    auto cmdBuffer   = pool.createGPUOnly("CmdBufferStage", cmdStripeSize * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    auto cmdBuffer   = pool.createGPUOnly("CmdBufferStage", sizeof(uint3) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
     queue.clearUAV(countBuffer);
 
@@ -285,10 +273,7 @@ chord::detail::CountAndCmdBuffer chord::detail::filterPipeForVisibility(bool bMe
     pushConst.targetTwoSide          = bTwoSide;
     pushConst.targetAlphaMode        = alphaMode;
 
-    FillPipelineDrawParamCS::Permutation permutation;
-    permutation.set<FillPipelineDrawParamCS::SV_bMeshShader>(bMeshShader);
-
-    addIndirectComputePass2(queue, "PipelineFilter", getContext().computePipe(getContext().getShaderLibrary().getShader<FillPipelineDrawParamCS>(permutation), "PipelineFilter"), pushConst, dispatchCmd);
+    addIndirectComputePass2(queue, "PipelineFilter", getContext().computePipe(getContext().getShaderLibrary().getShader<FillPipelineDrawParamCS>(), "PipelineFilter"), pushConst, dispatchCmd);
 
     return { countBuffer, cmdBuffer };
 }

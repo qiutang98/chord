@@ -13,7 +13,7 @@ CHORD_PUSHCONST(VisibilityBufferPushConst, pushConsts);
 #include "bindless.hlsli"
 #include "base.hlsli"
 
-struct VisibilityPassVS2PS
+struct VisibilityPassMS2PS
 {
     float4 positionHS : SV_Position;
     nointerpolation uint2 id : TEXCOORD0;
@@ -38,7 +38,7 @@ void visibilityPassMS(
     uint dispatchThreadId : SV_DispatchThreadID,
     uint groupThreadId : SV_GroupThreadID,
     uint groupId : SV_GroupID,
-    out vertices VisibilityPassVS2PS verts[kNaniteMeshletMaxVertices],
+    out vertices VisibilityPassMS2PS verts[kNaniteMeshletMaxVertices],
     out primitives PrimitiveAttributes prims[kNaniteMeshletMaxTriangle],
     out indices  uint3 tris[kNaniteMeshletMaxTriangle])
 {
@@ -74,11 +74,13 @@ void visibilityPassMS(
         const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
         const float4 positionRS = mul(localToTranslatedWorld, float4(positionLS, 1.0));
 
-        VisibilityPassVS2PS output;
+        VisibilityPassMS2PS output;
 
         // Get HS position.
         const float4 positionHS = mul(translatedWorldToClip, positionRS);
         output.positionHS = positionHS;
+
+        // Store in shared memory for triangle culling.
         sharedVerticesHS_R[i] = positionHS.x;
         sharedVerticesHS_G[i] = positionHS.y;
         sharedVerticesHS_B[i] = positionHS.w;
@@ -136,6 +138,7 @@ void visibilityPassMS(
         const float2 uv_1 = positionHS_1.xy / abs(positionHS_1.z) * float2(0.5, -0.5) + 0.5;
         const float2 uv_2 = positionHS_2.xy / abs(positionHS_2.z) * float2(0.5, -0.5) + 0.5; // No fully ndc culling, just use .xy
 
+        // UV AABB.
         const float2 maxUv = max(uv_0, max(uv_1, uv_2));
         const float2 minUv = min(uv_0, min(uv_1, uv_2));
 
@@ -159,64 +162,9 @@ void visibilityPassMS(
     }
 }
 
-// TODO: CS build draw list.
-void visibilityPassVS(
-    uint vertexId : SV_VertexID, 
-    uint instanceId : SV_INSTANCEID,
-    out VisibilityPassVS2PS output)
-{
-    const GLTFMeshletDrawCmd drawCmd = BATL(GLTFMeshletDrawCmd, pushConsts.drawedMeshletCmdId, instanceId);
-    PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
-    const GPUBasicData scene = perView.basicData;
-
-
-    // Load object and meshlet.
-    uint objectId  = drawCmd.objectId;
-    uint meshletId = drawCmd.meshletId;
-    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
-    const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
-    const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
-    const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
-
-    ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
-    ByteAddressBuffer meshletDataBuffer = ByteAddressBindless(primitiveDataInfo.meshletDataBuffer);
-
-    // Get current triangle local id.
-    const uint triangleId = vertexId / 3;
-
-    // Get vertices count. 
-    uint verticesCount = unpackVertexCount(meshlet.vertexTriangleCount);
-
-    // Get meshlet index of triangle. 
-    uint triangleIndicesSampleOffset = (meshlet.dataOffset + verticesCount + triangleId) * 4;
-    uint indexTri = meshletDataBuffer.Load(triangleIndicesSampleOffset);
-
-    // Noew get vertices id. 
-    uint verticesSampleOffset = (meshlet.dataOffset + ((indexTri >> ((vertexId % 3) * 8)) & 0xff)) * 4;
-    uint verticesIndex = meshletDataBuffer.Load(verticesSampleOffset);
-    const uint indicesId = primitiveInfo.vertexOffset + verticesIndex;
-
-    // 
-    float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
-    float4x4 translatedWorldToClip = perView.translatedWorldToClip;
-
-    const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
-    const float4 positionRS = mul(localToTranslatedWorld, float4(positionLS, 1.0));
-
-    output.positionHS = mul(translatedWorldToClip, positionRS);
-    
-#if DIM_MASKED_MATERIAL
-    ByteAddressBuffer uvDataBuffer = ByteAddressBindless(primitiveDataInfo.textureCoord0Buffer);
-    output.uv = uvDataBuffer.TypeLoad(float2, indicesId); //
-#endif
-
-    output.id.x = drawCmd.instanceId;
-    output.id.y = objectId;
-} 
-
 void visibilityPassPS(
     in uint primitiveId : SV_PrimitiveID,
-    in VisibilityPassVS2PS input, 
+    in VisibilityPassMS2PS input, 
     out uint outId : SV_Target0)
 {
     uint objectId = input.id.y;

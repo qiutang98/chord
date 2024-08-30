@@ -220,13 +220,30 @@ uint2 remap16x16(uint tid)
     return xy;
 }
 
-float min4(float4 v) { return min(min(min(v.x, v.y), v.z), v.w); }
-float max4(float4 v) { return max(max(max(v.x, v.y), v.z), v.w); }
+float min4(float4 v) 
+{ 
+    return min(min(min(v.x, v.y), v.z), v.w); 
+}
 
-half min4(half4 v) { return min(min(min(v.x, v.y), v.z), v.w); }
-half max4(half4 v) { return max(max(max(v.x, v.y), v.z), v.w); }
+float max4(float4 v) 
+{
+    return max(max(max(v.x, v.y), v.z), v.w); 
+}
 
-float max2(float2 v) { return max(v.x, v.y); }
+half min4(half4 v) 
+{ 
+    return min(min(min(v.x, v.y), v.z), v.w); 
+}
+
+half max4(half4 v) 
+{ 
+    return max(max(max(v.x, v.y), v.z), v.w); 
+}
+
+float max2(float2 v) 
+{ 
+    return max(v.x, v.y); 
+}
 
 uint2 convert2d(uint id, uint dim)
 {

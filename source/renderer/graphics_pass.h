@@ -23,7 +23,19 @@ namespace chord
 		const std::string& name,
 		graphics::GraphicsPipelineRef pipe,
 		RenderTargets& RTs,
-		graphics::PoolBufferRef cmdBuffer, VkDeviceSize offset, uint32_t stride,
+		graphics::PoolBufferRef cmdBuffer, 
+		VkDeviceSize offset, 
+		uint32 stride,
+		uint32 drawCount,
+		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda);
+
+	extern void addMeshIndirectCountDrawPass(
+		graphics::GraphicsQueue& queue,
+		const std::string& name,
+		graphics::GraphicsPipelineRef pipe,
+		RenderTargets& RTs,
+		graphics::PoolBufferRef cmdBuffer, VkDeviceSize offset, graphics::PoolBufferRef countBuffer, VkDeviceSize countBufferOffset,
+		uint32_t maxDrawCount, uint32_t stride,
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda);
 
 	extern void addIndirectDrawPass(

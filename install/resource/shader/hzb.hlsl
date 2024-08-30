@@ -19,21 +19,9 @@ CHORD_PUSHCONST(HZBPushConst, pushConsts);
 #include "bindless.hlsli"
 #include "base.hlsli"
 
-// https://github.com/microsoft/DirectXShaderCompiler/issues/6880
-[[vk::image_format("r16f")]]
-[[vk::binding((int)chord::EBindingType::BindlessStorageImage, 0)]] 
-RWTexture2D<float> RWTextureBindless[];
-
-[[vk::image_format("r16f")]] 
-[[vk::binding(0, 1)]] 
-globallycoherent RWTexture2D<float> mip5DestMin;
-
-[[vk::image_format("r16f")]] 
-[[vk::binding(1, 1)]] 
-globallycoherent RWTexture2D<float> mip5DestMax;
-
-[[vk::binding(2, 1)]] 
-globallycoherent RWStructuredBuffer<uint> counterBuffer;
+[[vk::binding(0, 1)]] globallycoherent RWTexture2D<float> mip5DestMin;
+[[vk::binding(1, 1)]] globallycoherent RWTexture2D<float> mip5DestMax;
+[[vk::binding(2, 1)]] globallycoherent RWStructuredBuffer<uint> counterBuffer;
 
 groupshared uint sharedCounter;
 
@@ -42,86 +30,86 @@ void incrementCounter()
     InterlockedAdd(counterBuffer[0], 1, sharedCounter);
 }
 
-void loadSrcDepth4(uint2 posStripe2x2, out half4 minDepth4, out half4 maxDepth4)
+float4 loadSrcDepth4(uint2 posStripe2x2)
 {
+    float4 depth4;
     Texture2D<float> sceneDepth = TBindless(Texture2D, float, pushConsts.sceneDepth);
+
     uint2 edgeSamplePos = uint2(pushConsts.sceneDepthWidth - 1, pushConsts.sceneDepthHeight - 1);
 
-    // Min value default store, floor default.
-    minDepth4.x = half(sceneDepth[min(posStripe2x2 + uint2(0, 0), edgeSamplePos)]);
-    minDepth4.y = half(sceneDepth[min(posStripe2x2 + uint2(0, 1), edgeSamplePos)]);
-    minDepth4.z = half(sceneDepth[min(posStripe2x2 + uint2(1, 0), edgeSamplePos)]);
-    minDepth4.w = half(sceneDepth[min(posStripe2x2 + uint2(1, 1), edgeSamplePos)]);
+    depth4.x = sceneDepth[min(posStripe2x2 + uint2(0, 0), edgeSamplePos)];
+    depth4.y = sceneDepth[min(posStripe2x2 + uint2(0, 1), edgeSamplePos)];
+    depth4.z = sceneDepth[min(posStripe2x2 + uint2(1, 0), edgeSamplePos)];
+    depth4.w = sceneDepth[min(posStripe2x2 + uint2(1, 1), edgeSamplePos)];
 
-    // Max value use ceil. 
-    maxDepth4.x = half(f16tof32(f32tof16(sceneDepth[min(posStripe2x2 + uint2(0, 0), edgeSamplePos)]) + 1));
-    maxDepth4.y = half(f16tof32(f32tof16(sceneDepth[min(posStripe2x2 + uint2(0, 1), edgeSamplePos)]) + 1));
-    maxDepth4.z = half(f16tof32(f32tof16(sceneDepth[min(posStripe2x2 + uint2(1, 0), edgeSamplePos)]) + 1));
-    maxDepth4.w = half(f16tof32(f32tof16(sceneDepth[min(posStripe2x2 + uint2(1, 1), edgeSamplePos)]) + 1));
+    return depth4;
 }
 
-void loadHZBMip5Depth4(uint2 posStripe2x2, out half4 minDepth4, out half4 maxDepth4)
+void loadHZBMip5Depth4(uint2 posStripe2x2, out float4 minDepth4, out float4 maxDepth4)
 {
-    minDepth4.x = half(mip5DestMin[posStripe2x2 + uint2(0, 0)]);
-    minDepth4.y = half(mip5DestMin[posStripe2x2 + uint2(0, 1)]);
-    minDepth4.z = half(mip5DestMin[posStripe2x2 + uint2(1, 0)]);
-    minDepth4.w = half(mip5DestMin[posStripe2x2 + uint2(1, 1)]);
+    minDepth4.x = mip5DestMin[posStripe2x2 + uint2(0, 0)];
+    minDepth4.y = mip5DestMin[posStripe2x2 + uint2(0, 1)];
+    minDepth4.z = mip5DestMin[posStripe2x2 + uint2(1, 0)];
+    minDepth4.w = mip5DestMin[posStripe2x2 + uint2(1, 1)];
 
-    maxDepth4.x = half(mip5DestMax[posStripe2x2 + uint2(0, 0)]);
-    maxDepth4.y = half(mip5DestMax[posStripe2x2 + uint2(0, 1)]);
-    maxDepth4.z = half(mip5DestMax[posStripe2x2 + uint2(1, 0)]);
-    maxDepth4.w = half(mip5DestMax[posStripe2x2 + uint2(1, 1)]);
+    maxDepth4.x = mip5DestMax[posStripe2x2 + uint2(0, 0)];
+    maxDepth4.y = mip5DestMax[posStripe2x2 + uint2(0, 1)];
+    maxDepth4.z = mip5DestMax[posStripe2x2 + uint2(1, 0)];
+    maxDepth4.w = mip5DestMax[posStripe2x2 + uint2(1, 1)];
 }
 
-void storeHZBMip5(half2 depthMinMax, uint2 storePos)
+void storeHZBMip5(float2 depthMinMax, uint2 storePos)
 {
-    mip5DestMin[storePos] = depthMinMax.x; 
-    mip5DestMax[storePos] = depthMinMax.y; 
+    mip5DestMin[storePos] = depthMinMax.x; // Min value default store, floor default.
+    mip5DestMax[storePos] = f16tof32(f32tof16(depthMinMax.y) + 1); // Max value use ceil. 
 }
 
-void storeHZB(half2 depthMinMax, uint2 storePos, uint level)
+void storeHZB(float2 depthMinMax, uint2 storePos, uint level)
 {
-    RWTextureBindless[pushConsts.hzbMinView[level]][storePos] = depthMinMax.x; // 
-    RWTextureBindless[pushConsts.hzbMaxView[level]][storePos] = depthMinMax.y; //
+    RWTexture2D<float> mipDestMin = TBindless(RWTexture2D, float, pushConsts.hzbMinView[level]);
+    RWTexture2D<float> mipDestMax = TBindless(RWTexture2D, float, pushConsts.hzbMaxView[level]);
+
+    mipDestMin[storePos] = depthMinMax.x; // 
+    mipDestMax[storePos] = depthMinMax.y; // Max de
 }
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 // >>>>>>>>>>>>>>>>>>>> LDS >>>>>>>>>>>>>>>>>>>>
 
-groupshared half sharedValuesR[16][16]; // Min
-groupshared half sharedValuesG[16][16]; // Max
+groupshared float sharedValuesR[16][16]; // Min
+groupshared float sharedValuesG[16][16]; // Max
 
-void storeLDS(half2 minMax, uint x, uint y)
+void storeLDS(float2 minMax, uint x, uint y)
 {
     sharedValuesR[x][y] = minMax.r;
     sharedValuesG[x][y] = minMax.g;
 }
 
 // Return minMax.
-half2 loadLDS(uint x, uint y) 
+float2 loadLDS(uint x, uint y) 
 {
-    return half2(sharedValuesR[x][y], sharedValuesG[x][y]);
+    return float2(sharedValuesR[x][y], sharedValuesG[x][y]);
 }
 
-half2 reductionFunc(half2 v0, half2 v1, half2 v2, half2 v3)
+float2 reductionFunc(float2 v0, float2 v1, float2 v2, float2 v3)
 {
-    half2 r;
+    float2 r;
     r.x = min(min(min(v0.x, v1.x), v2.x), v3.x);
     r.y = max(max(max(v0.y, v1.y), v2.y), v3.y);
     return r;
 }
 
 // Return minMax.
-half2 ldsReduction(uint2 p0, uint2 p1, uint2 p2, uint2 p3)
+float2 ldsReduction(uint2 p0, uint2 p1, uint2 p2, uint2 p3)
 {
-    half2 v0 = loadLDS(p0.x, p0.y);
-    half2 v1 = loadLDS(p1.x, p1.y);
-    half2 v2 = loadLDS(p2.x, p2.y);
-    half2 v3 = loadLDS(p3.x, p3.y); 
+    float2 v0 = loadLDS(p0.x, p0.y);
+    float2 v1 = loadLDS(p1.x, p1.y);
+    float2 v2 = loadLDS(p2.x, p2.y);
+    float2 v3 = loadLDS(p3.x, p3.y); 
     return reductionFunc(v0, v1, v2, v3);
 }
 
-half2 ldsReduction2x2(uint2 xy)
+float2 ldsReduction2x2(uint2 xy)
 {
     return ldsReduction(xy * 2, xy * 2 + uint2(1, 0), xy * 2 + uint2(0, 1), xy * 2 + 1);
 }
@@ -137,7 +125,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
 
     // 0 - 1
     {
-        half2 depthMinMaxs[4];
+        float2 depthMinMaxs[4];
 
         // Mip #0. 16x16, each handle 2x2 tile, each tile exist 2x2 pixel.
         //                so process 64x64 pixels. total fill 32x32
@@ -150,10 +138,8 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
             for (int i = 0; i < 4; i++)
             {
                 const uint2 offsetBasic = convert2d(i, 2);
-
-                half4 minDepth4, maxDepth4;
-                loadSrcDepth4(basicPos + 32 * offsetBasic, minDepth4, maxDepth4); // src: 32x32 pertile
-                depthMinMaxs[i] = half2(min4(minDepth4), max4(maxDepth4));
+                float4 depth4 = loadSrcDepth4(basicPos + 32 * offsetBasic); // src: 32x32 pertile
+                depthMinMaxs[i] = float2(min4(depth4), max4(depth4));
                 storeHZB(depthMinMaxs[i], storePos + 16 * offsetBasic, 0); // mip0: 16x16 pertile
             }
         }
@@ -205,7 +191,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
 
         if (localThreadIndex < 64)
         {
-            half2 minMax = ldsReduction2x2(xy);
+            float2 minMax = ldsReduction2x2(xy);
             storeHZB(minMax, workGroupId * 8 + xy, 2);
             storeLDS(minMax, xy.x, xy.y);
         }
@@ -221,7 +207,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
 
         if (localThreadIndex < 16)
         {
-            half2 minMax = ldsReduction2x2(xy);
+            float2 minMax = ldsReduction2x2(xy);
             storeHZB(minMax, workGroupId * 4 + xy, 3);
             storeLDS(minMax, xy.x, xy.y);
         }
@@ -236,7 +222,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
         GroupMemoryBarrierWithGroupSync();
         if (localThreadIndex < 4)
         {
-            half2 minMax = ldsReduction2x2(xy);
+            float2 minMax = ldsReduction2x2(xy);
             storeHZB(minMax, workGroupId * 2 + xy, 4);
             storeLDS(minMax, xy.x, xy.y);
         }
@@ -251,7 +237,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
         GroupMemoryBarrierWithGroupSync();
         if (localThreadIndex < 1)
         {
-            half2 minMax = ldsReduction2x2(xy);
+            float2 minMax = ldsReduction2x2(xy);
             storeHZBMip5(minMax, workGroupId);
         }
     }
@@ -278,17 +264,17 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
         const uint2 storePos = xy * 2;
 
         // Mip 6: 32x32
-        half2 depthMinMaxs[4];
+        float2 depthMinMaxs[4];
         [unroll(4)]
         for (int i = 0; i < 4; i++)
         {
             const uint2 offsetBasic = convert2d(i, 2);
 
-            half4 depth4Min;
-            half4 depth4Max;
+            float4 depth4Min;
+            float4 depth4Max;
             loadHZBMip5Depth4(basicPos + 2 * offsetBasic, depth4Min, depth4Max);
 
-            depthMinMaxs[i] = half2(min4(depth4Min), max4(depth4Max));
+            depthMinMaxs[i] = float2(min4(depth4Min), max4(depth4Max));
             storeHZB(depthMinMaxs[i], storePos + offsetBasic, 6);
         }
 
@@ -297,7 +283,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
         #endif
 
         // Reduce 2x2
-        half2 minMax = reductionFunc(depthMinMaxs[0], depthMinMaxs[1], depthMinMaxs[2], depthMinMaxs[3]);
+        float2 minMax = reductionFunc(depthMinMaxs[0], depthMinMaxs[1], depthMinMaxs[2], depthMinMaxs[3]);
         storeHZB(minMax, xy, 7);
         storeLDS(minMax, xy.x, xy.y); // 16x16
     }
@@ -313,7 +299,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
 
         if (localThreadIndex < 64)
         {
-            half2 minMax = ldsReduction2x2(xy);
+            float2 minMax = ldsReduction2x2(xy);
             storeHZB(minMax, xy, 8);
             storeLDS(minMax, xy.x, xy.y);
         }
@@ -330,7 +316,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
         if (localThreadIndex < 16)
         {
             // 4x4 tile
-            half2 minMax = ldsReduction2x2(xy);
+            float2 minMax = ldsReduction2x2(xy);
             storeHZB(minMax, xy, 9);
             storeLDS(minMax, xy.x, xy.y);
         }
@@ -347,7 +333,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
         // 2x2 tile
         if (localThreadIndex < 4)
         {
-            half2 minMax = ldsReduction2x2(xy);
+            float2 minMax = ldsReduction2x2(xy);
             storeHZB(minMax, xy, 10);
             storeLDS(minMax, xy.x, xy.y);
         }
@@ -363,7 +349,7 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
         GroupMemoryBarrierWithGroupSync();
         if (localThreadIndex < 1)
         {
-            half2 minMax = ldsReduction2x2(xy);
+            float2 minMax = ldsReduction2x2(xy);
             storeHZB(minMax, 0, 11);
         }
     }

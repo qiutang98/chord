@@ -277,12 +277,14 @@ namespace chord
 		auto normalTex = getContext().getBuiltinTextures().normal;
 		std::weak_ptr<GLTFMaterialProxy> weakPtr = proxy;
 
+		// Load texture.
 		auto proxyLoadTexture = [&](const auto& materialTex, auto& tex, GPUTextureAssetRef fallback)
 		{
-			if (materialTex.isValid())
+			tex.bExist = materialTex.isValid();
+			if (tex.bExist)
 			{
 				auto asset = tryLoadTextureAsset(materialTex.image);
-				tex = asset->getGPUTexture([weakPtr](GPUTextureAssetRef texture)
+				tex.texture = asset->getGPUTexture([weakPtr](GPUTextureAssetRef texture)
 				{
 					// When loading ready, require update gpu scene.
 					if (auto ptr = weakPtr.lock())
@@ -293,7 +295,7 @@ namespace chord
 			}
 			else
 			{
-				tex = fallback;
+				tex.texture = fallback;
 			}
 		};
 
@@ -311,10 +313,10 @@ namespace chord
 	void GLTFMaterialProxy::updateGPUScene(bool bForceUpload)
 	{
 		const bool bAllTextureFinish = 
-			baseColorTexture->isReady() && 
-			emissiveTexture->isReady()  && 
-			normalTexture->isReady()    && 
-			metallicRoughnessTexture->isReady();
+			baseColorTexture.isLoadingReady() &&
+			emissiveTexture.isLoadingReady()  &&
+			normalTexture.isLoadingReady()    &&
+			metallicRoughnessTexture.isLoadingReady();
 
 		if (!bForceUpload && !bAllTextureFinish)
 		{
@@ -326,14 +328,14 @@ namespace chord
 		uploadData.alphaMode                = (uint)reference->alphaMode;
 		uploadData.alphaCutOff              = reference->alphaCoutoff;
 		uploadData.bTwoSided                = reference->bDoubleSided;
-		uploadData.baseColorId              = baseColorTexture->getSRV(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D);
+		uploadData.baseColorId              = baseColorTexture.requireSRV();
 		uploadData.baseColorFactor          = reference->baseColorFactor;
-		uploadData.emissiveTexture          = emissiveTexture->getSRV(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D);
+		uploadData.emissiveTexture          = emissiveTexture.requireSRV();
 		uploadData.emissiveFactor           = reference->emissiveFactor;
 		uploadData.metallicFactor           = reference->metallicFactor;
 		uploadData.roughnessFactor          = reference->roughnessFactor;
-		uploadData.metallicRoughnessTexture = metallicRoughnessTexture->getSRV(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D);
-		uploadData.normalTexture            = normalTexture->getSRV(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D);
+		uploadData.metallicRoughnessTexture = metallicRoughnessTexture.requireSRV();
+		uploadData.normalTexture            = normalTexture.requireSRV(true);
 		uploadData.normalFactorScale        = reference->normalTextureScale;
 		uploadData.bExistOcclusion          = reference->bExistOcclusion;
 		uploadData.occlusionTextureStrength = reference->occlusionTextureStrength;
@@ -610,5 +612,16 @@ namespace chord
 			+ getValidSize(bvhNodeData)
 			+ getValidSize(meshletGroup)
 			+ getValidSize(meshletGroupIndices);
+	}
+
+	uint32 GLTFMaterialProxy::TextureInfo::requireSRV(bool bReturnUnValidIfNoExist) const
+	{
+		if (!bExist && bReturnUnValidIfNoExist)
+		{
+			return kUnvalidIdUint32;
+		}
+
+		checkMsgf(texture != nullptr, "Texture must create before require srv.");
+		return texture->getSRV(graphics::helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D);
 	}
 }

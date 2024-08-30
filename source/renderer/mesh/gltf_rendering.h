@@ -10,6 +10,8 @@
 
 namespace chord
 {
+	using CountAndCmdBuffer = std::pair<graphics::PoolBufferGPUOnlyRef, graphics::PoolBufferGPUOnlyRef>;
+	
 	struct GLTFRenderContext
 	{
 		struct PostBasicCulling
@@ -62,10 +64,10 @@ namespace chord
 	namespace detail
 	{
 		extern graphics::PoolBufferGPUOnlyRef fillIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, graphics::PoolBufferGPUOnlyRef countBuffer);
-		using CountAndCmdBuffer = std::pair<graphics::PoolBufferGPUOnlyRef, graphics::PoolBufferGPUOnlyRef>;
+
 		extern CountAndCmdBuffer hzbCulling(GLTFRenderContext& renderCtx, bool bFirstStage, graphics::PoolBufferGPUOnlyRef inCountBuffer, graphics::PoolBufferGPUOnlyRef inCmdBuffer, CountAndCmdBuffer& outBuffer);
 	
-		extern CountAndCmdBuffer filterPipeForVisibility(bool bMeshShader, GLTFRenderContext& renderCtx, graphics::PoolBufferGPUOnlyRef dispatchCmd, graphics::PoolBufferGPUOnlyRef inCmdBuffer, graphics::PoolBufferGPUOnlyRef inCountBuffer, uint alphaMode, uint bTwoSide);
+		extern CountAndCmdBuffer filterPipeForVisibility(GLTFRenderContext& renderCtx, graphics::PoolBufferGPUOnlyRef dispatchCmd, graphics::PoolBufferGPUOnlyRef inCmdBuffer, graphics::PoolBufferGPUOnlyRef inCountBuffer, uint alphaMode, uint bTwoSide);
 	}
 
 
