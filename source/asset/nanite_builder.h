@@ -72,6 +72,7 @@ namespace chord::nanite
 			std::vector<uint32>&& indices,
 			std::vector<Vertex>&& vertices,
 			bool bFuse,
+			bool bFuseIgnoreNormal,
 			float coneWeight);
 
 		MeshletContainer build() const;

@@ -919,7 +919,7 @@ MeshletContainer NaniteBuilder::build() const
 	return finalCtx;
 }
 
-void fuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices)
+void fuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices, bool bFuseIgnoreNormal)
 {
 	std::vector<Vertex> remapVertices;
 	remapVertices.reserve(vertices.size());
@@ -947,16 +947,20 @@ void fuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices)
 	{
 		const Vertex& vertex = vertices[index];
 
-		HashVertexInfo hashInfo{};
+		HashVertexInfo hashInfo { };
 		hashInfo.position = vertex.position;
 		hashInfo.uv0 = vertex.uv0;
 		hashInfo.uv1 = vertex.uv1;
 		hashInfo.color0 = vertex.color0;
 		hashInfo.tangentW = vertex.tangent.w;
 
-		hashInfo.normal[0] = (signed char)(meshopt_quantizeSnorm(vertex.normal[0], 8));
-		hashInfo.normal[1] = (signed char)(meshopt_quantizeSnorm(vertex.normal[1], 8));
-		hashInfo.normal[2] = (signed char)(meshopt_quantizeSnorm(vertex.normal[2], 8));
+		if (!bFuseIgnoreNormal)
+		{
+			hashInfo.normal[0] = (signed char)(meshopt_quantizeSnorm(vertex.normal[0], 8));
+			hashInfo.normal[1] = (signed char)(meshopt_quantizeSnorm(vertex.normal[1], 8));
+			hashInfo.normal[2] = (signed char)(meshopt_quantizeSnorm(vertex.normal[2], 8));
+		}
+
 
 		const uint64 hashId = cityhash::cityhash64((const char*)&hashInfo, sizeof(HashVertexInfo));
 		if (!verticesMap.contains(hashId))
@@ -982,6 +986,7 @@ NaniteBuilder::NaniteBuilder(
 	std::vector<uint32>&& inputIndices,
 	std::vector<Vertex>&& inputVertices,
 	bool bFuse,
+	bool bFuseIgnoreNormal,
 	float coneWeight)
 	: m_indices(inputIndices)
 	, m_vertices(inputVertices)
@@ -989,7 +994,7 @@ NaniteBuilder::NaniteBuilder(
 {
 	if (bFuse)
 	{
-		fuseVertices(m_indices, m_vertices);
+		fuseVertices(m_indices, m_vertices, bFuseIgnoreNormal);
 	}
 
 	size_t indexCount = m_indices.size();

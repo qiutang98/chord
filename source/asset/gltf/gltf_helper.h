@@ -10,6 +10,7 @@ namespace chord
 	{
 		bool bGenerateSmoothNormal = false;
 		bool bFuse = true;
+		bool bFuseIgnoreNormal = false;
 		float meshletConeWeight = 0.7f;
 	};
 	using GLTFAssetImportConfigRef = std::shared_ptr<GLTFAssetImportConfig>;

@@ -100,6 +100,11 @@ namespace chord
 		ImGui::Checkbox("##SmoothNormal", &config->bGenerateSmoothNormal); ImGui::SameLine(); ImGui::Text("Generate Smooth Normal");
 		ImGui::Checkbox("##Fuse", &config->bFuse); ImGui::SameLine(); ImGui::Text("Fuse Close Vertices");
 
+		if (config->bFuse)
+		{
+			ImGui::Checkbox("##FuseIgnoreVertexNormal", &config->bFuseIgnoreNormal); ImGui::SameLine(); ImGui::Text("Fuse Without Normal Consider");
+		}
+
 		ImGui::Separator();
 		ImGui::DragFloat("Meshlet ConeWeight", &config->meshletConeWeight, 0.1f, 0.0f, 1.0f);
 	}
@@ -1206,7 +1211,12 @@ namespace chord
 					primitiveMesh.posMax = meshPosMax;
 					primitiveMesh.posAverage = meshPosAvg;
 
-					nanite::NaniteBuilder builder(std::move(rawIndices), std::move(rawVertices), config->bFuse, config->meshletConeWeight);
+					nanite::NaniteBuilder builder(
+						std::move(rawIndices), 
+						std::move(rawVertices), 
+						config->bFuse, 
+						config->bFuseIgnoreNormal, 
+						config->meshletConeWeight);
 					{
 						auto meshletCtx = builder.build();
 

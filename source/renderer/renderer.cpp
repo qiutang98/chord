@@ -267,13 +267,22 @@ namespace chord
 			hzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, true);
 			insertTimer("BuildHZB", graphics);
 
+			VisibilityTileMarkerContext visibilityCtx;
 			if (shouldRenderGLTF(gltfRenderCtx))
 			{
-				auto visibilityCtx = visibilityMark(graphics, viewGPUId, gltfRenderCtx.postBasicCullingCtx.meshletCmdBuffer, gbuffers.visibility);
+				visibilityCtx = visibilityMark(graphics, viewGPUId, gltfRenderCtx.postBasicCullingCtx.meshletCmdBuffer, gbuffers.visibility);
 				insertTimer("Visibility Tile Marker", graphics);
 
 				lighting(graphics, gbuffers, viewGPUId, gltfRenderCtx.postBasicCullingCtx.meshletCmdBuffer, visibilityCtx);
 				insertTimer("lighting Tile", graphics);
+			}
+
+
+			// Visualize for nanite.
+			if (shouldRenderGLTF(gltfRenderCtx))
+			{
+				visualizeNanite(graphics, gbuffers, viewGPUId, gltfRenderCtx.postBasicCullingCtx.meshletCmdBuffer, visibilityCtx);
+				insertTimer("Nanite visualize", graphics);
 			}
 
 			check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
