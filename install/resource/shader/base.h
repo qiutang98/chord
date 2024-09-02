@@ -218,10 +218,10 @@ enum class EShadingType
 
 #define kWaveSize 32
 
-// Nanite config: fit mesh shader.
-#define kNaniteMeshletMaxVertices 64
-#define kNaniteMeshletMaxTriangle 126
-#define kNaniteMaxLODCount        8
+// Nanite config: fit mesh shader. Best performance: 126 triangles and 64 vertices.
+#define kNaniteMeshletMaxVertices 255
+#define kNaniteMeshletMaxTriangle 128
+#define kNaniteMaxLODCount        12
 #define kNaniteMaxBVHLevelCount   14
 #define kNaniteBVHLevelNodeCount  8
 

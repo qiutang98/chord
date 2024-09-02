@@ -351,52 +351,47 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
             minUVz.xy = saturate(minUVz.xy);
             maxUVz.xy = saturate(maxUVz.xy);
 
-            // UV convert to hzb space.
-            // NOTE: It cause float error here, so we must do 4x4 sample hzb later. :(
-            maxUVz.x *= pushConsts.uv2HzbX;
-            maxUVz.y *= pushConsts.uv2HzbY;
-            minUVz.x *= pushConsts.uv2HzbX;
-            minUVz.y *= pushConsts.uv2HzbY;
+            const float4 uvRect = float4(minUVz.xy, maxUVz.xy);
+            int4 pixelRect      = int4(uvRect * perView.renderDimension.xyxy + float4(0.5, 0.5, -0.5, -0.5)); // offset half pixel make box tight.
 
-            const float2 bounds = (maxUVz.xy - minUVz.xy) * float2(pushConsts.hzbMip0Width, pushConsts.hzbMip0Height);
-            if (any(bounds <= 0))
+            // Range clamp.
+            pixelRect.xy = max(0, pixelRect.xy);
+            pixelRect.zw = min(perView.renderDimension.xy - 1, pixelRect.zw);
+
+            // 
+            if (any(pixelRect.zw < pixelRect.xy))
             {
                 // Zero area just culled.
                 bVisible = false;
-            }
+            } 
             else
             {
-                // Use max bounds dim as sample mip level.
-                const uint mipLevel = uint(min(ceil(log2(max(1.0, max2(bounds)))), pushConsts.hzbMipCount - 1));
-                const uint2 mipSize = uint2(pushConsts.hzbMip0Width, pushConsts.hzbMip0Height) / uint(exp2(mipLevel));
+                // Cast to mip0.
+                const int4 hzbMip0Coord = pixelRect >> 1;
 
-                // Load hzb texture.
+                // Get mip level. 
+                const int2 mipLevels = firstbithigh(hzbMip0Coord.zw - hzbMip0Coord.xy);
+                
+                // 4x4 sample bias one level.
+                const int mipOffset = 1;
+                int mipLevel = max(0, max(mipLevels.x, mipLevels.y) - mipOffset);
+                mipLevel += any((hzbMip0Coord.zw >> mipLevel) - (hzbMip0Coord.xy >> mipLevel) >= 4) ? 1 : 0;
+
+                // Get select hzb level coord.
+                const int4 hzbMipCoord = hzbMip0Coord >> mipLevel;
+
+                // Load min z.
                 Texture2D<float> hzbTexture = TBindless(Texture2D, float, pushConsts.hzb);
-
-                const int2 minPos = uint2(minUVz.xy * mipSize);
-                const int2 maxPos = uint2(maxUVz.xy * mipSize);
-
-                    float zMin = hzbTexture.Load(int3(minPos.x, maxPos.y, mipLevel));
-                zMin = min(zMin, hzbTexture.Load(int3(maxPos.x, minPos.y, mipLevel)));
-                zMin = min(zMin, hzbTexture.Load(int3(maxPos, mipLevel)));
-                zMin = min(zMin, hzbTexture.Load(int3(minPos, mipLevel)));
-
-                #if 1 // Avoid float uv precision cause sample error.
+                float zMin = 10.0f;
+                [unroll(4)]
+                for (int x = 0; x < 4; x ++)
                 {
-                    zMin = min(zMin, hzbTexture.Load(int3(minPos + int2(-1, -1), mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(minPos + int2(-1,  0), mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(minPos + int2( 0, -1), mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(maxPos + int2( 1,  1), mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(maxPos + int2( 1,  0), mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(maxPos + int2( 0,  1), mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(maxPos.x + 1, minPos.y + 0, mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(maxPos.x + 0, minPos.y - 1, mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(maxPos.x + 1, minPos.y - 1, mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(minPos.x - 1, maxPos.y + 1, mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(minPos.x - 1, maxPos.y + 0, mipLevel)));
-                    zMin = min(zMin, hzbTexture.Load(int3(minPos.x + 0, maxPos.y + 1, mipLevel)));
+                    [unroll(4)]
+                    for(int y = 0; y < 4; y ++)
+                    {
+                        zMin = min(zMin, hzbTexture.Load(int3(min(hzbMipCoord.zw, int2(x, y) + hzbMipCoord.xy), mipLevel)));
+                    }
                 }
-                #endif
 
                 if (zMin > maxUVz.z)
                 {

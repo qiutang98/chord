@@ -95,10 +95,10 @@ namespace chord
 		float m_fovy = math::radians(45.0f);
 
 		// z near.
-		double m_zNear = 0.01; // 1 CM.
+		double m_zNear = 0.001; //
 
-		// z far, use for frustum culling, when rendering, we use infinite z.
-		double m_zFar = 39000.0; // 39 KM.
+		// z far.
+		double m_zFar = 20000.0; // 
 
 		// render width.
 		size_t m_width = 1;

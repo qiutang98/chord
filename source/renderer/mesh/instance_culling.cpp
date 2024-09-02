@@ -43,6 +43,7 @@ static AutoCVarRef cVarInstanceCullingShaderDebugMode(
     "**** Instance culling shader debug mode ****"
     "  0. default state, do nothing."
     "  1. draw visible meshlet bounds box."
+    "  2. draw stage#1 visible meshlet bounds box."
 );
 
 bool chord::enableGLTFHZBCulling()
@@ -59,9 +60,11 @@ static inline uint32 getInstanceCullingSwitchFlags()
     return result;
 }
 
-static inline bool shouldPrintDebugBox()
+static inline bool shouldPrintDebugBox(bool bFirstStage)
 {
-    return sInstanceCullingShaderDebugMode == 1;
+    if (sInstanceCullingShaderDebugMode == 1) { return true; }
+    if (sInstanceCullingShaderDebugMode == 2) { return !bFirstStage; }
+    return false;
 }
 
 PRIVATE_GLOBAL_SHADER(InstanceCullingCS,       "resource/shader/instance_culling.hlsl", "instanceCullingCS",       EShaderStage::Compute);
@@ -237,7 +240,7 @@ chord::CountAndCmdBuffer chord::detail::hzbCulling(
 
     HZBCullCS::Permutation permutation;
     permutation.set<HZBCullCS::SV_bFirstStage>(bFirstStage);
-    permutation.set<HZBCullCS::SV_bPrintDebugBox>(shouldPrintDebugBox());
+    permutation.set<HZBCullCS::SV_bPrintDebugBox>(shouldPrintDebugBox(bFirstStage));
 
     auto computeShader = getContext().getShaderLibrary().getShader<HZBCullCS>(permutation);
     addIndirectComputePass2(queue,

@@ -28,11 +28,13 @@ struct PrimitiveAttributes
     bool bCulled   : SV_CullPrimitive;
 };
 
-groupshared float sharedVerticesHS_R[64];
-groupshared float sharedVerticesHS_G[64];
-groupshared float sharedVerticesHS_B[64];
+groupshared float sharedVerticesHS_R[kNaniteMeshletMaxVertices];
+groupshared float sharedVerticesHS_G[kNaniteMeshletMaxVertices];
+groupshared float sharedVerticesHS_B[kNaniteMeshletMaxVertices];
 
-[numthreads(64, 1, 1)]
+#define kMeshShaderTGSize 128
+
+[numthreads(kMeshShaderTGSize, 1, 1)]
 [outputtopology("triangle")]
 void visibilityPassMS(
     uint dispatchThreadId : SV_DispatchThreadID,
@@ -61,23 +63,22 @@ void visibilityPassMS(
     const uint trianglesCount = unpackTriangleCount(meshlet.vertexTriangleCount);
 
     SetMeshOutputCounts(verticesCount, trianglesCount);
-    for (uint i = groupThreadId; i < verticesCount; i += 64)
+    for (uint i = groupThreadId; i < verticesCount; i += kMeshShaderTGSize)
     {
         // Noew get vertices id. 
         const uint verticesSampleOffset = meshlet.dataOffset + i;
         const uint verticesIndex = meshletDataBuffer.TypeLoad(uint, verticesSampleOffset);
         const uint indicesId = primitiveInfo.vertexOffset + verticesIndex;
 
-        float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
-        float4x4 translatedWorldToClip = perView.translatedWorldToClip;
+        const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
+        const float4x4 mvp = mul(perView.translatedWorldToClip, localToTranslatedWorld);
 
         const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
-        const float4 positionRS = mul(localToTranslatedWorld, float4(positionLS, 1.0));
 
         VisibilityPassMS2PS output;
 
         // Get HS position.
-        const float4 positionHS = mul(translatedWorldToClip, positionRS);
+        const float4 positionHS = mul(mvp, float4(positionLS, 1.0));
         output.positionHS = positionHS;
 
         // Store in shared memory for triangle culling.
@@ -98,7 +99,7 @@ void visibilityPassMS(
 
     GroupMemoryBarrierWithGroupSync();
 
-    for (uint i = groupThreadId; i < trianglesCount; i += 64)
+    for (uint i = groupThreadId; i < trianglesCount; i += kMeshShaderTGSize)
     {
         uint triangleIndicesSampleOffset = meshlet.dataOffset + verticesCount + i;
         uint indexTri = meshletDataBuffer.TypeLoad(uint, triangleIndicesSampleOffset);

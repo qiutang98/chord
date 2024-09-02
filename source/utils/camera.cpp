@@ -40,10 +40,10 @@ namespace chord
         const float aspect = getAspect();
 
         const math::vec3 nearC = camWorldPos + forwardVector * float(m_zNear);
-        const math::vec3 farC = camWorldPos + forwardVector * float(m_zFar);
+        const math::vec3 farC  = camWorldPos + forwardVector * float(m_zFar);
 
 		const float yNearHalf = m_zNear * tanFovyHalf;
-		const float yFarHalf = m_zFar * tanFovyHalf;
+		const float yFarHalf  = m_zFar * tanFovyHalf;
 
 		const math::vec3 yNearHalfV = yNearHalf * upVector;
 		const math::vec3 xNearHalfV = yNearHalf * aspect * rightVector;

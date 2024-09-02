@@ -9,9 +9,7 @@ namespace chord
 	struct GLTFAssetImportConfig : public IAssetImportConfig
 	{
 		bool bGenerateSmoothNormal = false;
-		bool bFuse = false;
-		float fuseRelativeDistance = 1e-7f;
-
+		bool bFuse = true;
 		float meshletConeWeight = 0.7f;
 	};
 	using GLTFAssetImportConfigRef = std::shared_ptr<GLTFAssetImportConfig>;

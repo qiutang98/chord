@@ -98,11 +98,7 @@ namespace chord
 	void uiDrawImportConfig(GLTFAssetImportConfigRef config)
 	{
 		ImGui::Checkbox("##SmoothNormal", &config->bGenerateSmoothNormal); ImGui::SameLine(); ImGui::Text("Generate Smooth Normal");
-		ImGui::Checkbox("##Fuse", &config->bFuse); ImGui::SameLine(); ImGui::Text("Fuse Close Vertices When Found Loose Geometry");
-		if (config->bFuse)
-		{
-			ImGui::DragFloat("Fuse Relative Distance", &config->fuseRelativeDistance, 1e-5f, 1e-5f, 1e-3f);
-		}
+		ImGui::Checkbox("##Fuse", &config->bFuse); ImGui::SameLine(); ImGui::Text("Fuse Close Vertices");
 
 		ImGui::Separator();
 		ImGui::DragFloat("Meshlet ConeWeight", &config->meshletConeWeight, 0.1f, 0.0f, 1.0f);
@@ -1210,7 +1206,7 @@ namespace chord
 					primitiveMesh.posMax = meshPosMax;
 					primitiveMesh.posAverage = meshPosAvg;
 
-					nanite::NaniteBuilder builder(std::move(rawIndices), std::move(rawVertices), config->bFuse ? config->fuseRelativeDistance : -1.0f, config->meshletConeWeight);
+					nanite::NaniteBuilder builder(std::move(rawIndices), std::move(rawVertices), config->bFuse, config->meshletConeWeight);
 					{
 						auto meshletCtx = builder.build();
 

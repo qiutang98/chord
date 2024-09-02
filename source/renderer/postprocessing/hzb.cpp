@@ -109,7 +109,7 @@ namespace chord
                 });
 
             const uvec2 mip0Dimension = { targetWidth, targetHeight };
-            const uvec2 mip0ValidArea = { (depthWdith + 1) / 2, (depthHeight + 1) / 2 };
+            const uvec2 mip0ValidArea = { depthWdith / 2, depthHeight / 2 };
             const vec2 validUv = math::clamp(vec2(mip0ValidArea) / vec2(mip0Dimension), 0.0f, 1.0f);
 
             HZBContext result(
@@ -162,12 +162,12 @@ namespace chord
 
                     PushSetBuilder(queue, cmd)
                         .addUAV(bBuildMin ? hzbMinTexture : hzbMaxTexture, range) // mip5Dest
-                        .addUAV(countBuffer)          // counterBuffer
+                        .addUAV(countBuffer)  // counterBuffer
                         .push(pipe, 1); // Push set 1.
                 });
 
             const uvec2 mip0Dimension = { targetWidth, targetHeight };
-            const uvec2 mip0ValidArea = { (depthWdith + 1) / 2, (depthHeight + 1) / 2 };
+            const uvec2 mip0ValidArea = { depthWdith / 2, depthHeight / 2 };
             const vec2 validUv = math::clamp(vec2(mip0ValidArea) / vec2(mip0Dimension), 0.0f, 1.0f);
 
             HZBContext result(

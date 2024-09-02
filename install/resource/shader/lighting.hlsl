@@ -151,18 +151,8 @@ float3 gltfMetallicRoughnessPBR(
     {
         normalRS = vertNormalRS;
     }
-
-#if 0
-
-    if(meshlet.lod == 0) { return float3(1.0, 0.0, 0.0); } 
-    if(meshlet.lod == 1) { return float3(1.0, 0.0, 1.0); }
-    if(meshlet.lod == 2) { return float3(0.0, 0.0, 1.0); }
-    if(meshlet.lod == 3) { return float3(0.0, 1.0, 1.0); }
-    if(meshlet.lod == 4) { return float3(1.0, 1.0, 0.0); }
-    if(meshlet.lod == 5) { return float3(0.0, 1.0, 0.0); }
-#endif
     
-    return dot(normalRS, normalize(float3(0.4, 1.0, 0.0)));// baseColor.xyz;
+    return baseColor.xyz * dot(normalRS, normalize(float3(0.4, 1.0, 0.0)));// ;
 }
 
 void storeColor(uint2 pos, float3 c)
@@ -190,6 +180,8 @@ void mainCS(
 
     // Exist normal texture or not.
     bool bExistNormalTexture;
+    
+    uint meshletId = 0;
 
     const uint  sampleGroup = workGroupId * 4 + localThreadIndex / 16;
     const uint2 tileOffset  = BATL(uint2, pushConsts.tileBufferCmdId, sampleGroup);
@@ -205,6 +197,7 @@ void mainCS(
         }
 
 
+
         [branch]
         if (packID != 0 && cachePackId != packID)
         {
@@ -216,7 +209,7 @@ void mainCS(
             check(drawCmd.z == instanceId);
 
             const uint objectId  = drawCmd.x;
-            const uint meshletId = drawCmd.y;
+            meshletId = drawCmd.y;
 
             objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
             materialInfo  = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
@@ -240,7 +233,8 @@ void mainCS(
         if (packID != 0 && materialInfo.materialType == kLightingType_GLTF_MetallicRoughnessPBR)
         {
             float3 c = gltfMetallicRoughnessPBR(perView, scene, objectInfo, materialInfo, triangleInfo, bExistNormalTexture, dispatchPos);
-            storeColor(dispatchPos, (c + 0.5) );
+            // storeColor(dispatchPos, c);
+            storeColor(dispatchPos, (c + 0.5) * simpleHashColor(meshletId));
         }
     #endif 
     }

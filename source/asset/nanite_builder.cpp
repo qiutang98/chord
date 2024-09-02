@@ -20,7 +20,8 @@ constexpr float  kGroupSimplifyThreshold = 1.0f / float(kNumGroupSplitAfterSimpl
 constexpr auto kGroupSimplifyMinReduce = 0.8f; 
 
 // Simplify error relative to extent.
-constexpr auto kSimplifyError = 0.01f;
+constexpr auto kSimplifyErrorMin = 0.01f;
+constexpr auto kSimplifyErrorMax = 0.10f;
 
 // Group merge position error, relative to simplify error. 
 constexpr auto kGroupMergePosError = 0.1f;    
@@ -571,8 +572,12 @@ static inline std::vector<ConbimeMeshlets> buildOneClusterGroup(const MeshletCon
 
 uint32 hashPosition(float3 pos, float posFuseThreshold)
 {
+#if 0
+	return crc::crc32((void*)&pos, sizeof(pos), 0);
+#else
 	int3 posInt3 = math::ceil(pos / posFuseThreshold);
 	return crc::crc32((void*)&posInt3, sizeof(posInt3), 0);
+#endif
 }
 
 static bool buildClusterGroup(const MeshletContainer& ctx, std::vector<ConbimeMeshlets>& outGroup, const std::vector<Vertex>& vertices, float posFuseThreshold)
@@ -866,6 +871,10 @@ void NaniteBuilder::MeshletsGMSS(
 				outCtx.merge(std::move(nextMeshletCtx));
 			}
 		}
+		else
+		{
+			// Current meshlet group can't simplify anymore.
+		}
 	}
 }
 
@@ -887,7 +896,11 @@ MeshletContainer NaniteBuilder::build() const
 		// Clear next lod ctx.
 		nextLodCtx = {};
 
-		MeshletsGMSS(currentLodCtx, nextLodCtx, kSimplifyError * meshOptSimplifyScale, lod + 1);
+		const uint32 targetLod = lod + 1;
+		const float tagetLodError = float(lod) / float(kNaniteMaxLODCount);
+
+		const float lodErrorAbsolute = math::lerp(kSimplifyErrorMin, kSimplifyErrorMax, tagetLodError) * meshOptSimplifyScale;
+		MeshletsGMSS(currentLodCtx, nextLodCtx, lodErrorAbsolute, targetLod);
 
 		// Current lod ctx already update parent data, so merge to final.
 		finalCtx.merge(std::move(currentLodCtx));
@@ -906,35 +919,72 @@ MeshletContainer NaniteBuilder::build() const
 	return finalCtx;
 }
 
-struct FuseVertex
+void fuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices)
 {
-	int3 hashPos;
-	int2 hashUv;
-	Vertex cacheVertex;
-};
+	std::vector<Vertex> remapVertices;
+	remapVertices.reserve(vertices.size());
 
-void fuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices, float fuseDistance)
-{
-	// Do nothing when fuse distance is negative. 
-	if (fuseDistance < 0.0f) { return; }
+	std::vector<uint32> remapIndices;
+	remapIndices.reserve(indices.size());
+
+	std::map<uint64, size_t> verticesMap;
+
+	// 
+	struct HashVertexInfo
+	{
+		float3 position;
+		float2 uv0;
+		float2 uv1;
+		float4 color0;
+		float tangentW;
+	};
+
+	uint fuseCount = 0;
 
 	//
+	for (uint32 index : indices)
+	{
+		const Vertex& vertex = vertices[index];
 
+		HashVertexInfo hashInfo{};
+		hashInfo.position = vertex.position;
+		hashInfo.uv0 = vertex.uv0;
+		hashInfo.uv1 = vertex.uv1;
+		hashInfo.color0 = vertex.color0;
+		hashInfo.tangentW = vertex.tangent.w;
+
+		const uint64 hashId = cityhash::cityhash64((const char*)&hashInfo, sizeof(HashVertexInfo));
+		if (!verticesMap.contains(hashId))
+		{
+			verticesMap[hashId] = remapVertices.size();
+			remapVertices.push_back(vertex);
+		}
+		else
+		{
+			fuseCount ++;
+		}
+
+		remapIndices.push_back(verticesMap[hashId]);
+	}
+
+	LOG_TRACE("Fuse vertices to {1}%.", fuseCount, 100.0f * float(remapVertices.size()) / float(vertices.size()))
+
+	indices  = std::move(remapIndices);
+	vertices = std::move(remapVertices);
 }
 
 NaniteBuilder::NaniteBuilder(
 	std::vector<uint32>&& inputIndices,
 	std::vector<Vertex>&& inputVertices,
-	float fuseDistance,
+	bool bFuse,
 	float coneWeight)
 	: m_indices(inputIndices)
 	, m_vertices(inputVertices)
 	, m_coneWeight(coneWeight)
 {
-	const bool bInputIsLooseGeometry = isLooseGeometry(m_indices, m_vertices);
-	if (bInputIsLooseGeometry)
+	if (bFuse)
 	{
-		LOG_TRACE("Nanite builder find loose geometry input, you must fused vertex before import.");
+		fuseVertices(m_indices, m_vertices);
 	}
 
 	size_t indexCount = m_indices.size();

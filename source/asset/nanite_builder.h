@@ -7,6 +7,7 @@
 
 namespace chord::nanite
 {
+	// Struct member's layout can't change.
 	struct Vertex
 	{
 		float3 position;
@@ -70,7 +71,7 @@ namespace chord::nanite
 		explicit NaniteBuilder(
 			std::vector<uint32>&& indices,
 			std::vector<Vertex>&& vertices,
-			float fuseDistance,
+			bool bFuse,
 			float coneWeight);
 
 		MeshletContainer build() const;
