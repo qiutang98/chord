@@ -936,6 +936,7 @@ void fuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices)
 		float2 uv0;
 		float2 uv1;
 		float4 color0;
+		signed char normal[3];
 		float tangentW;
 	};
 
@@ -952,6 +953,10 @@ void fuseVertices(std::vector<uint32>& indices, std::vector<Vertex>& vertices)
 		hashInfo.uv1 = vertex.uv1;
 		hashInfo.color0 = vertex.color0;
 		hashInfo.tangentW = vertex.tangent.w;
+
+		hashInfo.normal[0] = (signed char)(meshopt_quantizeSnorm(vertex.normal[0], 8));
+		hashInfo.normal[1] = (signed char)(meshopt_quantizeSnorm(vertex.normal[1], 8));
+		hashInfo.normal[2] = (signed char)(meshopt_quantizeSnorm(vertex.normal[2], 8));
 
 		const uint64 hashId = cityhash::cityhash64((const char*)&hashInfo, sizeof(HashVertexInfo));
 		if (!verticesMap.contains(hashId))
