@@ -326,12 +326,11 @@ void WidgetOutliner::popupMenu()
 	if (bSelectedLessEqualOne)
 	{
 		const auto* camera = Flower::get().getActiveViewportCamera();
-		const dvec3 relativeCameraPos = dvec3(0);
+		dvec3 relativeCameraPos = dvec3(0);
 		if (camera)
 		{
-			camera->getPosition() + camera->getFront();
+			relativeCameraPos = camera->getPosition() + camera->getFront() * 5.0;
 		}
-
 
 		static const std::string kEmptyNodeStr = combineIcon("Empty Scene Node", ICON_FA_FAN);
 
@@ -342,6 +341,16 @@ void WidgetOutliner::popupMenu()
 
 			ImGui::EndPopup();
 			return;
+		}
+
+		static const std::string kSkyName = combineIcon("Sky", ICON_FA_SUN);
+		if (ImGui::MenuItem(kSkyName.c_str()))
+		{
+			auto newNode = activeScene->createNode(m_sceneManagerUI->addUniqueIdForName(u16str("Sky")), selectedOneNode);
+
+			newNode->getScene()->addComponent<SkyComponent>(std::make_shared<SkyComponent>(), newNode);
+			newNode->getTransform()->setTranslation(relativeCameraPos);
+			newNode->getTransform()->setRotation(vec3(-0.7854f, 0.0f, 0.0f));
 		}
 	}
 
@@ -418,8 +427,8 @@ void WidgetOutliner::acceptDragdrop(bool bRoot)
 					{
 						if (auto gltfRef = assetManager.getOrLoadAsset<GLTFAsset>(asset, true))
 						{
-							const auto& gltfScene = gltfRef->getScene();
-							const auto& gltfNodes = gltfRef->getNodes();
+							const auto& gltfScene  = gltfRef->getScene();
+							const auto& gltfNodes  = gltfRef->getNodes();
 							const auto& gltfMeshes = gltfRef->getMeshes();
 
 

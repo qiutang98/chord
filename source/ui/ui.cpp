@@ -352,6 +352,9 @@ namespace chord
 					helper::dynamicStateGeneralSet(imguiCmdBuffer);
 
 					imguiRenderDrawData(backBufferIndex, imguiCmdBuffer, (void*)viewport->DrawData, graphicsPipeline);
+
+					// Full screen blit render texture to back buffer.
+
 				}
 				vkCmdEndRendering(imguiCmdBuffer);
 

@@ -216,7 +216,7 @@ namespace chord::graphics
 	};
 	// Define TEST_SHADER_VARIANT 0/1
 	// Class SV_TestVariant : SHADER_VARIANT_BOOL("TEST_SHADER_VARIANT");
-	#define SHADER_VARIANT_BOOL(x) public ShaderVariantBool { public: static constexpr const char* kName = x; }
+	#define SHADER_VARIANT_BOOL(x) public chord::graphics::ShaderVariantBool { public: static constexpr const char* kName = x; }
 
 	// Continuous int range variant.
 	template<typename T, int32 kDimSize, int32 kFirstValue = 0>
@@ -248,16 +248,16 @@ namespace chord::graphics
 	// Define TEST_SHADER_VARIANT [0, N)
 	// Class SV_TestVariant : SHADER_VARIANT_INT("TEST_SHADER_VARIANT", N);
 	#define SHADER_VARIANT_INT(x, count) \
-	public ShaderVariantInt<int32, count> { public: static constexpr const char* kName = x; }
+	public chord::graphics::ShaderVariantInt<int32, count> { public: static constexpr const char* kName = x; }
 
 	// Define TEST_SHADER_VARIANT [X, N + X)
 	// Class SV_TestVariant : SHADER_VARIANT_RANGE_INT("TEST_SHADER_VARIANT", X, N);
 	#define SHADER_VARIANT_RANGE_INT(x, start, count) \
-	public ShaderVariantInt<int32, count, start> { public: static constexpr const char* kName = x; }
+	public chord::graphics::ShaderVariantInt<int32, count, start> { public: static constexpr const char* kName = x; }
 
 	// Ensure enum end with MAX, it will define [0, MAX)
 	#define SHADER_VARIANT_ENUM(x, T) \
-	public ShaderVariantInt<T, static_cast<int32>(T::MAX)> { public: static constexpr const char* kName = x; }
+	public chord::graphics::ShaderVariantInt<T, static_cast<int32>(T::MAX)> { public: static constexpr const char* kName = x; }
 
 	template<int32... Ts>
 	class ShaderVariantSparseInt
@@ -314,7 +314,7 @@ namespace chord::graphics
 	};
 
 	#define SHADER_VARIANT_SPARSE_INT(x, ...) \
-	public ShaderVariantSparseInt<__VA_ARGS__> { public: static constexpr const char* kName = x; }
+	public chord::graphics::ShaderVariantSparseInt<__VA_ARGS__> { public: static constexpr const char* kName = x; }
 
 	// Shader variant vector merge all type of variant.
 	template<typename... Ts>

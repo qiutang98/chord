@@ -9,6 +9,24 @@
 #include <asset/gltf/gltf.h>
 #include <scene/component/gltf_mesh.h>
 #include <scene/component/gltf_material.h>
+#include <scene/component/sky.h>
+#include <shader/base.h>
+#include <astrophysics/atmosphere.h>
+
+registerPODClassMember(AtmosphereConfig)
+{
+	ar(bUseConstantSolarSpectrum);
+	ar(bUseHalfPrecision);
+	ar(bUseCombinedTexture);
+	ar(bUseOzone);
+	ar(iterationTimes);
+	ARCHIVE_ENUM_CLASS(luminance);
+}
+
+registerPODClassMember(AtmosphereManager)
+{
+	ar(m_config);
+}
 
 registerPODClassMember(GLTFSampler)
 {
@@ -152,6 +170,11 @@ registerClassMemberInherit(GLTFMaterialComponent, Component)
 	ar(m_gltfAssetInfos);
 }}
 
+registerClassMemberInherit(SkyComponent, Component)
+{
+
+}}
+
 registerClassMember(SceneNode)
 {
 	ar(m_bVisibility);
@@ -170,6 +193,7 @@ registerClassMemberInherit(Scene, IAsset)
 	ar(m_root);
 	ar(m_components);
 	ar(m_sceneNodes);
+	ar(m_atmosphereManager);
 }}
 
 namespace chord

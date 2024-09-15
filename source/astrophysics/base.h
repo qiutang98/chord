@@ -2,7 +2,7 @@
 
 #include <utils/utils.h>
 
-namespace chord
+namespace chord::astrophysics
 {
 
 }

@@ -21,7 +21,7 @@ CHORD_PUSHCONST(NaniteDebugPushConsts, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
 
-#include "nanite_shared.hlsl"
+#include "nanite_shared.hlsli"
 #include "fullscreen.hlsl"
 
 static const float3 kLODDebugColor[kNaniteMaxLODCount] = 

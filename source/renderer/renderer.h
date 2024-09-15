@@ -8,10 +8,29 @@
 #include <utils/camera.h>
 #include <graphics/bufferpool.h>
 #include <renderer/postprocessing/postprocessing.h>
+#include <astrophysics/atmosphere.h>
 
 namespace chord
 {
-	extern GPUBasicData getGPUBasicData();
+	extern GPUBasicData getGPUBasicData(const AtmosphereParameters& atmosphere);
+
+	template<typename T>
+	static inline uint32 uploadBufferToGPU(graphics::CommandList& cmd, const std::string& name, const T* data, uint32 count = 1)
+	{
+		using namespace graphics;
+
+		VkBufferUsageFlags usageFlag = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
+		auto newGPUBuffer = getContext().getBufferPool().createHostVisible(
+			name,
+			usageFlag,
+			SizedBuffer(sizeof(T) * count, (void*)data));
+
+		// Insert perframe lazy destroy.
+		cmd.insertPendingResource(newGPUBuffer);
+		const auto& viewC = newGPUBuffer->get().requireView(true, false);
+		return viewC.storage.get();
+	}
 
 	class DeferredRenderer : NonCopyable
 	{
@@ -35,11 +54,11 @@ namespace chord
 		public:
 			DimensionConfig();
 
-			uint32 getRenderWidth() const { return m_renderDim.x; }
+			uint32 getRenderWidth()  const { return m_renderDim.x; }
 			uint32 getRenderHeight() const { return m_renderDim.y; }
 
-			uint32 getPostWidth()  const { return m_postDim.x; }
-			uint32 getPostHeight() const { return m_postDim.y; }
+			uint32 getPostWidth()    const { return m_postDim.x; }
+			uint32 getPostHeight()   const { return m_postDim.y; }
 
 			uint32 getOutputWidth()  const { return m_outputDim.x; }
 			uint32 getOutputHeight() const { return m_outputDim.y; }

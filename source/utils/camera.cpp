@@ -1,7 +1,19 @@
 #include <utils/camera.h>
+#include <astrophysics/atmosphere.h>
 
 namespace chord
 {
+	static inline GPUStorageDouble4 fillDouble3(const double3& v)
+	{
+		GPUStorageDouble4 r { };
+
+		asuint(v.x, r.x.x, r.x.y);
+		asuint(v.y, r.y.x, r.y.y);
+		asuint(v.z, r.z.x, r.z.y);
+
+		return r;
+	}
+
     void ICamera::fillViewUniformParameter(PerframeCameraView& outUB) const
     {
         const math::mat4& realtiveView = getRelativeCameraViewMatrix();
@@ -26,7 +38,16 @@ namespace chord
 		outUB.frustumPlane[4] = frustum.planes[4];
 		outUB.frustumPlane[5] = frustum.planes[5];
 
-		outUB.camMiscInfo.x = m_fovy;
+		double3 cameraRelativeEarthKm;
+		double3 cameraToEarthCenterKm = getCameraToEarthCenterKm(m_position, cameraRelativeEarthKm);
+
+		outUB.cameraRelativeEarthKm = fillDouble3(cameraRelativeEarthKm);
+		outUB.cameraToEarthCenterKm = fillDouble3(cameraToEarthCenterKm);
+		
+		//
+		outUB.cameraFovy = m_fovy;
+
+		outUB.cameraWorldPos = fillDouble3(m_position);
     }
 
 	Frustum ICamera::computeRelativeWorldFrustum() const

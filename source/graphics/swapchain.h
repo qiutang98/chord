@@ -8,10 +8,10 @@ namespace chord::graphics
 	{
 	public:
 		// Mainstream monitor support formats.
-		static constexpr VkSurfaceFormatKHR k10BitSRGB = { .format = VK_FORMAT_A2B10G10R10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
-		static constexpr VkSurfaceFormatKHR k8BitSRGB = { .format = VK_FORMAT_B8G8R8A8_SRGB, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
-		static constexpr VkSurfaceFormatKHR kScRGB = { .format = VK_FORMAT_R16G16B16A16_SFLOAT, .colorSpace = VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT };
-		static constexpr VkSurfaceFormatKHR kHDR10ST2084 = { .format = VK_FORMAT_A2B10G10R10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT };
+		static constexpr VkSurfaceFormatKHR k10BitSRGB   = { .format = VK_FORMAT_A2B10G10R10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR       };
+		static constexpr VkSurfaceFormatKHR k8BitSRGB    = { .format = VK_FORMAT_B8G8R8A8_SRGB,            .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR       };
+		static constexpr VkSurfaceFormatKHR kScRGB       = { .format = VK_FORMAT_R16G16B16A16_SFLOAT,      .colorSpace = VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT };
+		static constexpr VkSurfaceFormatKHR kHDR10ST2084 = { .format = VK_FORMAT_A2B10G10R10_UNORM_PACK32, .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT         };
 
 		// Format enum map.
 		enum class EFormatType

@@ -65,7 +65,6 @@ namespace chord::ui
 			ImGui::TableNextColumn();
 			// X
 			{
-				
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.6f, 0.2f, 0.1f, 0.15f });
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.6f, 0.2f, 0.1f, 1.0f });
 				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.9f, 0.9f, 0.9f, 1.0f });

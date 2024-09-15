@@ -679,6 +679,7 @@ namespace chord::graphics
 					FORCE_ENABLE(core10Features.fillModeNonSolid);
 					FORCE_ENABLE(core10Features.depthBiasClamp);
 					FORCE_ENABLE(core10Features.geometryShader);
+					FORCE_ENABLE(core10Features.shaderFloat64);
 
 					// Vulkan 1.1 core.
 					FORCE_ENABLE(core11Features.shaderDrawParameters);

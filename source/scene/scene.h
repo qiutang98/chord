@@ -4,6 +4,9 @@
 #include <scene/scene_node.h>
 #include <shader/base.h>
 
+#include <astrophysics/atmosphere.h>
+#include <scene/system/shadow.h>
+
 namespace chord
 {
 
@@ -14,6 +17,7 @@ namespace chord
 
 		friend class AssetManager;
 		friend SceneNode;
+
 	public:
 		Scene() = default;
 
@@ -23,6 +27,7 @@ namespace chord
 		static const AssetTypeMeta kAssetTypeMeta;
 
 		void postLoad();
+
 	protected:
 		// ~IAsset virtual function.
 		// Call back when call AssetManager::createAsset
@@ -137,6 +142,23 @@ namespace chord
 			return hasComponent(typeid(T).name());
 		}
 
+		template <typename T>
+		inline const std::shared_ptr<T> getFirstComponent() const
+		{
+			if (hasComponent<T>())
+			{
+				for (const auto& comp : m_components.at(typeid(T).name()))
+				{
+					if (auto v = comp.lock())
+					{
+						return std::dynamic_pointer_cast<T>(v);
+					}
+				}
+			}
+
+			return nullptr;
+		}
+
 		template<typename T>
 		bool removeComponent(SceneNodeRef node)
 		{
@@ -145,6 +167,12 @@ namespace chord
 		}
 
 		bool removeComponent(SceneNodeRef node, const std::string& type);
+
+		const AtmosphereManager& getAtmosphereManager() const { return *m_atmosphereManager; }
+		AtmosphereManager& getAtmosphereManager() { return *m_atmosphereManager; }
+
+		const ShadowManager& getShadowManager() const { return *m_shadowManager; }
+		ShadowManager& getShadowManager() { return *m_shadowManager; }
 
 	private:
 		static AssetTypeMeta createTypeMeta();
@@ -161,6 +189,10 @@ namespace chord
 
 		// Cache scene node maps.
 		std::map<size_t, SceneNodeWeak> m_sceneNodes;
+
+		// 
+		std::unique_ptr<AtmosphereManager> m_atmosphereManager = nullptr;
+		std::unique_ptr<ShadowManager> m_shadowManager = nullptr;
 	};
 
 

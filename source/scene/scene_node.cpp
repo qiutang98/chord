@@ -57,13 +57,17 @@ namespace chord
             data.localToTranslatedWorld = math::mat4(localToWorld);
             data.translatedWorldToLocal = math::inverse(data.localToTranslatedWorld);
 
+            // Get scale factor.
             math::vec3 extractScale = math::vec3(
-                glm::length(glm::dvec3(data.localToTranslatedWorld[0])),
-                glm::length(glm::dvec3(data.localToTranslatedWorld[1])),
-                glm::length(glm::dvec3(data.localToTranslatedWorld[2])));
+                math::length(math::vec3(data.localToTranslatedWorld[0])),
+                math::length(math::vec3(data.localToTranslatedWorld[1])),
+                math::length(math::vec3(data.localToTranslatedWorld[2])));
 
+            // Get max abs scale factor.
             math::vec3 absScale = math::abs(extractScale);
             const float maxScaleAbs = math::max(math::max(absScale.x, absScale.y), absScale.z);
+
+            // 
             data.scaleExtractFromMatrix = math::vec4(extractScale, maxScaleAbs);
         }
 

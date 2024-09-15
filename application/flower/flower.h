@@ -16,6 +16,7 @@ class WidgetViewport;
 class WidgetDetail;
 class UISceneContentManager;
 class WidgetOutliner;
+class WidgetSystem;
 
 class Flower
 {
@@ -107,6 +108,8 @@ private:
 
 	// UI manager.
 	ProjectContentManager* m_contentManager = nullptr;
+
+	WidgetSystem* m_widgetSystemHandle = nullptr;
 
 	// Widget handles.
 	HubWidget* m_hubHandle = nullptr;

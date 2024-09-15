@@ -49,12 +49,21 @@ namespace chord
 
 	void Scene::onPostConstruct()
 	{
+		if (m_atmosphereManager == nullptr)
+		{
+			m_atmosphereManager = std::make_unique<AtmosphereManager>();
+		}
+
+		if (m_shadowManager == nullptr)
+		{
+			m_shadowManager = std::make_unique<ShadowManager>();
+		}
+
 		// Construct root node post construct.
 		if (m_root == nullptr)
 		{
 			m_root = createNode(kRootId, u16str("Root"));
 		}
-
 	}
 
 	void Scene::postLoad()
@@ -88,6 +97,8 @@ namespace chord
 
 	void Scene::tick(const ApplicationTickData& tickData)
 	{
+		m_atmosphereManager->update(tickData);
+
 		// All node tick.
 		loopNodeTopToDown([tickData](SceneNodeRef node)
 		{

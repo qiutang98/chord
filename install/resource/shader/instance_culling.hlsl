@@ -141,13 +141,14 @@ bool isMeshletGroupVisibile(
     in const float4x4 localToClip,
     in const GPUGLTFMeshletGroup meshletGroup)
 {
+
     const bool bFinalLod = (meshletGroup.parentError > kErrorRadiusRoot);
     const bool bFirstlOD = (meshletGroup.error < -0.5f);
 
     if (!bFinalLod)
     {
         float4 sphere = transformSphere(float4(meshletGroup.parentPosCenter, meshletGroup.parentError), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
-        float parentError = projectSphereToScreen(sphere, perView.renderDimension.y, perView.camMiscInfo.x);
+        float parentError = projectSphereToScreen(sphere, perView.renderDimension.y, perView.cameraFovy);
         if (parentError > 0.0f && parentError <= kErrorPixelThreshold) 
         { 
             // When eye in sphere, always > kErrorPixelThreshold, so visible.
@@ -158,7 +159,7 @@ bool isMeshletGroupVisibile(
     if (!bFirstlOD)
     {
         float4 sphere = transformSphere(float4(meshletGroup.clusterPosCenter, meshletGroup.error), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
-        float error = projectSphereToScreen(sphere, perView.renderDimension.y, perView.camMiscInfo.x);
+        float error = projectSphereToScreen(sphere, perView.renderDimension.y, perView.cameraFovy);
         if (error < 0.0f || error > kErrorPixelThreshold) 
         { 
             // When eye in sphere, always > kErrorPixelThreshold, meaning unvisible.
@@ -352,7 +353,9 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
             maxUVz.xy = saturate(maxUVz.xy);
 
             const float4 uvRect = float4(minUVz.xy, maxUVz.xy);
-            int4 pixelRect      = int4(uvRect * perView.renderDimension.xyxy + float4(0.5, 0.5, -0.5, -0.5)); // offset half pixel make box tight.
+
+            // offset half pixel make box tight.
+            int4 pixelRect = int4(uvRect * perView.renderDimension.xyxy + float4(0.5, 0.5, -0.5, -0.5));
 
             // Range clamp.
             pixelRect.xy = max(0, pixelRect.xy);
@@ -374,15 +377,15 @@ void HZBCullingCS(uint threadId : SV_DispatchThreadID)
                 
                 // 4x4 sample bias one level.
                 const int mipOffset = 1;
-                int mipLevel = max(0, max(mipLevels.x, mipLevels.y) - mipOffset);
-                mipLevel += any((hzbMip0Coord.zw >> mipLevel) - (hzbMip0Coord.xy >> mipLevel) >= 4) ? 1 : 0;
+                int mipLevel  = max(0, max(mipLevels.x, mipLevels.y) - mipOffset);
+                    mipLevel += any((hzbMip0Coord.zw >> mipLevel) - (hzbMip0Coord.xy >> mipLevel) >= 4) ? 1 : 0;
 
-                // Get select hzb level coord.
+                // Get selected hzb level coord.
                 const int4 hzbMipCoord = hzbMip0Coord >> mipLevel;
 
-                // Load min z.
-                Texture2D<float> hzbTexture = TBindless(Texture2D, float, pushConsts.hzb);
+                // Load min z in 4x4 pattern.
                 float zMin = 10.0f;
+                Texture2D<float> hzbTexture = TBindless(Texture2D, float, pushConsts.hzb);
                 [unroll(4)]
                 for (int x = 0; x < 4; x ++)
                 {

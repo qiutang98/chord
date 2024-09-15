@@ -17,9 +17,12 @@ static const std::string kIconContentImport  = ICON_FA_FILE_IMPORT + utf8::utf16
 static const std::string kIconContentNew     = ICON_FA_FILE_CIRCLE_PLUS + utf8::utf16to8(u" 新建");
 static const std::string kIconContentSave    = ICON_FA_FILE_EXPORT + utf8::utf16to8(u" 保存");
 static const std::string kIconContentSaveAll = ICON_FA_FILE_SIGNATURE + utf8::utf16to8(u" 全部保存");
+
+// 
 static constexpr const char* kIconContentSearch  = ICON_FA_MAGNIFYING_GLASS;
 static constexpr const char* kIconContentTitle   = ICON_FA_FOLDER_CLOSED;
 
+// 
 static constexpr const char* kRightClickedMenuName = "##RightClickedMenu";
 
 static const float kMinSnapShotIconSize = 2.0f;

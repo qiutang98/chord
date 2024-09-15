@@ -17,7 +17,7 @@ CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
 
-#include "nanite_shared.hlsl"
+#include "nanite_shared.hlsli"
 
 float3 gltfMetallicRoughnessPBR(
     in const PerframeCameraView perView,
@@ -69,17 +69,23 @@ float3 gltfMetallicRoughnessPBR(
 
         Texture2D<float2> normalTexture = TBindless(Texture2D, float2, materialInfo.normalTexture);
         SamplerState normalSampler      = Bindless(SamplerState, materialInfo.normalSampler);
-        const float2 xy                 = normalTexture.SampleGrad(normalSampler, meshUv, meshUv_ddx, meshUv_ddy) * 2.0 - 1.0; // Remap to [-1, 1].
-        const float  z                  = sqrt(1.0 - dot(xy, xy)); // Construct z.
 
-        normalRS = mul(float3(xy, z), TBN);
+        float3 xyz;
+        xyz.xy = normalTexture.SampleGrad(normalSampler, meshUv, meshUv_ddx, meshUv_ddy) * 2.0 - 1.0; // Remap to [-1, 1].
+        xyz.z  = sqrt(1.0 - dot(xyz.xy, xyz.xy)); // Construct z.
+
+        // Apply normal scale.
+        xyz.xy *= materialInfo.normalFactorScale;
+
+        // Tangent space to world sapce.
+        normalRS = mul(normalize(xyz), TBN);
     }
     else
     {
         normalRS = vertNormalRS;
     }
     
-    return normalRS * 0.5 + 0.5;// baseColor.xyz * dot(normalRS, normalize(float3(0.4, 1.0, 0.0)));// ;
+    return baseColor.xyz * dot(normalRS, -scene.sunInfo.direction);// ;
 }
 
 void storeColor(uint2 pos, float3 c)

@@ -271,6 +271,15 @@ namespace chord
 		return texture->get().requireView(range, viewType, true, false).SRV.get();
 	}
 
+	inline static uint32 asSRV3DTexture(
+		graphics::GraphicsOrComputeQueue& queue,
+		graphics::PoolTextureRef texture,
+		const VkImageSubresourceRange& range = graphics::helper::buildBasicImageSubresource())
+	{
+		queue.transitionSRV(texture, range);
+		return texture->get().requireView(range, VK_IMAGE_VIEW_TYPE_3D, true, false).SRV.get();
+	}
+
 	inline static uint32 asUAV(
 		graphics::GraphicsOrComputeQueue& queue,
 		graphics::PoolTextureRef texture,
@@ -282,6 +291,18 @@ namespace chord
 		queue.transitionUAV(texture, range);
 		return texture->get().requireView(range, viewType, false, true).UAV.get();
 	}
+
+	inline static uint32 asUAV3DTexture(
+		graphics::GraphicsOrComputeQueue& queue,
+		graphics::PoolTextureRef texture,
+		const VkImageSubresourceRange& range = graphics::helper::buildBasicImageSubresource())
+	{
+		check(hasFlag(texture->get().getInfo().usage, VK_IMAGE_USAGE_STORAGE_BIT));
+
+		queue.transitionUAV(texture, range);
+		return texture->get().requireView(range, VK_IMAGE_VIEW_TYPE_3D, false, true).UAV.get();
+	}
+
 
 	inline static uint32 asUAV(
 		graphics::GraphicsOrComputeQueue& queue,

@@ -38,9 +38,7 @@ void mainVS(in VSIn input, out VS2PS output)
     output.uv  = input.uv;
 };
 
-void mainPS(
-    in VS2PS input, 
-    out float4 outColor : SV_Target0)
+void mainPS(in VS2PS input, out float4 outColor : SV_Target0)
 {
     Texture2D<float4> inputTexture = TBindless(Texture2D, float4, pushConsts.textureId);
     SamplerState inputSampler = Bindless(SamplerState, pushConsts.samplerId);
@@ -59,7 +57,7 @@ void mainPS(
     
     // ImGui color default in gamma rec709.
     float4 lerpColor = input.col;
-    lerpColor.xyz = chord::rec709GammaDecode(lerpColor.xyz);
+    lerpColor.xyz = rec709GammaDecode(lerpColor.xyz);
     
     // Default in linearRec709, UI always draw in SRGB color buffer, so just output use hardware convert is fine.
     outColor = lerpColor * sampleColor;

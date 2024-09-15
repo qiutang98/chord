@@ -11,6 +11,7 @@
 #include "widget/viewport.h"
 #include "widget/outliner.h"
 #include "widget/detail.h"
+#include "widget/system.h"
 
 using namespace chord;
 using namespace chord::graphics;
@@ -212,6 +213,14 @@ void Flower::onProjectSetup()
 			{
 				WidgetInView consoleView = { .bMultiWindow = false, .widgets = { m_consoleHandle } };
 				m_dockSpaceHandle->widgetInView.add(consoleView);
+			}
+		}
+
+		{
+			m_widgetSystemHandle = m_widgetManager.addWidget<WidgetSystem>();
+			{
+				WidgetInView systemView = { .bMultiWindow = false, .widgets = { m_widgetSystemHandle } };
+				m_dockSpaceHandle->widgetInView.add(systemView);
 			}
 		}
 

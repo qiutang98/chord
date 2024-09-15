@@ -3,23 +3,21 @@
 #include <renderer/postprocessing/postprocessing.h>
 #include <shader/tonemapping.hlsl>
 
-namespace chord
+using namespace chord;
+using namespace chord::graphics;
+
+PRIVATE_GLOBAL_SHADER(TonemappingPS, "resource/shader/tonemapping.hlsl", "mainPS", EShaderStage::Pixel);
+
+void chord::tonemapping(GraphicsQueue& queue, PoolTextureRef srcImage, PoolTextureRef outImage)
 {
-	using namespace graphics;
-	PRIVATE_GLOBAL_SHADER(TonemappingPS, "resource/shader/tonemapping.hlsl", "mainPS", EShaderStage::Pixel);
+	RenderTargets RTs { };
+	RTs.RTs[0] = RenderTargetRT(outImage, ERenderTargetLoadStoreOp::Nope_Store);
 
-	void chord::tonemapping(GraphicsQueue& queue, PoolTextureRef srcImage, PoolTextureRef outImage)
-	{
-		RenderTargets RTs { };
-		RTs.RTs[0] = RenderTargetRT(outImage, ERenderTargetLoadStoreOp::Nope_Store);
+	uint32 srcImageId = asSRV(queue, srcImage);
 
-		uint32 srcImageId = asSRV(queue, srcImage);
+	TonemappingPushConsts pushConst { };
+	pushConst.textureId = srcImageId;
+	pushConst.pointClampSamplerId = getSamplers().pointClampBorder0000().index.get();
 
-		TonemappingPushConsts pushConst { };
-		pushConst.textureId = srcImageId;
-		pushConst.pointClampSamplerId = getSamplers().pointClampBorder0000().index.get();
-
-		addFullScreenPass2<TonemappingPS>(queue, "Tonemapping", RTs, pushConst);
-	}
-
+	addFullScreenPass2<TonemappingPS>(queue, "Tonemapping", RTs, pushConst);
 }

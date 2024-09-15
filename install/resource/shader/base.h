@@ -33,31 +33,23 @@
     using float2x2 = chord::math::mat2;
     using float3x3 = chord::math::mat3;
     using float4x4 = chord::math::mat4;
+    
+    constexpr auto kMaxPushConstSize = 128;
 
-    namespace chord
+    inline float4 lerp(const float4& x, const float4& y, const float4& a) { return math::mix(x, y, a); }
+    inline float3 lerp(const float3& x, const float3& y, const float3& a) { return math::mix(x, y, a); }
+    inline float3 lerp(const float3& x, const float3& y, const float   a) { return math::mix(x, y, a); }
+    inline float2 lerp(const float2& x, const float2& y, const float2& a) { return math::mix(x, y, a); }
+    inline float  lerp(const float   x, const float   y, const float   a) { return math::mix(x, y, a); }
+
+    inline float3 pow(const float3& base, float v)
     {
-        constexpr auto kMaxPushConstSize = 128;
-
-        inline float4 lerp(const float4& x, const float4& y, const float4& a) { return math::mix(x, y, a); }
-        inline float3 lerp(const float3& x, const float3& y, const float3& a) { return math::mix(x, y, a); }
-        inline float3 lerp(const float3& x, const float3& y, const float   a) { return math::mix(x, y, a); }
-        inline float2 lerp(const float2& x, const float2& y, const float2& a) { return math::mix(x, y, a); }
-        inline float  lerp(const float   x, const float   y, const float   a) { return math::mix(x, y, a); }
-
-        inline float3 pow(const float3& base, float v)
-        {
-            return math::pow(base, float3(v));
-        }
-
-        inline float pow(const float base, float v)
-        {
-            return math::pow(base, v);
-        }
+        return math::pow(base, float3(v));
     }
 
     // Cpp end check struct size match machine.
     #define CHORD_PUSHCONST(Type, Name) \
-        static_assert(sizeof(Type) <= chord::kMaxPushConstSize)
+        static_assert(sizeof(Type) <= kMaxPushConstSize)
 
     // Serialization relative.
     #define CHORD_DEFAULT_COMPARE_ARCHIVE(T)       \
@@ -68,9 +60,17 @@
     #define CHORD_CHECK_SIZE_GPU_SAFE(X) \
         static_assert(sizeof(X) % (4 * sizeof(float)) == 0)
 
-    static inline float asuint(float floatValue)
+    static inline uint asuint(float floatValue)
     {
         return *reinterpret_cast<uint*>(&floatValue);
+    }
+
+    static inline void asuint(double doubleValue, uint& lowbits, uint& highbits)
+    {
+        const uint* data = (uint*)(&doubleValue);
+
+        lowbits  = data[0];
+        highbits = data[1];
     }
 
     static inline float asfloat(uint32 uintValue)
@@ -88,8 +88,112 @@
 
 #endif ///////////////////////////////////////////////////////
 
+struct DensityProfileLayer 
+{
+    float width;
+    float exp_term;
+    float exp_scale;
+    float linear_term;
+
+    float constant_term;
+    float pad0;
+    float pad1;
+    float pad2;
+};
+
+struct DensityProfile 
+{
+    DensityProfileLayer layers[2];
+};
+
+#define LUMINANCE_MODE_NONE       0
+#define LUMINANCE_MODE_APPROX     1
+#define LUMINANCE_MODE_PRECOMPUTE 2
+struct AtmosphereParameters 
+{
+    // The solar irradiance at the top of the atmosphere.
+    float3 solar_irradiance;
+    // The sun's angular radius. Warning: the implementation uses approximations
+    // that are valid only if this angle is smaller than 0.1 radians.
+    float sun_angular_radius;
+
+    // The distance between the planet center and the bottom of the atmosphere.
+    float bottom_radius;
+    // The distance between the planet center and the top of the atmosphere.
+    float top_radius;
+    uint  luminanceMode; // 0 none, 1 approx, 2 precompute.
+    float pad1;
+
+    // The density profile of air molecules, i.e. a function from altitude to
+    // dimensionless values between 0 (null density) and 1 (maximum density).
+    DensityProfile rayleigh_density;
+    // The scattering coefficient of air molecules at the altitude where their
+    // density is maximum (usually the bottom of the atmosphere), as a function of
+    // wavelength. The scattering coefficient at altitude h is equal to
+    // 'rayleigh_scattering' times 'rayleigh_density' at this altitude.
+    float3 rayleigh_scattering;
+    uint bCombineScattering;
+
+    // The density profile of aerosols, i.e. a function from altitude to
+    // dimensionless values between 0 (null density) and 1 (maximum density).
+    DensityProfile mie_density;
+    // The scattering coefficient of aerosols at the altitude where their density
+    // is maximum (usually the bottom of the atmosphere), as a function of
+    // wavelength. The scattering coefficient at altitude h is equal to
+    // 'mie_scattering' times 'mie_density' at this altitude.
+    float3 mie_scattering;
+    float pad3;
+
+    // The extinction coefficient of aerosols at the altitude where their density
+    // is maximum (usually the bottom of the atmosphere), as a function of
+    // wavelength. The extinction coefficient at altitude h is equal to
+    // 'mie_extinction' times 'mie_density' at this altitude.
+    float3 mie_extinction;
+    // The asymetry parameter for the Cornette-Shanks phase function for the
+    // aerosols.
+    float mie_phase_function_g;
+
+    // The density profile of air molecules that absorb light (e.g. ozone), i.e.
+    // a function from altitude to dimensionless values between 0 (null density)
+    // and 1 (maximum density).
+    DensityProfile absorption_density;
+    // The extinction coefficient of molecules that absorb light (e.g. ozone) at
+    // the altitude where their density is maximum, as a function of wavelength.
+    // The extinction coefficient at altitude h is equal to
+    // 'absorption_extinction' times 'absorption_density' at this altitude.
+    float3 absorption_extinction;
+    float pad4;
+
+    // The average albedo of the ground.
+    float3 ground_albedo;
+    // The cosine of the maximum Sun zenith angle for which atmospheric scattering
+    // must be precomputed (for maximum precision, use the smallest Sun zenith
+    // angle yielding negligible sky light radiance values. For instance, for the
+    // Earth case, 102 degrees is a good choice - yielding mu_s_min = -0.2).
+    float mu_s_min;
+
+    float3 skySpectralRadianceToLumiance;
+    float pad5;
+
+    float3 sunSpectralRadianceToLumiance;
+    float pad6;
+
+    float3 earthCenterKm;
+    float pad7;
+};
+
+struct SkyLightInfo
+{
+    float3 direction;
+    float  pad0;
+};
+CHORD_CHECK_SIZE_GPU_SAFE(SkyLightInfo);
+
 struct GPUBasicData
 {
+    AtmosphereParameters atmosphere;
+    SkyLightInfo sunInfo;
+
     uint frameCounter; // 32 bit-framecounter, easy overflow. todo:
     uint frameCounterMod8;
     uint GLTFPrimitiveDetailBuffer; // gpu scene: gltf primitive detail buffer index.
@@ -106,7 +210,13 @@ struct GPUBasicData
     uint pad2;
 };
 
-    
+struct GPUStorageDouble4
+{
+    uint2 x;
+    uint2 y;
+    uint2 z;
+    uint2 w;
+};
 
 struct PerframeCameraView
 {
@@ -129,7 +239,16 @@ struct PerframeCameraView
 
     float4 renderDimension; //  .xy is width and height, .zw is inverse of .xy.
 
-    float4 camMiscInfo; // .x = fovy,
+    GPUStorageDouble4 cameraToEarthCenterKm; // .xyz store cameraPosition - earthCenter.
+    GPUStorageDouble4 cameraRelativeEarthKm; // Camera pos in km.
+
+    // Camera world position, double precision.
+    GPUStorageDouble4 cameraWorldPos;
+
+    float cameraFovy;
+    float pad0;
+    float pad1;
+    float pad2;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);
 
@@ -237,7 +356,7 @@ struct NaniteShadingMeshlet
 };
 
 
- // smallest such that 1.0 + kEpsilon != 1.0
+// smallest such that 1.0 + kEpsilon != 1.0
 #define kEpsilon 1.192092896e-07F
 
 // 

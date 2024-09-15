@@ -39,4 +39,23 @@ namespace chord
         std::function<bool(ComponentRef)> onDrawUI;
         std::function<std::shared_ptr<Component>()> factory;
     };
+
+    class ISceneSystem
+    {
+    public:
+        explicit ISceneSystem(const std::string& name, const std::string& decoratedName)
+            : m_name(name), m_decoratedName(decoratedName)
+        {
+
+        }
+
+        void drawUI(SceneRef scene);
+
+    protected:
+        virtual void onDrawUI(SceneRef scene) = 0;
+
+    private:
+        std::string m_name;
+        std::string m_decoratedName;
+    };
 }

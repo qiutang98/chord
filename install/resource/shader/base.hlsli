@@ -9,6 +9,36 @@
 #define KPIOver4  (kPI / 4.0)
 #define kNaN asfloat(0x7FC00000)
 
+#define kFloatEpsilon 1.192092896e-07f
+
+// Infinite invert z can't just use zero, it will produce nan, we use epsilon.
+#define kFarPlaneZ kFloatEpsilon
+
+float1 max0(float1 v) { return max(v, 0.0); }
+float2 max0(float2 v) { return max(v, 0.0); }
+float3 max0(float3 v) { return max(v, 0.0); }
+float4 max0(float4 v) { return max(v, 0.0); }
+
+float1 mod(float1 x, float1 y) { return x - y * floor(x / y); }
+float2 mod(float2 x, float2 y) { return x - y * floor(x / y); }
+float3 mod(float3 x, float3 y) { return x - y * floor(x / y); }
+float4 mod(float4 x, float4 y) { return x - y * floor(x / y); }
+
+float1 log10(float1 x) { return log(x) / log(10.0); }
+float2 log10(float2 x) { return log(x) / log(10.0); }
+float3 log10(float3 x) { return log(x) / log(10.0); }
+float4 log10(float4 x) { return log(x) / log(10.0); }
+
+double3 asDouble3(GPUStorageDouble4 v)
+{
+    double3 d;
+    d.x = asdouble(v.x.x, v.x.y);
+    d.y = asdouble(v.y.x, v.y.y);
+    d.z = asdouble(v.z.x, v.z.y);
+
+    return d;
+}
+
 /**
     Gather pattern
 
@@ -56,6 +86,14 @@ float2 screenUvToNdcUv(float2 uv)
     uv.y = 2.0 * (0.5 - uv.y);
 
     return uv;
+}
+
+float3 getPositionRS(float2 uv, float z, in PerframeCameraView view)
+{
+    const float4 posCS   = float4(screenUvToNdcUv(uv), z, 1.0);
+    const float4 posRS_H = mul(view.clipToTranslatedWorld, posCS);
+
+    return posRS_H.xyz / posRS_H.w;
 }
 
 float3 projectPosToUVz(float3 pos, in const float4x4 projectMatrix)
@@ -332,5 +370,59 @@ float projectSphereToScreen(float4 sphere, float height, float fovy)
     //
     return height * 0.5 / tan(halfFovy) * r / sqrt(d2 - r2);
 }
+
+// Uchimura 2017, "HDR theory and practice"
+// Math: https://www.desmos.com/calculator/gslcdxvipg
+// Source: https://www.slideshare.net/nikuque/hdr-theory-and-practicce-jp
+float uchimuraTonemapperComponent(float x, float P, float a, float m, float l0, float c, float b, float S0, float S1, float CP) 
+{
+    float w0 = 1.0 - smoothstep(0.0, m, x);
+    float w2 = step(m + l0, x);
+    float w1 = 1.0 - w0 - w2;
+    float T  = m * pow(x / m, c) + b;
+    float S  = P - (P - S1) * exp(CP * (x - S0));
+    float L  = m + a * (x - m);
+
+    return T * w0 + L * w1 + S * w2;
+}
+
+float3 uchimuraTonemapper(float3 color, float P, float a, float m, float l0, float c, float b, float S0, float S1, float CP)
+{
+    float3 result;
+    result.x = uchimuraTonemapperComponent(color.x, P, a, m, l0, c, b, S0, S1, CP);
+    result.y = uchimuraTonemapperComponent(color.y, P, a, m, l0, c, b, S0, S1, CP);
+    result.z = uchimuraTonemapperComponent(color.z, P, a, m, l0, c, b, S0, S1, CP);
+    return result;
+}
+
+// https://www.shadertoy.com/view/Mtc3Ds
+// rayleigh phase function.
+float rayleighPhase(float a) 
+{
+    const float k = 3.0 / (16.0 * kPI);
+    return k * (1.0 + a * a);
+}
+
+// Cornette-Shanks (CS) [1992]: Physically reasonable analytic expression for the single-scattering phase function
+// Schlick approximation mie phase function.
+float cornetteShanksMiePhase(float g, float VoL)
+{
+    float g2 = g * g;
+
+	float k = 3.0 / (8.0 * kPI) * (1.0 - g2) / (2.0 + g2);
+	return k * (1.0 + VoL * VoL) / pow(1.0 + g2 - 2.0 * g * VoL, 1.5);
+}
+
+// Henyey-Greenstein (HG) [1941] http://www.pbr-book.org/3ed-2018/Volume_Scattering/Phase_Functions.html
+float henyeyGreensteinPhase(float g, float VoL)
+{
+    float a = -VoL; // Assume inp
+    float g2 = g * g;
+
+	float denom = 1.0 + g2 + 2.0 * g * a;
+	return (1.0 - g2) / (4.0f * kPI * denom * sqrt(denom));
+}
+
+// NOTE: henyeyGreensteinPhase looks same with cornetteShanksMiePhase in most case and henyeyGreensteinPhase compute faster.
 
 #endif // !SHADER_BASE_HLSLI

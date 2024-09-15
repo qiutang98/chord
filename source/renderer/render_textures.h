@@ -16,7 +16,7 @@ namespace chord
 		// Color: .xyz = Store emissive in base pass, lighting color in lighting pass.
 		// 
 		graphics::PoolTextureRef color = nullptr;
-		static auto colorFormat() { return VK_FORMAT_B10G11R11_UFLOAT_PACK32; }
+		static auto colorFormat() { return VK_FORMAT_R16G16B16A16_SFLOAT; }
 
 		// 
 		graphics::PoolTextureRef depthStencil = nullptr;

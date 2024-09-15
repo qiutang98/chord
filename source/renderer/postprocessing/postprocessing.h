@@ -5,6 +5,7 @@
 #include <graphics/helper.h>
 #include <renderer/fullscreen.h>
 #include <renderer/render_helper.h>
+#include <astrophysics/atmosphere.h>
 
 struct LineDrawVertex;
 
@@ -37,4 +38,11 @@ namespace chord
 		graphics::PoolTextureRef depthImage,
 		bool bBuildMin,
 		bool bBuildMax);
+
+
+	extern void renderSky(
+		graphics::GraphicsQueue& queue,
+		graphics::PoolTextureRef sceneColor,
+		uint32 cameraViewId,
+		const AtmosphereLut& luts);
 }
