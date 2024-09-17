@@ -122,19 +122,19 @@ namespace chord
 					uint32_t packColorIndex = 0;
 
 					// TODO: Color error diffusion avoid too much block artifact.
-					vec3 minColorVec = math::vec3(minColor[0], minColor[1], minColor[2]);
-					vec3 maxColorVec = math::vec3(maxColor[0], maxColor[1], maxColor[2]);
+					math::vec3 minColorVec = math::vec3(minColor[0], minColor[1], minColor[2]);
+					math::vec3 maxColorVec = math::vec3(maxColor[0], maxColor[1], maxColor[2]);
 
 					// Color vector max -> min.
-					vec3 maxMinVec = maxColorVec - minColorVec;
+					math::vec3 maxMinVec = maxColorVec - minColorVec;
 
 					// Color vector direction and length.
 					float lenInvert = 1.0f / math::length(maxMinVec);
-					vec3 colorDirVec = maxMinVec * lenInvert;
+					math::vec3 colorDirVec = maxMinVec * lenInvert;
 
 					for (int i = 0; i < 16; i++)
 					{
-						vec3 computeVec =
+						math::vec3 computeVec =
 							math::vec3(*(src + i * 4 + 0), *(src + i * 4 + 1), *(src + i * 4 + 2)) - minColorVec;
 
 						// Project current color into color direction vector and scale to [0, 3]

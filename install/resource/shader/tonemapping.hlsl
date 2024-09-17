@@ -4,6 +4,9 @@ struct TonemappingPushConsts
 {
     CHORD_DEFAULT_COMPARE_ARCHIVE(TonemappingPushConsts);
 
+    uint2 textureSize;
+    
+    uint cameraViewId;
     uint textureId;
     uint pointClampSamplerId;
 };
@@ -13,7 +16,7 @@ CHORD_PUSHCONST(TonemappingPushConsts, pushConsts);
 
 #include "bindless.hlsli" 
 #include "fullscreen.hlsl"
-
+#include "blue_noise.hlsli"
 #include "aces.hlsli"
 
 static const float3x3 sRGB_2_AP1 = mul(XYZ_2_AP1_MAT,  mul(D65_2_D60_CAT, sRGB_2_XYZ_MAT));
@@ -134,9 +137,13 @@ void mainPS(
     in FullScreenVS2PS input, 
     out float4 outColor : SV_Target0)
 {
+    PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
+    const GPUBasicData scene = perView.basicData;
+
     Texture2D<float4> inputTexture = TBindless(Texture2D, float4, pushConsts.textureId);
     SamplerState pointClampSampler = Bindless(SamplerState, pushConsts.pointClampSamplerId);
 
+    uint2 workPos = uint2(pushConsts.textureSize * input.uv);
     float4 sampleColor = inputTexture.Sample(pointClampSampler, input.uv);
 
 
@@ -155,6 +162,21 @@ void mainPS(
         1.00); //float filmGlowScale
 
     float3 srgbColor = mul(AP1_2_sRGB, colorAp1);
+
+    // Dither RGB in 8bit, even we store data in 10bit back buffer.
+    {
+        // Offset retarget for new seeds each frame
+        uint2 offsetId = jitterSequence(scene.frameCounter, pushConsts.textureSize, workPos);
+
+        // Display is 8bit, so jitter with blue noise with [-1, 1] / 255.0.
+        // Current also looks good in hdr display even it under 11bit.
+        srgbColor.x += 1.0 / 255.0 * (-1.0 + 2.0 * samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 0u));
+        srgbColor.y += 1.0 / 255.0 * (-1.0 + 2.0 * samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 1u));
+        srgbColor.z += 1.0 / 255.0 * (-1.0 + 2.0 * samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 2u));
+        
+        // Safe color.
+        srgbColor = max(srgbColor, 0);
+    }
 
     // Store linear srgb color in 10bit unorm color, do gamma encode when blit to ui.
     outColor.xyz = srgbColor;

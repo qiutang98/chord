@@ -12,7 +12,7 @@
 namespace chord
 {
 	extern float3 getEarthCenterKm();
-	extern double3 getCameraToEarthCenterKm(const dvec3 cameraPosition, double3& cameraKm);
+	extern double3 getCameraToEarthCenterKm(const double3 cameraPosition, double3& cameraKm);
 
 	struct AtmosphereLut
 	{

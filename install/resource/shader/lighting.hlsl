@@ -151,7 +151,7 @@ void mainCS(
             const float4x4 translatedWorldToClip  = perView.translatedWorldToClip;
             const float4x4 localToClip            = mul(translatedWorldToClip, localToTranslatedWorld);
             uint triangleIndexId;
-            getTriangleMiscInfo(perView, scene, objectInfo, bExistNormalTexture, localToClip, meshletId, triangleId, triangleInfo, triangleIndexId);
+            getTriangleMiscInfo(scene, objectInfo, bExistNormalTexture, localToClip, meshletId, triangleId, triangleInfo, triangleIndexId);
 
             // Update cache pack id.
             cachePackId = packID;

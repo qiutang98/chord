@@ -10,8 +10,7 @@
 
 namespace chord
 {
-	using CountAndCmdBuffer = std::pair<graphics::PoolBufferGPUOnlyRef, graphics::PoolBufferGPUOnlyRef>;
-	
+
 	struct GLTFRenderContext
 	{
 		struct PostBasicCulling
@@ -34,7 +33,6 @@ namespace chord
 
 		graphics::GraphicsQueue& queue;
 		GBufferTextures& gbuffers;
-		const DeferredRendererHistory& history;
 		std::function<void(const std::string&, graphics::GraphicsOrComputeQueue& queue)> timerLambda = nullptr;
 
 		GLTFRenderContext(
@@ -51,7 +49,6 @@ namespace chord
 			, cameraView(inCameraViewId)
 			, queue(inQueue)
 			, gbuffers(inGBuffers)
-			, history(inHistory)
 		{
 
 		}
@@ -59,13 +56,19 @@ namespace chord
 
 	extern bool shouldRenderGLTF(GLTFRenderContext& renderCtx);
 	extern bool enableGLTFHZBCulling();
-	extern void instanceCulling(GLTFRenderContext& ctx);
+	extern void instanceCulling(GLTFRenderContext& ctx, uint instanceCullingViewInfo, uint instanceCullingViewInfoOffset);
 
 	namespace detail
 	{
-		extern graphics::PoolBufferGPUOnlyRef fillIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, graphics::PoolBufferGPUOnlyRef countBuffer);
+		extern graphics::PoolBufferGPUOnlyRef filterPipelineIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, graphics::PoolBufferGPUOnlyRef countBuffer);
 
-		extern CountAndCmdBuffer hzbCulling(GLTFRenderContext& renderCtx, bool bFirstStage, graphics::PoolBufferGPUOnlyRef inCountBuffer, graphics::PoolBufferGPUOnlyRef inCmdBuffer, CountAndCmdBuffer& outBuffer);
+		extern CountAndCmdBuffer hzbCulling(
+			const HZBContext& inHzb,
+			GLTFRenderContext& renderCtx, 
+			bool bFirstStage, 
+			graphics::PoolBufferGPUOnlyRef inCountBuffer, 
+			graphics::PoolBufferGPUOnlyRef inCmdBuffer, 
+			CountAndCmdBuffer& outBuffer);
 	
 		extern CountAndCmdBuffer filterPipeForVisibility(GLTFRenderContext& renderCtx, graphics::PoolBufferGPUOnlyRef dispatchCmd, graphics::PoolBufferGPUOnlyRef inCmdBuffer, graphics::PoolBufferGPUOnlyRef inCountBuffer, uint alphaMode, uint bTwoSide);
 	}
@@ -74,6 +77,8 @@ namespace chord
 
 	// Return true if need invoke stage1.
 	// Return false no need stage1.
-	extern bool gltfVisibilityRenderingStage0(GLTFRenderContext& renderCtx);
+	extern bool gltfVisibilityRenderingStage0(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx);
 	extern void gltfVisibilityRenderingStage1(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx);
+
+
 }

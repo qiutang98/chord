@@ -11,9 +11,7 @@ struct LineDrawVertex;
 
 namespace chord
 {
-
-
-	extern void tonemapping(graphics::GraphicsQueue& queue, graphics::PoolTextureRef srcImage, graphics::PoolTextureRef outImage);
+	extern void tonemapping(uint32 cameraViewBufferId, graphics::GraphicsQueue& queue, graphics::PoolTextureRef srcImage, graphics::PoolTextureRef outImage);
 	
 	struct DebugLineCtx
 	{
@@ -37,12 +35,22 @@ namespace chord
 		graphics::GraphicsQueue& queue, 
 		graphics::PoolTextureRef depthImage,
 		bool bBuildMin,
-		bool bBuildMax);
+		bool bBuildMax,
+		bool bBuildValidRange);
 
 
 	extern void renderSky(
 		graphics::GraphicsQueue& queue,
 		graphics::PoolTextureRef sceneColor,
+		graphics::PoolTextureRef depthImage,
 		uint32 cameraViewId,
 		const AtmosphereLut& luts);
+
+	using CountAndCmdBuffer = std::pair<graphics::PoolBufferGPUOnlyRef, graphics::PoolBufferGPUOnlyRef>;
+
+	extern graphics::PoolBufferGPUOnlyRef indirectDispatchCmdFill(
+		const std::string& name,
+		graphics::GraphicsQueue& queue,
+		uint groupSize, 
+		graphics::PoolBufferGPUOnlyRef countBuffer);
 }

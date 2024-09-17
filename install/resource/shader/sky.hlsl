@@ -5,6 +5,7 @@ struct SkyPushConsts
     CHORD_DEFAULT_COMPARE_ARCHIVE(SkyPushConsts);
 
     uint cameraViewId;
+    uint depthId;
     uint linearSampler;
     uint sceneColorId;
 
@@ -34,6 +35,14 @@ void skyRenderCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Grou
         return;
     }
 
+    Texture2D<float> depthTexture = TBindless(Texture2D, float, pushConsts.depthId);
+    float deviceZ = depthTexture[workPos];
+
+    if (deviceZ > 0.0)
+    {
+        return;   
+    }
+
     const float2 fragCoord = workPos + 0.5;
     const float2 uv = fragCoord * perView.renderDimension.zw;
 
@@ -44,11 +53,10 @@ void skyRenderCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Grou
         worldDirectionRS = normalize(viewPointRS.xyz / viewPointRS.w);
     }
  
-    Texture2D<float4> transmittanceTexture = TBindless(Texture2D, float4, pushConsts.transmittanceId);
-    Texture2D<float4> irradianceTexture = TBindless(Texture2D, float4, pushConsts.irradianceTextureId);
-    Texture3D<float4> scatteringTexture = TBindless(Texture3D, float4, pushConsts.scatteringId);
-
     uint singleMieScatteringId = (scene.atmosphere.bCombineScattering == 0) ? pushConsts.singleMieScatteringId : pushConsts.scatteringId;
+    Texture2D<float4> transmittanceTexture       = TBindless(Texture2D, float4, pushConsts.transmittanceId);
+    Texture2D<float4> irradianceTexture          = TBindless(Texture2D, float4, pushConsts.irradianceTextureId);
+    Texture3D<float4> scatteringTexture          = TBindless(Texture3D, float4, pushConsts.scatteringId);
     Texture3D<float4> singleMieScatteringTexture = TBindless(Texture3D, float4, singleMieScatteringId);
 
     const float3 sunDirection = -scene.sunInfo.direction;
@@ -56,8 +64,12 @@ void skyRenderCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Grou
     // Compute the radiance reflected by the ground, if the ray intersects it.
     float groundAlpha = 0.0;
     float3 groundRadiance = 0.0;
+
+    // Can hack to float here when unit is kilometers.
+    float3 cameraToEarthCenterKm = float3(asDouble3(perView.cameraToEarthCenter_km));
+    float3 cameraPositionWS_km = float3(asDouble3(perView.cameraPositionWS_km));
     {
-        float3 p = float3(asDouble3(perView.cameraToEarthCenterKm)); // WARN: Precision lost here.
+        float3 p = cameraToEarthCenterKm; 
 
         float pov = dot(p, worldDirectionRS);
         float pop = dot(p, p);
@@ -66,7 +78,7 @@ void skyRenderCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Grou
         float distance2intersection = -pov - sqrt(scene.atmosphere.bottom_radius * scene.atmosphere.bottom_radius - rayEarthCenterSquaredDistance);
         if (distance2intersection > 0.0)
         {
-            float3 intersectPoint = float3(asDouble3(perView.cameraRelativeEarthKm)) + worldDirectionRS * distance2intersection;
+            float3 intersectPoint = cameraPositionWS_km + worldDirectionRS * distance2intersection;
             float3 normal = normalize(intersectPoint - scene.atmosphere.earthCenterKm);
 
             // Compute the radiance reflected by the ground.
@@ -92,7 +104,7 @@ void skyRenderCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Grou
                 transmittanceTexture,
                 scatteringTexture, 
                 singleMieScatteringTexture,  
-                float3(asDouble3(perView.cameraToEarthCenterKm)), // WARN: PRECISION lost here. 
+                cameraToEarthCenterKm,
                 intersectPoint - scene.atmosphere.earthCenterKm, 
                 0.0,  
                 sunDirection, 
@@ -109,7 +121,7 @@ void skyRenderCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Grou
         transmittanceTexture,
         scatteringTexture, 
         singleMieScatteringTexture,  
-        float3(asDouble3(perView.cameraToEarthCenterKm)), // WARN: PRECISION lost here. 
+        cameraToEarthCenterKm,
         worldDirectionRS, 
         0.0, 
         sunDirection,  

@@ -47,27 +47,6 @@ public:
 };
 IMPLEMENT_GLOBAL_SHADER(VisibilityBufferPS, "resource/shader/visibility_buffer.hlsl", "visibilityPassPS", EShaderStage::Pixel);
 
-PRIVATE_GLOBAL_SHADER(FillMeshShadingParamCS, "resource/shader/instance_culling.hlsl", "fillMeshShadingParamCS", EShaderStage::Compute);
-
-PoolBufferGPUOnlyRef fillMeshIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, PoolBufferGPUOnlyRef countBuffer)
-{
-    auto meshletCullCmdBuffer = getContext().getBufferPool().createGPUOnly(name, sizeof(uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-    {
-        InstanceCullingPushConst push{ };
-        push.drawedMeshletCountId = asSRV(renderCtx.queue, countBuffer);
-        push.meshletCullCmdId = asUAV(renderCtx.queue, meshletCullCmdBuffer);
-
-        auto computeShader = getContext().getShaderLibrary().getShader<FillMeshShadingParamCS>();
-        addComputePass2(renderCtx.queue,
-            name,
-            getContext().computePipe(computeShader, name),
-            push,
-            math::uvec3(1, 1, 1));
-    }
-
-    return meshletCullCmdBuffer;
-};
-
 static inline void renderVisibilityPipe(
     GLTFRenderContext& renderCtx,
     bool bMaskedMaterial,
@@ -110,7 +89,7 @@ static inline void renderVisibilityPipe(
         RTs.getDepthStencilFormat(),
         RTs.getDepthStencilFormat());
 
-    auto clusterCmdBuffer = fillMeshIndirectDispatchCmd(renderCtx, "VisibilityCmd", countBuffer);
+    auto clusterCmdBuffer = indirectDispatchCmdFill("VisibilityCmd", renderCtx.queue, 1, countBuffer);
 
     addMeshIndirectDrawPass(
         queue,
@@ -136,7 +115,7 @@ static inline void renderVisibility(GLTFRenderContext& renderCtx, PoolBufferGPUO
     auto& gbuffers = renderCtx.gbuffers;
     const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
-    auto filterCmd = chord::detail::fillIndirectDispatchCmd(renderCtx, "Pipeline filter prepare.", inCountBuffer);
+    auto filterCmd = chord::detail::filterPipelineIndirectDispatchCmd(renderCtx, "Pipeline filter prepare.", inCountBuffer);
 
     for (uint alphaMode = 0; alphaMode <= 1; alphaMode++) // alpha mode == 3 meaning blend.
     {
@@ -155,7 +134,7 @@ static inline void renderVisibility(GLTFRenderContext& renderCtx, PoolBufferGPUO
     }
 }
 
-bool chord::gltfVisibilityRenderingStage0(GLTFRenderContext& renderCtx)
+bool chord::gltfVisibilityRenderingStage0(GLTFRenderContext& renderCtx, const HZBContext& hzbCtx)
 {
     bool bShouldInvokeStage1 = false;
     if (!shouldRenderGLTF(renderCtx))
@@ -168,13 +147,13 @@ bool chord::gltfVisibilityRenderingStage0(GLTFRenderContext& renderCtx)
         auto& pool = getContext().getBufferPool();
         ScopePerframeMarker marker(queue, "Visibility Stage#0");
 
-        if (renderCtx.history.hzbCtx.isValid() && enableGLTFHZBCulling())
+        if (hzbCtx.isValid() && enableGLTFHZBCulling())
         {
             bShouldInvokeStage1 = true;
 
             chord::CountAndCmdBuffer countAndCmdBuffers;
             auto [countBufferStage1, cmdBufferStage1] =
-                detail::hzbCulling(renderCtx, true, renderCtx.postBasicCullingCtx.meshletCountBuffer, renderCtx.postBasicCullingCtx.meshletCmdBuffer, countAndCmdBuffers);
+                detail::hzbCulling(hzbCtx, renderCtx, true, renderCtx.postBasicCullingCtx.meshletCountBuffer, renderCtx.postBasicCullingCtx.meshletCmdBuffer, countAndCmdBuffers);
 
             renderVisibility(renderCtx, countAndCmdBuffers.second, countAndCmdBuffers.first);
 
@@ -200,7 +179,7 @@ void chord::gltfVisibilityRenderingStage1(GLTFRenderContext& renderCtx, const HZ
     auto& queue = renderCtx.queue;
 
     chord::CountAndCmdBuffer countAndCmdBuffers;
-    detail::hzbCulling(renderCtx, false, countBufferStage1, cmdBufferStage1, countAndCmdBuffers);
+    detail::hzbCulling(hzbCtx, renderCtx, false, countBufferStage1, cmdBufferStage1, countAndCmdBuffers);
 
     renderVisibility(renderCtx, countAndCmdBuffers.second, countAndCmdBuffers.first);
 }

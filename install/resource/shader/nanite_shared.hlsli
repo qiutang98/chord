@@ -5,6 +5,82 @@
 #include "base.hlsli"
 #include "debug.hlsli"
 
+// One pixel threshold.
+#define kErrorPixelThreshold 1.0f
+#define kErrorRadiusRoot     3e38f
+
+// Meshlet group. 
+bool isMeshletGroupVisibile(
+    in const float renderHeight,
+    in const float cameraFovy,
+    in const GPUObjectGLTFPrimitive objectInfo,
+    in const float4x4 localToView,
+    in const GPUGLTFMeshletGroup meshletGroup)
+{
+
+    const bool bFinalLod = (meshletGroup.parentError > kErrorRadiusRoot);
+    const bool bFirstlOD = (meshletGroup.error < -0.5f);
+
+    if (!bFinalLod)
+    {
+        float4 sphere = transformSphere(float4(meshletGroup.parentPosCenter, meshletGroup.parentError), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
+        float parentError = projectSphereToScreen(sphere, renderHeight, cameraFovy);
+        if (parentError > 0.0f && parentError <= kErrorPixelThreshold) 
+        { 
+            // When eye in sphere, always > kErrorPixelThreshold, so visible.
+            return false; 
+        }
+    }
+
+    if (!bFirstlOD)
+    {
+        float4 sphere = transformSphere(float4(meshletGroup.clusterPosCenter, meshletGroup.error), localToView, objectInfo.basicData.scaleExtractFromMatrix.w);
+        float error = projectSphereToScreen(sphere, renderHeight, cameraFovy);
+        if (error < 0.0f || error > kErrorPixelThreshold) 
+        { 
+            // When eye in sphere, always > kErrorPixelThreshold, meaning unvisible.
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool isMeshletVisible(
+    in const uint switchFlags,
+    in const float4 frustumPlanes[6], 
+    in const GPUObjectGLTFPrimitive objectInfo,
+    in const float4x4 localToTranslatedWorld,
+    in const GPUGLTFMeshlet meshlet,
+    in const GLTFMaterialGPUData materialInfo)
+{
+    // Do cone culling before frustum culling, it compute faster.
+    if ((materialInfo.bTwoSided == 0) && shaderHasFlag(switchFlags, kMeshletConeCullEnableBit))
+    {
+    	float3 cameraPosLS = mul(objectInfo.basicData.translatedWorldToLocal, float4(0, 0, 0, 1)).xyz;
+        if (dot(normalize(meshlet.coneApex - cameraPosLS), meshlet.coneAxis) >= meshlet.coneCutOff)
+        {
+            return false;
+        }
+    }
+
+    const float3 posMin    = meshlet.posMin;
+    const float3 posMax    = meshlet.posMax;
+    const float3 posCenter = 0.5 * (posMin + posMax);
+    const float3 extent    = posMax - posCenter;
+
+    // Frustum visible culling: use obb.
+    if (shaderHasFlag(switchFlags, kFrustumCullingEnableBit))
+    {
+        if (frustumCulling(frustumPlanes, posCenter, extent, localToTranslatedWorld))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 struct TriangleMiscInfo
 {
     float4  positionHS[3];
@@ -15,7 +91,6 @@ struct TriangleMiscInfo
 };
 
 GPUGLTFMeshlet getTriangleMiscInfo(
-    in const PerframeCameraView perView,
     in const GPUBasicData scene,
     in const GPUObjectGLTFPrimitive objectInfo,
     in const bool bExistNormalTexture,

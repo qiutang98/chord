@@ -166,6 +166,7 @@ void DeferredRenderer::render(
 	uint gltfBufferId = ~0;
 	uint gltfObjectCount = 0;
 	uint32 viewGPUId;
+	uint32 mainViewInstanceCullingInfoId;
 	{
 		perframe.debugLineCtx = &debugLineCtx;
 
@@ -200,6 +201,15 @@ void DeferredRenderer::render(
 
 		// update debugline gpu.
 		debugLineCtx.cameraViewBufferId = viewGPUId;
+
+		{
+			InstanceCullingViewInfo mainViewInstanceCullingInfo{ };
+			for (uint i = 0; i < 6; i++)
+			{
+				mainViewInstanceCullingInfo.frustumPlanesRS[i] = m_perframeCameraView.frustumPlane[i];
+			}
+			mainViewInstanceCullingInfoId = uploadBufferToGPU(cmd, "MainViewInstanceCullingInfo" + m_name, &mainViewInstanceCullingInfo);
+		}
 	}
 
 	// 
@@ -235,17 +245,17 @@ void DeferredRenderer::render(
 
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
-			instanceCulling(gltfRenderCtx);
+			instanceCulling(gltfRenderCtx, mainViewInstanceCullingInfoId, 0);
 			insertTimer("GLTF Instance Culling", graphics);
 
 			// Prepass stage0
-			const bool bShouldStage1GLTF = gltfVisibilityRenderingStage0(gltfRenderCtx);
+			const bool bShouldStage1GLTF = gltfVisibilityRenderingStage0(gltfRenderCtx, m_rendererHistory.hzbCtx);
 			insertTimer("GLTF Visibility Stage0", graphics);
 
 			// Prepass stage1
 			if (bShouldStage1GLTF)
 			{
-				auto tempHzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, false);
+				auto tempHzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, false, false);
 				insertTimer("BuildHZB Post Prepass Stage0", graphics);
 
 				gltfVisibilityRenderingStage1(gltfRenderCtx, tempHzbCtx);
@@ -253,7 +263,7 @@ void DeferredRenderer::render(
 			}
 		}
 
-		hzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, true);
+		hzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, true, true);
 		insertTimer("BuildHZB", graphics);
 
 		VisibilityTileMarkerContext visibilityCtx;
@@ -266,6 +276,7 @@ void DeferredRenderer::render(
 			insertTimer("lighting Tile", graphics);
 		}
 
+		renderSky(graphics, gbuffers.color, gbuffers.depthStencil, viewGPUId, atmosphereLuts);
 
 		// Visualize for nanite.
 		if (shouldRenderGLTF(gltfRenderCtx))
@@ -274,11 +285,11 @@ void DeferredRenderer::render(
 			insertTimer("Nanite visualize", graphics);
 		}
 
-		renderSky(graphics, gbuffers.color, viewGPUId, atmosphereLuts);
+
 
 		check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 		check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);
-		tonemapping(graphics, gbuffers.color, finalOutput);
+		tonemapping(viewGPUId, graphics, gbuffers.color, finalOutput);
 		insertTimer("Tonemapping", graphics);
 
 		check(finalOutput->get().getExtent().width == gbuffers.depthStencil->get().getExtent().width);
@@ -299,6 +310,8 @@ void DeferredRenderer::render(
 GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
 {
 	GPUBasicData result { };
+
+	result.blueNoiseCtx = getContext().getBlueNoise().getGPUBlueNoiseCtx();
 
 	// Fill atmosphere first.
 	result.atmosphere = atmosphere;

@@ -17,7 +17,9 @@ namespace chord
     {
     public:
         DECLARE_SUPER_TYPE(GlobalShader);
-        using Permutation = TShaderVariantVector<SV_MipCount>;
+
+        class SV_bComputeValidRange : SHADER_VARIANT_BOOL("DIM_COMPUTE_VALID_RANGE");
+        using Permutation = TShaderVariantVector<SV_bComputeValidRange, SV_MipCount>;
     };
     IMPLEMENT_GLOBAL_SHADER(HZBCS, "resource/shader/hzb.hlsl", "mainCS", EShaderStage::Compute);
 
@@ -30,14 +32,16 @@ namespace chord
         using Permutation = TShaderVariantVector<SV_MipCount, SV_ReductionType>;
     };
     IMPLEMENT_GLOBAL_SHADER(HZBOneCS, "resource/shader/hzb_one.hlsl", "mainCS", EShaderStage::Compute);
-
-
     
-    HZBContext chord::buildHZB(GraphicsQueue& queue, PoolTextureRef depthImage, bool bBuildMin, bool bBuildMax)
+    HZBContext chord::buildHZB(GraphicsQueue& queue, PoolTextureRef depthImage, bool bBuildMin, bool bBuildMax, bool bBuildValidRange)
     {
+        // At least need to build one type.
         check(bBuildMin || bBuildMax);
 
-        uint32 depthWdith = depthImage->get().getExtent().width;
+        // When need to compute valid range, always need build two state.
+        if (bBuildValidRange) { check(bBuildMin && bBuildMax); }
+
+        uint32 depthWdith  = depthImage->get().getExtent().width;
         uint32 depthHeight = depthImage->get().getExtent().height;
 
         uint32 targetWidth  = getNextPOT(depthWdith)  / 2;
@@ -79,8 +83,21 @@ namespace chord
             pushConst.sceneDepthWidth = depthWdith;
             pushConst.sceneDepthHeight = depthHeight;
 
+            PoolBufferRef validDepthMinMaxDepthBuffer = nullptr;
+            if (bBuildValidRange)
+            {
+                auto maxMinDepthBuffer = getContext().getBufferPool().createGPUOnly("MaxMinDepthBuffer", sizeof(uint2), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                
+                uint clearRangeValue[2] = { ~0u, 0u }; // Min & Max.
+                queue.updateUAV(maxMinDepthBuffer, 0, sizeof(uint2), clearRangeValue);
+
+                pushConst.validDepthMinMaxBufferId = asUAV(queue, maxMinDepthBuffer);
+            }
+
             HZBCS::Permutation permutation;
             permutation.set<SV_MipCount>(ci.mipLevels);
+            permutation.set<HZBCS::SV_bComputeValidRange>(bBuildValidRange);
+
             auto computeShader = getContext().getShaderLibrary().getShader<HZBCS>(permutation);
 
             check(ci.mipLevels >= 6);
@@ -108,22 +125,24 @@ namespace chord
                         .push(pipe, 1); // Push set 1.
                 });
 
-            const uvec2 mip0Dimension = { targetWidth, targetHeight };
-            const uvec2 mip0ValidArea = { depthWdith / 2, depthHeight / 2 };
-            const vec2 validUv = math::clamp(vec2(mip0ValidArea) / vec2(mip0Dimension), 0.0f, 1.0f);
+            const math::uvec2 mip0Dimension = { targetWidth, targetHeight };
+            const math::uvec2 mip0ValidArea = { depthWdith / 2, depthHeight / 2 };
+            const math::vec2 validUv = math::clamp(math::vec2(mip0ValidArea) / math::vec2(mip0Dimension), 0.0f, 1.0f);
 
             HZBContext result(
                 hzbMinTexture,
                 hzbMaxTexture,
+                validDepthMinMaxDepthBuffer,
                 mip0Dimension,
                 ci.mipLevels,
                 mip0ValidArea,
                 validUv);
-
             return result;
         }
         else
         {
+            check(!bBuildValidRange);
+
             HZBOnePushConst pushConst{ };
             for (uint i = 0; i < ci.mipLevels; i++)
             {
@@ -166,18 +185,18 @@ namespace chord
                         .push(pipe, 1); // Push set 1.
                 });
 
-            const uvec2 mip0Dimension = { targetWidth, targetHeight };
-            const uvec2 mip0ValidArea = { depthWdith / 2, depthHeight / 2 };
-            const vec2 validUv = math::clamp(vec2(mip0ValidArea) / vec2(mip0Dimension), 0.0f, 1.0f);
+            const math::uvec2 mip0Dimension = { targetWidth, targetHeight };
+            const math::uvec2 mip0ValidArea = { depthWdith / 2, depthHeight / 2 };
+            const math::vec2 validUv = math::clamp(math::vec2(mip0ValidArea) / math::vec2(mip0Dimension), 0.0f, 1.0f);
 
             HZBContext result(
                 hzbMinTexture,
                 hzbMaxTexture,
+                nullptr,
                 mip0Dimension,
                 ci.mipLevels,
                 mip0ValidArea,
                 validUv);
-
             return result;
         }
 

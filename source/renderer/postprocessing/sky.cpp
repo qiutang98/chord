@@ -11,12 +11,14 @@ PRIVATE_GLOBAL_SHADER(RenderSkyCS, "resource/shader/sky.hlsl", "skyRenderCS", ES
 void chord::renderSky(
 	GraphicsQueue& queue, 
 	PoolTextureRef sceneColor, 
+	PoolTextureRef depthImage,
 	uint32 cameraViewId,
 	const AtmosphereLut& luts)
 {
 	SkyPushConsts pushConst{};
 
 	pushConst.cameraViewId  = cameraViewId;
+	pushConst.depthId = asSRV(queue, depthImage, helper::buildDepthImageSubresource());
 	pushConst.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
 	pushConst.sceneColorId  = asUAV(queue, sceneColor);
 

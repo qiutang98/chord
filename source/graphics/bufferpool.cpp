@@ -198,5 +198,11 @@ namespace chord::graphics
 			LOG_TRACE("Poolbuffer freeCount increment already reach {0}...", freeCount);
 		}
 	}
+
+	uint32 GPUBufferPool::HostVisiblePoolBuffer::getBindlessIndex() const
+	{
+		const auto& viewC = m_buffer->requireView(true, false);
+		return viewC.storage.get();
+	}
 }
 

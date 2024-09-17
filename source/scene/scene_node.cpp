@@ -47,7 +47,7 @@ namespace chord
 
         // Local2TranslatedWorld
         {
-            const dvec3& cameraWorldPos = camera->getPosition();
+            const double3& cameraWorldPos = camera->getPosition();
 
             // Apply camera offset.
             localToWorld[3][0] -= cameraWorldPos.x;
@@ -75,7 +75,7 @@ namespace chord
 
         // Local2TranslatedWorld last frame.
         {
-            const dvec3& cameraWorldPosLast = camera->getLastPosition();
+            const double3& cameraWorldPosLast = camera->getLastPosition();
             math::dmat4 localToWorldLast = getTransform()->getPrevWorldMatrix();
 
             // Apply camera offset.

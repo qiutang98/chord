@@ -7,6 +7,10 @@
 #include "bindless.hlsli"
 #endif
 
+#define kFrustumCullingEnableBit  0
+#define kHZBCullingEnableBit      1
+#define kMeshletConeCullEnableBit 2
+
 // id = ~0 if no exist.
 
 struct GPUBVHNode

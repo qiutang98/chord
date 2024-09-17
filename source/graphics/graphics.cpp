@@ -959,6 +959,7 @@ namespace chord::graphics
 				m_dummyUniform = std::make_shared<GPUBuffer>("DummyUniform", ci, vmaCI);
 			}
 
+			m_blueNoise = std::make_unique<BlueNoiseContext>();
 
 			// Imgui manager init.
 			m_imguiManager = std::make_unique<ImGuiManager>();
@@ -1020,6 +1021,7 @@ namespace chord::graphics
 		// Clear all builtin textures.
 		m_dummySSBO = nullptr;
 		m_dummyUniform = nullptr;
+		m_blueNoise = nullptr;
 		m_builtinTextures = {};
 		m_texturePool.reset();
 		m_bufferPool.reset();

@@ -5,8 +5,8 @@
     
     #include <utils/utils.h>
 
-    using namespace chord;
-    using namespace chord::math;
+    // using namespace chord;
+    // using namespace chord::math;
 
     // Type alias bool.
     using bool2 = chord::math::bvec2;
@@ -29,27 +29,22 @@
     using float3 = chord::math::vec3;
     using float4 = chord::math::vec4;
 
+    using double3 = chord::math::double3;
+
     // Type alias matrix.
     using float2x2 = chord::math::mat2;
     using float3x3 = chord::math::mat3;
     using float4x4 = chord::math::mat4;
     
-    constexpr auto kMaxPushConstSize = 128;
-
-    inline float4 lerp(const float4& x, const float4& y, const float4& a) { return math::mix(x, y, a); }
-    inline float3 lerp(const float3& x, const float3& y, const float3& a) { return math::mix(x, y, a); }
-    inline float3 lerp(const float3& x, const float3& y, const float   a) { return math::mix(x, y, a); }
-    inline float2 lerp(const float2& x, const float2& y, const float2& a) { return math::mix(x, y, a); }
-    inline float  lerp(const float   x, const float   y, const float   a) { return math::mix(x, y, a); }
-
-    inline float3 pow(const float3& base, float v)
+    namespace chord
     {
-        return math::pow(base, float3(v));
+        constexpr auto kMaxPushConstSize = 128;
     }
+
 
     // Cpp end check struct size match machine.
     #define CHORD_PUSHCONST(Type, Name) \
-        static_assert(sizeof(Type) <= kMaxPushConstSize)
+        static_assert(sizeof(Type) <= chord::kMaxPushConstSize)
 
     // Serialization relative.
     #define CHORD_DEFAULT_COMPARE_ARCHIVE(T)       \
@@ -60,22 +55,25 @@
     #define CHORD_CHECK_SIZE_GPU_SAFE(X) \
         static_assert(sizeof(X) % (4 * sizeof(float)) == 0)
 
-    static inline uint asuint(float floatValue)
+    namespace chord
     {
-        return *reinterpret_cast<uint*>(&floatValue);
-    }
+        static inline uint asuint(float floatValue)
+        {
+            return *reinterpret_cast<uint*>(&floatValue);
+        }
 
-    static inline void asuint(double doubleValue, uint& lowbits, uint& highbits)
-    {
-        const uint* data = (uint*)(&doubleValue);
+        static inline void asuint(double doubleValue, uint& lowbits, uint& highbits)
+        {
+            const uint* data = (uint*)(&doubleValue);
 
-        lowbits  = data[0];
-        highbits = data[1];
-    }
+            lowbits = data[0];
+            highbits = data[1];
+        }
 
-    static inline float asfloat(uint32 uintValue)
-    {
-        return *reinterpret_cast<float*>(&uintValue);
+        static inline float asfloat(uint uintValue)
+        {
+            return *reinterpret_cast<float*>(&uintValue);
+        }
     }
 
 #else  ///////////////////////////////////////////////////////
@@ -87,6 +85,13 @@
     #define ARCHIVE_DECLARE
 
 #endif ///////////////////////////////////////////////////////
+
+struct InstanceCullingViewInfo
+{
+    // Frustum plane relative main view world space.
+    float4 frustumPlanesRS[6];
+};
+CHORD_CHECK_SIZE_GPU_SAFE(InstanceCullingViewInfo);
 
 struct DensityProfileLayer 
 {
@@ -100,6 +105,7 @@ struct DensityProfileLayer
     float pad1;
     float pad2;
 };
+CHORD_CHECK_SIZE_GPU_SAFE(DensityProfileLayer);
 
 struct DensityProfile 
 {
@@ -181,16 +187,53 @@ struct AtmosphereParameters
     float3 earthCenterKm;
     float pad7;
 };
+CHORD_CHECK_SIZE_GPU_SAFE(AtmosphereParameters);
+
+struct GPUCascadeShadowMapConfig
+{
+    float basicLodOffset;
+    int physicalPageDim;
+
+    int minMipLevel;
+    int maxMipLevel;
+};
+CHORD_CHECK_SIZE_GPU_SAFE(GPUCascadeShadowMapConfig);
 
 struct SkyLightInfo
 {
     float3 direction;
     float  pad0;
+
+    GPUCascadeShadowMapConfig cascadeConfig;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(SkyLightInfo);
 
+struct GPUBlueNoise
+{
+    uint sobol;
+    uint rankingTile;
+    uint scramblingTile;
+    uint pad0;
+};
+
+struct GPUBlueNoiseContext
+{
+    GPUBlueNoise spp_1;
+    GPUBlueNoise spp_2;
+    GPUBlueNoise spp_4;
+    GPUBlueNoise spp_8;
+    GPUBlueNoise spp_16;
+#ifdef FULL_BLUE_NOISE_SPP
+    GPUBlueNoise spp_32;
+    GPUBlueNoise spp_64;
+    GPUBlueNoise spp_128;
+    GPUBlueNoise spp_256;
+#endif
+};
+
 struct GPUBasicData
 {
+    GPUBlueNoiseContext blueNoiseCtx;
     AtmosphereParameters atmosphere;
     SkyLightInfo sunInfo;
 
@@ -239,8 +282,8 @@ struct PerframeCameraView
 
     float4 renderDimension; //  .xy is width and height, .zw is inverse of .xy.
 
-    GPUStorageDouble4 cameraToEarthCenterKm; // .xyz store cameraPosition - earthCenter.
-    GPUStorageDouble4 cameraRelativeEarthKm; // Camera pos in km.
+    GPUStorageDouble4 cameraToEarthCenter_km; // .xyz store cameraPositionWS_km - earthCenter.
+    GPUStorageDouble4 cameraPositionWS_km; // Camera pos in km.
 
     // Camera world position, double precision.
     GPUStorageDouble4 cameraWorldPos;
@@ -343,6 +386,9 @@ enum class EShadingType
 #define kNaniteMaxLODCount        12
 #define kNaniteMaxBVHLevelCount   14
 #define kNaniteBVHLevelNodeCount  8
+
+// 4 meshlet per cluster group.
+#define kClusterGroupMergeMaxCount 4
 
 
 // NV 3070Ti, see VkPhysicalDeviceLimits::subpixelPrecisionBits

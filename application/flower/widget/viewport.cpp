@@ -416,7 +416,7 @@ void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* windo
 void ViewportCamera::updateMatrixMisc()
 {
 	// update view matrix, relative camera view.
-	m_relativeCameraViewMatrix = math::lookAt(vec3(0.0f), vec3(m_front), vec3(m_up));
+	m_relativeCameraViewMatrix = math::lookAt(math::vec3(0.0f), math::vec3(m_front), math::vec3(m_up));
 
 	// Reset z far to zero ensure we use infinite invert z.
 	m_projectMatrix = chord::infiniteInvertZPerspectiveRH_ZO(getAspect(), m_fovy, m_zNear);

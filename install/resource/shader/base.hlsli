@@ -371,6 +371,18 @@ float projectSphereToScreen(float4 sphere, float height, float fovy)
     return height * 0.5 / tan(halfFovy) * r / sqrt(d2 - r2);
 }
 
+// R2 based jitter sequence.
+uint2 jitterSequence(uint index, uint2 dimension, uint2 dispatchId)
+{
+	uint2 offset = uint2(float2(0.754877669, 0.569840296) * index * dimension);
+    uint2 offsetId = dispatchId + offset;
+
+    offsetId.x = offsetId.x % dimension.x;
+    offsetId.y = offsetId.y % dimension.y;
+
+	return offsetId;
+}
+
 // Uchimura 2017, "HDR theory and practice"
 // Math: https://www.desmos.com/calculator/gslcdxvipg
 // Source: https://www.slideshare.net/nikuque/hdr-theory-and-practicce-jp

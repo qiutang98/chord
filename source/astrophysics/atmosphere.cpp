@@ -237,7 +237,7 @@ void ComputeSpectralRadianceToLuminanceFactors(
     *k_b *= MAX_LUMINOUS_EFFICACY * dlambda;
 }
 
-static inline float3 interpolateFloat3(const std::vector<double>& wavelengths, const std::vector<double>& v, const vec3& lambdas, double scale)
+static inline float3 interpolateFloat3(const std::vector<double>& wavelengths, const std::vector<double>& v, const float3& lambdas, double scale)
 {
     double r = Interpolate(wavelengths, v, lambdas[0]) * scale;
     double g = Interpolate(wavelengths, v, lambdas[1]) * scale;
@@ -282,12 +282,12 @@ float3 chord::getEarthCenterKm()
     return float3(0.0f, -kBottomRadius / kLengthUnitInMeters, 0.0f);
 }
 
-double3 chord::getCameraToEarthCenterKm(const dvec3 cameraPosition, double3& cameraKm)
+double3 chord::getCameraToEarthCenterKm(const double3 cameraPosition, double3& cameraKm)
 {
     const float3 earthRelativeCenter = getEarthCenterKm();
 
     // 
-    cameraKm = cameraPosition;
+    cameraKm = cameraPosition / kLengthUnitInMeters;
 
     // 
     return cameraKm - double3(earthRelativeCenter);
@@ -780,7 +780,7 @@ void AtmosphereManager::computeLuts(graphics::CommandList& cmd, GraphicsQueue& q
         double dlambda = (lambdaMax - lambdaMin) / (3 * numIterations);
         for (int i = 0; i < numIterations; i++)
         {
-            vec3 lambdas
+            float3 lambdas
             {
                 lambdaMin + (3 * i + 0.5) * dlambda,
                 lambdaMin + (3 * i + 1.5) * dlambda,

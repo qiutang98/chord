@@ -7,10 +7,13 @@
 #include <renderer/mesh/gltf_rendering.h>
 #include <shader/shader.h>
 #include <shader/instance_culling.hlsl>
+#include <shader/pipeline_filter.hlsl>
+#include <shader/hzb_mainview_culling.hlsl>
 #include <renderer/compute_pass.h>
 #include <renderer/graphics_pass.h>
 #include <shader/base.h>
 #include <renderer/postprocessing/postprocessing.h>
+#include <renderer/renderer.h>
 
 using namespace chord;
 using namespace chord::graphics;
@@ -69,46 +72,15 @@ static inline bool shouldPrintDebugBox(bool bFirstStage)
 
 PRIVATE_GLOBAL_SHADER(InstanceCullingCS,       "resource/shader/instance_culling.hlsl", "instanceCullingCS",       EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(ClusterGroupCullingCS,   "resource/shader/instance_culling.hlsl", "clusterGroupCullingCS",   EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(FillCullingParamCS,      "resource/shader/instance_culling.hlsl", "fillCullingParamCS",      EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(FillPipelineDrawParamCS, "resource/shader/instance_culling.hlsl", "fillPipelineDrawParamCS", EShaderStage::Compute);
 
-class HZBCullCS : public GlobalShader
-{
-public:
-    DECLARE_SUPER_TYPE(GlobalShader);
-
-    class SV_bFirstStage : SHADER_VARIANT_BOOL("DIM_HZB_CULLING_PHASE_0");
-    class SV_bPrintDebugBox : SHADER_VARIANT_BOOL("DIM_PRINT_DEBUG_BOX");
-    using Permutation = TShaderVariantVector<SV_bFirstStage, SV_bPrintDebugBox>;
-};
-IMPLEMENT_GLOBAL_SHADER(HZBCullCS, "resource/shader/instance_culling.hlsl", "HZBCullingCS", EShaderStage::Compute);
-
-
-PoolBufferGPUOnlyRef chord::detail::fillIndirectDispatchCmd(GLTFRenderContext& renderCtx, const std::string& name, PoolBufferGPUOnlyRef countBuffer)
-{
-    auto meshletCullCmdBuffer = getContext().getBufferPool().createGPUOnly(name, sizeof(uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-    {
-        InstanceCullingPushConst push{ };
-        push.drawedMeshletCountId = asSRV(renderCtx.queue, countBuffer);
-        push.meshletCullCmdId = asUAV(renderCtx.queue, meshletCullCmdBuffer);
-
-        auto computeShader = getContext().getShaderLibrary().getShader<FillCullingParamCS>();
-        addComputePass2(renderCtx.queue,
-            name,
-            getContext().computePipe(computeShader, name),
-            push,
-            math::uvec3(1, 1, 1));
-    }
-
-    return meshletCullCmdBuffer;
-};
-
-void chord::instanceCulling(GLTFRenderContext& ctx)
+void chord::instanceCulling(GLTFRenderContext& ctx, uint instanceCullingViewInfo, uint instanceCullingViewInfoOffset)
 {
     if (!shouldRenderGLTF(ctx))
     {
         return;
     }
+
+    // Upload to GPU view id.
 
     auto& queue = ctx.queue;
     auto& gbuffers = ctx.gbuffers;
@@ -123,7 +95,9 @@ void chord::instanceCulling(GLTFRenderContext& ctx)
     check(lod0MeshletCount > 0 && clusterGroupCount > 0);
     queue.checkRecording();
 
-    const InstanceCullingPushConst pushTemplate { .cameraViewId = cameraView, .switchFlags = getInstanceCullingSwitchFlags() };
+    InstanceCullingPushConst pushTemplate { .cameraViewId = cameraView, .switchFlags = getInstanceCullingSwitchFlags() };
+    pushTemplate.instanceViewId = instanceCullingViewInfo;
+    pushTemplate.instanceViewOffset = instanceCullingViewInfoOffset;
 
     auto clusterGroupCountBuffer = pool.createGPUOnly("clusterGroupCountBuffer", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     auto clusterGroupIdBuffer = pool.createGPUOnly("clusterGroupIdBuffer", sizeof(uint2) * clusterGroupCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -133,7 +107,7 @@ void chord::instanceCulling(GLTFRenderContext& ctx)
 
         InstanceCullingPushConst push = pushTemplate;
         push.clusterGroupCountBuffer = asUAV(queue, clusterGroupCountBuffer);
-        push.clusterGroupIdBuffer    = asUAV(queue, clusterGroupIdBuffer);
+        push.clusterGroupIdBuffer = asUAV(queue, clusterGroupIdBuffer);
 
         auto computeShader = getContext().getShaderLibrary().getShader<InstanceCullingCS>();
 
@@ -151,19 +125,19 @@ void chord::instanceCulling(GLTFRenderContext& ctx)
 
 
     // Indirect dispatch parameter.
-    auto clusterGroupCullCmdBuffer = chord::detail::fillIndirectDispatchCmd(ctx, "ClusterGroupCullParam", clusterGroupCountBuffer);
+    auto clusterGroupCullCmdBuffer = indirectDispatchCmdFill("ClusterGroupCullParam", ctx.queue, 64, clusterGroupCountBuffer);
 
     auto drawMeshletCountBuffer = pool.createGPUOnly("drawMeshletCountBuffer", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    auto drawMeshletCmdBuffer   = pool.createGPUOnly("drawMeshletCmdBuffer",   sizeof(uint3) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    auto drawMeshletCmdBuffer = pool.createGPUOnly("drawMeshletCmdBuffer", sizeof(uint3) * lod0MeshletCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
     queue.clearUAV(drawMeshletCountBuffer);
     {
         ScopePerframeMarker marker(queue, "InstanceCulling: BVHTraverse");
 
         InstanceCullingPushConst push = pushTemplate;
-        push.clusterGroupCountBuffer  = asSRV(queue, clusterGroupCountBuffer);
-        push.clusterGroupIdBuffer     = asSRV(queue, clusterGroupIdBuffer);
-        push.drawedMeshletCountId     = asUAV(queue, drawMeshletCountBuffer);
-        push.drawedMeshletCmdId       = asUAV(queue, drawMeshletCmdBuffer);
+        push.clusterGroupCountBuffer = asSRV(queue, clusterGroupCountBuffer);
+        push.clusterGroupIdBuffer = asSRV(queue, clusterGroupIdBuffer);
+        push.drawedMeshletCountId = asUAV(queue, drawMeshletCountBuffer);
+        push.drawedMeshletCmdId = asUAV(queue, drawMeshletCmdBuffer);
 
         auto computeShader = getContext().getShaderLibrary().getShader<ClusterGroupCullingCS>();
         addIndirectComputePass2(queue,
@@ -173,11 +147,52 @@ void chord::instanceCulling(GLTFRenderContext& ctx)
             clusterGroupCullCmdBuffer);
     }
 
-    ctx.postBasicCullingCtx.meshletCmdBuffer   = drawMeshletCmdBuffer;
+    ctx.postBasicCullingCtx.meshletCmdBuffer = drawMeshletCmdBuffer;
     ctx.postBasicCullingCtx.meshletCountBuffer = drawMeshletCountBuffer;
 }
 
-static void fillHZBPushParam(GLTFRenderContext& renderCtx, InstanceCullingPushConst& push, const HZBContext& inHzb)
+
+// 
+PRIVATE_GLOBAL_SHADER(FilterPipelineParamCS, "resource/shader/pipeline_filter.hlsl", "filterPipelineParamCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(FillPipelineDrawParamCS, "resource/shader/pipeline_filter.hlsl", "fillPipelineDrawParamCS", EShaderStage::Compute);
+
+class HZBMainViewCullingCS : public GlobalShader
+{
+public:
+    DECLARE_SUPER_TYPE(GlobalShader);
+
+    class SV_bFirstStage : SHADER_VARIANT_BOOL("DIM_HZB_CULLING_PHASE_0");
+    class SV_bPrintDebugBox : SHADER_VARIANT_BOOL("DIM_PRINT_DEBUG_BOX");
+    using Permutation = TShaderVariantVector<SV_bFirstStage, SV_bPrintDebugBox>;
+};
+IMPLEMENT_GLOBAL_SHADER(HZBMainViewCullingCS, "resource/shader/hzb_mainview_culling.hlsl", "hzbMainViewCullingCS", EShaderStage::Compute);
+
+PoolBufferGPUOnlyRef chord::detail::filterPipelineIndirectDispatchCmd(
+    GLTFRenderContext& renderCtx, 
+    const std::string& name, 
+    graphics::PoolBufferGPUOnlyRef countBuffer)
+{
+    auto meshletCullCmdBuffer = getContext().getBufferPool().createGPUOnly(name, sizeof(math::uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    {
+        PipelineFilterPushConst push{ };
+        push.drawedMeshletCountId = asSRV(renderCtx.queue, countBuffer);
+        push.drawedMeshletCmdId = asUAV(renderCtx.queue, meshletCullCmdBuffer);
+
+        auto computeShader = getContext().getShaderLibrary().getShader<FilterPipelineParamCS>();
+        addComputePass2(renderCtx.queue,
+            name,
+            getContext().computePipe(computeShader, name),
+            push,
+            math::uvec3(1, 1, 1));
+    }
+
+    return meshletCullCmdBuffer;
+}
+
+
+
+
+static void fillHZBPushParam(GLTFRenderContext& renderCtx, HZBCullingPushConst& push, const HZBContext& inHzb)
 {
     // Texture SRV.
     push.hzb = asSRV(renderCtx.queue, inHzb.minHZB); //
@@ -195,7 +210,12 @@ static void fillHZBPushParam(GLTFRenderContext& renderCtx, InstanceCullingPushCo
 };
 
 chord::CountAndCmdBuffer chord::detail::hzbCulling(
-    GLTFRenderContext& renderCtx, bool bFirstStage, PoolBufferGPUOnlyRef inCountBuffer, PoolBufferGPUOnlyRef inCmdBuffer, CountAndCmdBuffer& outBuffer)
+    const HZBContext& inHzb,
+    GLTFRenderContext& renderCtx, 
+    bool bFirstStage,
+    PoolBufferGPUOnlyRef inCountBuffer, 
+    PoolBufferGPUOnlyRef inCmdBuffer, 
+    CountAndCmdBuffer& outBuffer)
 {
     const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
@@ -206,7 +226,7 @@ chord::CountAndCmdBuffer chord::detail::hzbCulling(
     PoolBufferGPUOnlyRef cmdBufferStage1 = nullptr;
 
     // Indirect dispatch parameter.
-    auto meshletCullCmdBuffer = chord::detail::fillIndirectDispatchCmd(renderCtx, "meshletCullCmdBufferParam", inCountBuffer);
+    auto meshletCullCmdBuffer = indirectDispatchCmdFill("meshletCullCmdBufferParam", renderCtx.queue, 64, inCountBuffer);
 
     // Count and cmd.
     auto countBuffer = pool.createGPUOnly("CountBuffer", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -224,8 +244,8 @@ chord::CountAndCmdBuffer chord::detail::hzbCulling(
         queue.clearUAV(countBufferStage1);
     }
 
-    InstanceCullingPushConst pushConst { .cameraViewId = renderCtx.cameraView, .switchFlags = getInstanceCullingSwitchFlags() };
-    fillHZBPushParam(renderCtx, pushConst, renderCtx.history.hzbCtx);
+    HZBCullingPushConst pushConst { .cameraViewId = renderCtx.cameraView, .switchFlags = getInstanceCullingSwitchFlags() };
+    fillHZBPushParam(renderCtx, pushConst, inHzb);
 
     pushConst.drawedMeshletCountId   = asSRV(queue, inCountBuffer);
     pushConst.drawedMeshletCmdId     = asSRV(queue, inCmdBuffer);
@@ -238,11 +258,11 @@ chord::CountAndCmdBuffer chord::detail::hzbCulling(
         pushConst.drawedMeshletCmdId_2   = asUAV(queue, cmdBufferStage1);
     }
 
-    HZBCullCS::Permutation permutation;
-    permutation.set<HZBCullCS::SV_bFirstStage>(bFirstStage);
-    permutation.set<HZBCullCS::SV_bPrintDebugBox>(shouldPrintDebugBox(bFirstStage));
+    HZBMainViewCullingCS::Permutation permutation;
+    permutation.set<HZBMainViewCullingCS::SV_bFirstStage>(bFirstStage);
+    permutation.set<HZBMainViewCullingCS::SV_bPrintDebugBox>(shouldPrintDebugBox(bFirstStage));
 
-    auto computeShader = getContext().getShaderLibrary().getShader<HZBCullCS>(permutation);
+    auto computeShader = getContext().getShaderLibrary().getShader<HZBMainViewCullingCS>(permutation);
     addIndirectComputePass2(queue,
         bFirstStage ? "HZBCulling: Stage#0" : "HZBCulling: Stage#1",
         getContext().computePipe(computeShader, "HZBCullingPipe"),
@@ -267,7 +287,7 @@ chord::CountAndCmdBuffer chord::detail::filterPipeForVisibility(GLTFRenderContex
 
     queue.clearUAV(countBuffer);
 
-    InstanceCullingPushConst pushConst{ .cameraViewId = renderCtx.cameraView, .switchFlags = getInstanceCullingSwitchFlags() };
+    PipelineFilterPushConst pushConst{ .cameraViewId = renderCtx.cameraView };
 
     pushConst.drawedMeshletCountId   = asSRV(queue, inCountBuffer);
     pushConst.drawedMeshletCmdId     = asSRV(queue, inCmdBuffer);

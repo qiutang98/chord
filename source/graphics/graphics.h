@@ -8,6 +8,7 @@
 #include <graphics/rendertargetpool.h>
 #include <graphics/uploader.h>
 #include <graphics/descriptor.h>
+#include <graphics/blue_noise/blue_noise.h>
 
 namespace chord::graphics
 {
@@ -223,6 +224,9 @@ namespace chord::graphics
 		void setPerfMarkerBegin(VkCommandBuffer cmdBuf, const char* name, const math::vec4& color) const;
 		void setPerfMarkerEnd(VkCommandBuffer cmdBuf) const;
 
+		BlueNoiseContext& getBlueNoise() { return *m_blueNoise; }
+		const BlueNoiseContext& getBlueNoise() const { return *m_blueNoise; }
+
 	public:
 		bool init(const InitConfig& config);
 		bool tick(const ApplicationTickData& tickData);
@@ -285,6 +289,9 @@ namespace chord::graphics
 		BuiltinTextures m_builtinTextures;
 		GPUBufferRef m_dummySSBO;
 		GPUBufferRef m_dummyUniform;
+
+		// Blue noise.
+		std::unique_ptr<BlueNoiseContext> m_blueNoise = nullptr;
 
 		// Descriptor allocator and layout cache.
 		DescriptorAllocator m_descriptorAllocator;

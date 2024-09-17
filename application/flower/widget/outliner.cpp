@@ -326,7 +326,7 @@ void WidgetOutliner::popupMenu()
 	if (bSelectedLessEqualOne)
 	{
 		const auto* camera = Flower::get().getActiveViewportCamera();
-		dvec3 relativeCameraPos = dvec3(0);
+		math::dvec3 relativeCameraPos = math::dvec3(0);
 		if (camera)
 		{
 			relativeCameraPos = camera->getPosition() + camera->getFront() * 5.0;
@@ -350,7 +350,7 @@ void WidgetOutliner::popupMenu()
 
 			newNode->getScene()->addComponent<SkyComponent>(std::make_shared<SkyComponent>(), newNode);
 			newNode->getTransform()->setTranslation(relativeCameraPos);
-			newNode->getTransform()->setRotation(vec3(-0.7854f, 0.0f, 0.0f));
+			newNode->getTransform()->setRotation(math::vec3(-0.7854f, 0.0f, 0.0f));
 		}
 	}
 

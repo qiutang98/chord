@@ -56,8 +56,8 @@ namespace chord
 	VisibilityTileContxt prepareShadingTileParam(GraphicsQueue& queue, EShadingType shadingType, const VisibilityTileMarkerContext& marker)
 	{
 		VisibilityTileContxt ctx{};
-		ctx.tileCmdBuffer = getContext().getBufferPool().createGPUOnly("shadingTileCmd", sizeof(uvec2) * marker.markerDim.x * marker.markerDim.y, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-		ctx.dispatchIndirectBuffer = getContext().getBufferPool().createGPUOnly("TileIndirectCmd", sizeof(uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+		ctx.tileCmdBuffer = getContext().getBufferPool().createGPUOnly("shadingTileCmd", sizeof(math::uvec2) * marker.markerDim.x * marker.markerDim.y, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		ctx.dispatchIndirectBuffer = getContext().getBufferPool().createGPUOnly("TileIndirectCmd", sizeof(math::uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 		
 		auto countBuffer = getContext().getBufferPool().createGPUOnly("count", sizeof(uint), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 		queue.clearUAV(countBuffer);

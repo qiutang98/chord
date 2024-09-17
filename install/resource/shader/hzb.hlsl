@@ -11,6 +11,9 @@ struct HZBPushConst
     uint numWorkGroups;
     uint sceneDepthWidth;
     uint sceneDepthHeight;  
+
+    // 
+    uint validDepthMinMaxBufferId;
 };
 CHORD_PUSHCONST(HZBPushConst, pushConsts);
 
@@ -133,6 +136,11 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
             const uint2 basicPos = workGroupId * 64 + xy * 2;
             const uint2 storePos = workGroupId * 32 + xy;
 
+        #if DIM_COMPUTE_VALID_RANGE
+            float zValidMax = -10.0;
+            float zValidMin =  10.0;
+        #endif
+
             // Mip 0 is 32x32
             [unroll(4)]
             for (int i = 0; i < 4; i++)
@@ -141,7 +149,25 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
                 float4 depth4 = loadSrcDepth4(basicPos + 32 * offsetBasic); // src: 32x32 pertile
                 depthMinMaxs[i] = float2(min4(depth4), max4(depth4));
                 storeHZB(depthMinMaxs[i], storePos + 16 * offsetBasic, 0); // mip0: 16x16 pertile
+
+            #if DIM_COMPUTE_VALID_RANGE
+                [flatten] if (depth4.x > 0.0) { zValidMax = max(zValidMax, depth4.x); zValidMin = min(zValidMin, depth4.x); }
+                [flatten] if (depth4.y > 0.0) { zValidMax = max(zValidMax, depth4.y); zValidMin = min(zValidMin, depth4.y); }
+                [flatten] if (depth4.z > 0.0) { zValidMax = max(zValidMax, depth4.z); zValidMin = min(zValidMin, depth4.z); }
+                [flatten] if (depth4.w > 0.0) { zValidMax = max(zValidMax, depth4.w); zValidMin = min(zValidMin, depth4.w); }
+            #endif
             }
+
+        #if DIM_COMPUTE_VALID_RANGE
+            float zValidMaxInWave = WaveActiveMax(zValidMax);
+            float zValidMinInWave = WaveActiveMin(zValidMin);
+            if (WaveIsFirstLane())
+            {
+                RWByteAddressBuffer bufferAcess = RWByteAddressBindless(pushConsts.validDepthMinMaxBufferId);
+                if (zValidMinInWave < 1.0) { uint o; bufferAcess.InterlockedMin(0, asuint(zValidMinInWave), o);  }
+                if (zValidMaxInWave > 0.0) { uint o; bufferAcess.InterlockedMax(4, asuint(zValidMaxInWave), o);  }
+            }
+        #endif
         }
 
         #if MIP_COUNT <= 1

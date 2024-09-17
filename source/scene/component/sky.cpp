@@ -56,7 +56,7 @@ float3 chord::SkyComponent::getSunDirection() const
 	{
 		const auto& worldMatrix = node->getTransform()->getWorldMatrix();
 		constexpr math::vec3 forward = math::vec3(0.0f, -1.0f, 0.0f);
-		auto result = math::normalize(math::vec3(worldMatrix * vec4(forward, 0.0f)));
+		auto result = math::normalize(math::vec3(worldMatrix * math::vec4(forward, 0.0f)));
 		if (result == forward)
 		{
 			result = math::normalize(math::vec3(1e-3f, -1.0f, 1e-3f));

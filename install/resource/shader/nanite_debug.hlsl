@@ -80,7 +80,6 @@ void mainPS(
 
     uint triangleIndexId;
     const GPUGLTFMeshlet meshlet = getTriangleMiscInfo(
-        perView, 
         scene, 
         objectInfo, 
         bExistNormalTexture, 

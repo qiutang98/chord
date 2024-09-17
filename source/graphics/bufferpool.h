@@ -85,6 +85,8 @@ namespace chord::graphics
 
 			const HostVisibleGPUBuffer& get() const { return *((HostVisibleGPUBuffer*)m_buffer.get()); }
 			HostVisibleGPUBuffer& get() { return *((HostVisibleGPUBuffer*)m_buffer.get()); }
+
+			uint32 getBindlessIndex() const;
 		};
 
 		std::shared_ptr<HostVisiblePoolBuffer> createHostVisible(

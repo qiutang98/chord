@@ -38,11 +38,11 @@ namespace chord
 		outUB.frustumPlane[4] = frustum.planes[4];
 		outUB.frustumPlane[5] = frustum.planes[5];
 
-		double3 cameraRelativeEarthKm;
-		double3 cameraToEarthCenterKm = getCameraToEarthCenterKm(m_position, cameraRelativeEarthKm);
+		double3 cameraPositionKm;
+		double3 cameraToEarthCenterKm = getCameraToEarthCenterKm(m_position, cameraPositionKm);
 
-		outUB.cameraRelativeEarthKm = fillDouble3(cameraRelativeEarthKm);
-		outUB.cameraToEarthCenterKm = fillDouble3(cameraToEarthCenterKm);
+		outUB.cameraPositionWS_km = fillDouble3(cameraPositionKm);
+		outUB.cameraToEarthCenter_km = fillDouble3(cameraToEarthCenterKm);
 		
 		//
 		outUB.cameraFovy = m_fovy;
@@ -52,11 +52,14 @@ namespace chord
 
 	Frustum ICamera::computeRelativeWorldFrustum() const
 	{
-        const math::vec3 forwardVector = math::normalize(m_front);
-		const math::vec3 upVector = math::normalize(m_up);
-		const math::vec3 rightVector = math::normalize(m_right);
+		// We always set camera position is zero to make relative rendering.
+		constexpr math::vec3 camWorldPos = math::vec3(0.0f);
 
-        const math::vec3 camWorldPos = math::vec3(0.0f);
+		//  
+        const math::vec3 forwardVector = math::normalize(m_front);
+		const math::vec3 upVector      = math::normalize(m_up);
+		const math::vec3 rightVector   = math::normalize(m_right);
+
         const float tanFovyHalf = math::tan(getFovY() * 0.5f);
         const float aspect = getAspect();
 

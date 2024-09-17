@@ -375,6 +375,8 @@ namespace chord
 		graphics::PoolTextureRef minHZB = nullptr;
 		graphics::PoolTextureRef maxHZB = nullptr;
 
+		graphics::PoolBufferRef validDepthRange = nullptr;
+
 		math::uvec2 dimension; // Texture extent.
 		uint32 mipmapLevelCount;
 
@@ -385,12 +387,14 @@ namespace chord
 		HZBContext(
 			graphics::PoolTextureRef minHzb, 
 			graphics::PoolTextureRef maxHzb,
+			graphics::PoolBufferRef validDepthRange,
 			math::uvec2 dimension,
 			uint32 mipmapLevelCount,
 			math::uvec2 mip0ValidArea,
 			math::vec2  validUv)
 			: minHZB(minHzb)
 			, maxHZB(maxHzb)
+			, validDepthRange(validDepthRange)
 			, dimension(dimension)
 			, mipmapLevelCount(mipmapLevelCount)
 			, mip0ValidArea(mip0ValidArea)

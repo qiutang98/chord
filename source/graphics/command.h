@@ -102,6 +102,8 @@ namespace chord::graphics
 		void transition(PoolBufferRef buffer, VkAccessFlags flag);
 		void clearImage(PoolTextureRef image, const VkClearColorValue* clear, uint32 rangeCount, const VkImageSubresourceRange* ranges);
 		void clearUAV(PoolBufferRef buffer, uint32 data = 0U);
+		void fillUAV(PoolBufferRef buffer, uint32 offset, uint32 size, uint32 data);
+		void updateUAV(PoolBufferRef buffer, uint32 offset, uint32 size, const void* data);
 	};
 
 	class GraphicsQueue : public GraphicsOrComputeQueue
