@@ -2,6 +2,7 @@
 
 0. GPU Scene与Full Bindless资源系统。
 1. [Nanite风格的无缝网格LOD渲染。](https://qiutang98.github.io/post/%E5%AE%9E%E6%97%B6%E6%B8%B2%E6%9F%93%E5%BC%80%E5%8F%91/mynanite01_mesh_processor/)
+2. [更快更好的Cached Cascade Shadow Map与PCSS。](https://qiutang98.github.io/post/%E5%AE%9E%E6%97%B6%E6%B8%B2%E6%9F%93%E5%BC%80%E5%8F%91/fasterpcss/)
 
 ![image](gallery/Nanite.png)
 
