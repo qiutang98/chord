@@ -165,4 +165,10 @@ SamplerState getPointClampEdgeSampler(PerframeCameraView perView)
     return pointClampSampler;
 }
 
+SamplerState getLinearClampEdgeSampler(PerframeCameraView perView)
+{
+    SamplerState linearClampSampler = Bindless(SamplerState, perView.basicData.linearClampEdgeSampler);
+    return linearClampSampler;
+}
+
 #endif // !SHADER_BINDLESS_HLSLI

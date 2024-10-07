@@ -23,9 +23,9 @@ namespace chord::graphics::helper
 		return range;
 	}
 
-	static inline VkImageSubresourceRange buildDepthImageSubresource()
+	static inline VkImageSubresourceRange buildDepthImageSubresource(bool bStencil = false)
 	{
-		return buildBasicImageSubresource(VK_IMAGE_ASPECT_DEPTH_BIT);
+		return buildBasicImageSubresource(bStencil ? VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
 	static inline VkImageCreateInfo buildBasicUploadImageCreateInfo(uint32 texWidth, uint32 texHeight, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM)

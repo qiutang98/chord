@@ -9,7 +9,9 @@ struct LightingPushConsts
     uint cameraViewId;
     uint tileBufferCmdId;
     uint visibilityId;
+
     uint sceneColorId;
+    uint normalRSId;
 
     uint drawedMeshletCmdId;
 };
@@ -18,6 +20,7 @@ CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 #ifndef __cplusplus // HLSL only area.
 
 #include "nanite_shared.hlsli"
+#include "colorspace.h"
 
 float3 gltfMetallicRoughnessPBR(
     in const PerframeCameraView perView,
@@ -26,7 +29,8 @@ float3 gltfMetallicRoughnessPBR(
     in const GLTFMaterialGPUData materialInfo,
     in const TriangleMiscInfo triangleInfo,
     in const bool bExistNormalTexture,
-    in const uint2 dispatchPos)
+    in const uint2 dispatchPos,
+    out float3 worldNormal)
 {
     // Screen uv. 
     const float2 screenUV = (dispatchPos + 0.5) * pushConsts.visibilityTexelSize;
@@ -54,6 +58,7 @@ float3 gltfMetallicRoughnessPBR(
         SamplerState baseColorSampler      = Bindless(SamplerState, materialInfo.baseColorSampler);
         baseColor = baseColorTexture.SampleGrad(baseColorSampler, meshUv, meshUv_ddx, meshUv_ddy) * materialInfo.baseColorFactor;
     }
+    baseColor.xyz = mul(sRGB_2_AP1, baseColor.xyz);
 
     // Vertex normal.
     const float3 vertNormalRS = triangleInfo.normalRS[0] * barycentric.x + triangleInfo.normalRS[1] * barycentric.y + triangleInfo.normalRS[2] * barycentric.z;
@@ -85,13 +90,8 @@ float3 gltfMetallicRoughnessPBR(
         normalRS = vertNormalRS;
     }
     
+    worldNormal = vertNormalRS;
     return baseColor.xyz * dot(normalRS, -scene.sunInfo.direction);// ;
-}
-
-void storeColor(uint2 pos, float3 c)
-{
-    RWTexture2D<float3> rwSceneColor = TBindless(RWTexture2D, float3, pushConsts.sceneColorId);
-    rwSceneColor[pos] = c;
 }
 
 [numthreads(64, 1, 1)]
@@ -101,7 +101,14 @@ void mainCS(
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
     const GPUBasicData scene = perView.basicData;
 
-    Texture2D<uint> visibilityTexture = TBindless(Texture2D, uint, pushConsts.visibilityId);
+    //
+    Texture2D<uint> visibilityTexture  = TBindless(Texture2D, uint,  pushConsts.visibilityId);
+
+    // 
+    RWTexture2D<float3> rwSceneColor = TBindless(RWTexture2D, float3, pushConsts.sceneColorId);
+    RWTexture2D<float4> rwNormalRS   = TBindless(RWTexture2D, float4, pushConsts.normalRSId);
+
+    SamplerState pointClampSampler = getPointClampEdgeSampler(perView);
 
     //
     uint cachePackId = 0;
@@ -120,12 +127,14 @@ void mainCS(
     for (uint i = 0; i < 4; i ++)
     {
         const uint2 dispatchPos = tileOffset + remap8x8((localThreadIndex % 16) * 4 + i);
+        const float2 screenUV = (dispatchPos + 0.5) * pushConsts.visibilityTexelSize;
 
         uint packID = 0;
         if (all(dispatchPos <= pushConsts.visibilityDim))
         {
             packID = visibilityTexture[dispatchPos];
         }
+
 
         [branch]
         if (packID != 0 && cachePackId != packID)
@@ -162,8 +171,11 @@ void mainCS(
         [branch]
         if (packID != 0 && materialInfo.materialType == kLightingType_GLTF_MetallicRoughnessPBR)
         {
-            float3 c = gltfMetallicRoughnessPBR(perView, scene, objectInfo, materialInfo, triangleInfo, bExistNormalTexture, dispatchPos);
-            storeColor(dispatchPos, c);
+            float3 worldNormal;
+            float3 c = gltfMetallicRoughnessPBR(perView, scene, objectInfo, materialInfo, triangleInfo, bExistNormalTexture, dispatchPos, worldNormal);
+
+            rwSceneColor[dispatchPos] = c;
+            rwNormalRS[dispatchPos]   = float4(worldNormal * 0.5 + 0.5, 1.0f);
         }
     #endif 
     }

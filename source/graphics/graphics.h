@@ -125,6 +125,7 @@ namespace chord::graphics
 
 		// Engine built textures.
 		const BuiltinTextures& getBuiltinTextures() const { return m_builtinTextures; }
+		uint32 getWhiteTextureSRV() const;
 
 		// Create a stage upload buffer, commonly only used for engine init.
 		HostVisibleGPUBufferRef createStageUploadBuffer(const std::string& name, SizedBuffer data);

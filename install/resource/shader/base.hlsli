@@ -29,6 +29,11 @@ float2 log10(float2 x) { return log(x) / log(10.0); }
 float3 log10(float3 x) { return log(x) / log(10.0); }
 float4 log10(float4 x) { return log(x) / log(10.0); }
 
+float1 linstep(float1 min, float1 max, float1 v) { return clamp((v - min) / (max - min), 0, 1); }
+float2 linstep(float2 min, float2 max, float2 v) { return clamp((v - min) / (max - min), 0, 1); }
+float3 linstep(float3 min, float3 max, float3 v) { return clamp((v - min) / (max - min), 0, 1); }
+float4 linstep(float4 min, float4 max, float4 v) { return clamp((v - min) / (max - min), 0, 1); }
+
 double3 asDouble3(GPUStorageDouble4 v)
 {
     double3 d;
@@ -155,6 +160,37 @@ float4 transformSphere(float4 sphere, float4x4 nonPerspectiveProj, float maxScal
     result.w = maxScaleAbs * sphere.w;
 
     return result;
+}
+
+const bool isOrthoProjection(float4x4 projectMatrix)
+{
+    return projectMatrix[3][3] == 1.0f;
+}
+
+
+// Project to ndc do frustum culling.
+// Return true if culled.
+bool orthoFrustumCulling(float3 centerLS, float3 extentLS, float4x4 localToClip)
+{
+    float3 extentUVz[8];
+    [unroll(8)] 
+    for (uint k = 0; k < 8; k ++)
+    {
+        const float3 extentPos = centerLS + extentLS * kExtentApplyFactor[k];
+        extentUVz[k] = projectPosToUVz(extentPos, localToClip);
+    }
+
+    float3 minUVz =  10.0f;
+    float3 maxUVz = -10.0f;
+    [unroll(8)] 
+    for(uint j = 0; j < 8; j ++)
+    {
+        minUVz = min(minUVz, extentUVz[j]);
+        maxUVz = max(maxUVz, extentUVz[j]);
+    }
+
+    // Only do non cross near or far plane culling.
+    return any(minUVz.xy >= 1) || any(maxUVz.xy <= 0); 
 }
 
 // Return true if culled. 
@@ -374,13 +410,39 @@ float projectSphereToScreen(float4 sphere, float height, float fovy)
 // R2 based jitter sequence.
 uint2 jitterSequence(uint index, uint2 dimension, uint2 dispatchId)
 {
-	uint2 offset = uint2(float2(0.754877669, 0.569840296) * index * dimension);
+    // 0.7548776662467, 0.569840290998
+    // 0.2451223337530, 0.430159709002
+	uint2 offset = uint2(float2(0.7548776662467, 0.569840290998) * index * dimension);
     uint2 offsetId = dispatchId + offset;
 
     offsetId.x = offsetId.x % dimension.x;
     offsetId.y = offsetId.y % dimension.y;
 
 	return offsetId;
+}
+
+uint2 jitterSequence2(uint index, uint2 dimension, uint2 dispatchId)
+{
+    // 0.7548776662467, 0.569840290998
+    // 0.2451223337530, 0.430159709002
+	uint2 offset = uint2(float2(0.2451223337530, 0.430159709002) * index * dimension);
+    uint2 offsetId = dispatchId + offset;
+
+    offsetId.x = offsetId.x % dimension.x;
+    offsetId.y = offsetId.y % dimension.y;
+
+	return offsetId;
+}
+
+// high frequency dither pattern appearing almost random without banding steps
+// note: from "NEXT GENERATION POST PROCESSING IN CALL OF DUTY: ADVANCED WARFARE"
+//      http://advances.realtimerendering.com/s2014/index.html
+float interleavedGradientNoise(float2 uv, float frameId)
+{
+	// magic values are found by experimentation
+	uv += frameId * (float2(47.0, 17.0) * 0.695f);
+    const float3 magic = float3(0.06711056f, 0.00583715f, 52.9829189f);
+    return frac(magic.z * frac(dot(uv, magic.xy)));
 }
 
 // Uchimura 2017, "HDR theory and practice"
@@ -436,5 +498,130 @@ float henyeyGreensteinPhase(float g, float VoL)
 }
 
 // NOTE: henyeyGreensteinPhase looks same with cornetteShanksMiePhase in most case and henyeyGreensteinPhase compute faster.
+
+
+// Right hand look at matrix.
+float4x4 lookAt_RH(float3 eye, float3 center, float3 up)
+{
+    const float3 f = normalize(center - eye);
+    const float3 s = normalize(cross(f, up));
+    const float3 u = cross(s, f);
+
+    float4x4 ret;
+
+    ret[0][0] = s.x; 
+    ret[0][1] = u.x; 
+    ret[0][2] =-f.x; 
+    ret[0][3] = 0.0; 
+
+    ret[1][0] = s.y; 
+    ret[1][1] = u.y;
+    ret[1][2] =-f.y;
+    ret[1][3] = 0.0;
+
+    ret[2][0] = s.z; 
+    ret[2][1] = u.z; 
+    ret[2][2] =-f.z; 
+    ret[2][3] = 0.0;
+
+    ret[3][0] = -dot(s, eye);
+    ret[3][1] = -dot(u, eye);
+    ret[3][2] =  dot(f, eye);
+    ret[3][3] = 1.0;
+
+    return ret;
+}
+
+float4x4 ortho_RH_ZeroOne(float left, float right, float bottom, float top, float zNear, float zFar)
+{
+    float4x4 ret;
+
+    ret[0][0] =   2.0f / (right - left);
+    ret[1][1] =   2.0f / (top - bottom);
+    ret[2][2] =  -1.0f / (zFar - zNear);
+    ret[3][0] = -(right + left) / (right - left);
+    ret[3][1] = -(top + bottom) / (top - bottom);
+    ret[3][2] = -zNear / (zFar - zNear);
+    ret[3][3] =  1.0;
+
+    return ret;
+}
+
+float4x4 matrixInverse(float4x4 m)
+{
+	float n11 = m[0][0], n12 = m[1][0], n13 = m[2][0], n14 = m[3][0];
+	float n21 = m[0][1], n22 = m[1][1], n23 = m[2][1], n24 = m[3][1];
+	float n31 = m[0][2], n32 = m[1][2], n33 = m[2][2], n34 = m[3][2];
+	float n41 = m[0][3], n42 = m[1][3], n43 = m[2][3], n44 = m[3][3];
+
+	float t11 = n23 * n34 * n42 - n24 * n33 * n42 + n24 * n32 * n43 - n22 * n34 * n43 - n23 * n32 * n44 + n22 * n33 * n44;
+	float t12 = n14 * n33 * n42 - n13 * n34 * n42 - n14 * n32 * n43 + n12 * n34 * n43 + n13 * n32 * n44 - n12 * n33 * n44;
+	float t13 = n13 * n24 * n42 - n14 * n23 * n42 + n14 * n22 * n43 - n12 * n24 * n43 - n13 * n22 * n44 + n12 * n23 * n44;
+	float t14 = n14 * n23 * n32 - n13 * n24 * n32 - n14 * n22 * n33 + n12 * n24 * n33 + n13 * n22 * n34 - n12 * n23 * n34;
+
+	float det = n11 * t11 + n21 * t12 + n31 * t13 + n41 * t14;
+	float idet = 1.0f / det;
+
+	float4x4 ret;
+
+	ret[0][0] = t11 * idet;
+	ret[0][1] = (n24 * n33 * n41 - n23 * n34 * n41 - n24 * n31 * n43 + n21 * n34 * n43 + n23 * n31 * n44 - n21 * n33 * n44) * idet;
+	ret[0][2] = (n22 * n34 * n41 - n24 * n32 * n41 + n24 * n31 * n42 - n21 * n34 * n42 - n22 * n31 * n44 + n21 * n32 * n44) * idet;
+	ret[0][3] = (n23 * n32 * n41 - n22 * n33 * n41 - n23 * n31 * n42 + n21 * n33 * n42 + n22 * n31 * n43 - n21 * n32 * n43) * idet;
+
+	ret[1][0] = t12 * idet;
+	ret[1][1] = (n13 * n34 * n41 - n14 * n33 * n41 + n14 * n31 * n43 - n11 * n34 * n43 - n13 * n31 * n44 + n11 * n33 * n44) * idet;
+	ret[1][2] = (n14 * n32 * n41 - n12 * n34 * n41 - n14 * n31 * n42 + n11 * n34 * n42 + n12 * n31 * n44 - n11 * n32 * n44) * idet;
+	ret[1][3] = (n12 * n33 * n41 - n13 * n32 * n41 + n13 * n31 * n42 - n11 * n33 * n42 - n12 * n31 * n43 + n11 * n32 * n43) * idet;
+
+	ret[2][0] = t13 * idet;
+	ret[2][1] = (n14 * n23 * n41 - n13 * n24 * n41 - n14 * n21 * n43 + n11 * n24 * n43 + n13 * n21 * n44 - n11 * n23 * n44) * idet;
+	ret[2][2] = (n12 * n24 * n41 - n14 * n22 * n41 + n14 * n21 * n42 - n11 * n24 * n42 - n12 * n21 * n44 + n11 * n22 * n44) * idet;
+	ret[2][3] = (n13 * n22 * n41 - n12 * n23 * n41 - n13 * n21 * n42 + n11 * n23 * n42 + n12 * n21 * n43 - n11 * n22 * n43) * idet;
+
+	ret[3][0] = t14 * idet;
+	ret[3][1] = (n13 * n24 * n31 - n14 * n23 * n31 + n14 * n21 * n33 - n11 * n24 * n33 - n13 * n21 * n34 + n11 * n23 * n34) * idet;
+	ret[3][2] = (n14 * n22 * n31 - n12 * n24 * n31 - n14 * n21 * n32 + n11 * n24 * n32 + n12 * n21 * n34 - n11 * n22 * n34) * idet;
+	ret[3][3] = (n12 * n23 * n31 - n13 * n22 * n31 + n13 * n21 * n32 - n11 * n23 * n32 - n12 * n21 * n33 + n11 * n22 * n33) * idet;
+
+	return ret;
+}
+
+// 3x3 Sample pattern
+// 
+static const int2 k3x3QuadSampleSigned[4] = 
+{
+    int2(-1, -1),
+    int2(+1, -1),
+    int2(-1, +1),
+    int2(+1, +1),
+};
+
+static const int2 k3x3QuadSampleOffset[4] = 
+{
+    int2(0, 0), // Central
+    int2(1, 1),
+    int2(0, 1),
+    int2(1, 0),
+};
+
+
+// 
+float chebyshevUpperBound(float2 moments, float mean, float minVariance)
+{
+    // Standard shadow map comparison
+    float p = (mean >= moments.x);
+    
+    // Compute variance
+    float variance = moments.y - (moments.x * moments.x);
+    variance = max(variance, minVariance);
+    
+    // Compute probabilistic upper bound
+    float d     = mean - moments.x;
+    float p_max = variance / (variance + d * d);
+    
+    return max(p, p_max);
+}
+
 
 #endif // !SHADER_BASE_HLSLI

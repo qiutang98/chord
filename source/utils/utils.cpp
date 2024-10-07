@@ -74,7 +74,7 @@ void chord::setConsoleFont(const std::vector<ConsoleFontConfig>& fontTypes)
 void chord::debugBreak()
 {
 #if CHORD_DEBUG
-	__debugbreak();
+__debugbreak();
 #endif 
 }
 
@@ -252,7 +252,7 @@ chord::IResource::IResource()
 {
 	sResourceAliveCounter ++;
 
-	if (sResourceAliveCounter % 1000 == 0)
+	if (sResourceAliveCounter % 10000 == 0)
 	{
 		LOG_TRACE("Live resource count already reach {}.", sResourceAliveCounter);
 	}

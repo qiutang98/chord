@@ -154,9 +154,13 @@ namespace chord::graphics
 		auto range = inRange;
 
 		// 
-		if (hasFlag(range.aspectMask, VK_IMAGE_ASPECT_DEPTH_BIT) || hasFlag(range.aspectMask, VK_IMAGE_ASPECT_STENCIL_BIT))
+		if (hasFlag(range.aspectMask, VK_IMAGE_ASPECT_DEPTH_BIT))
 		{
 			range.aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+		}
+
+		if (hasFlag(range.aspectMask, VK_IMAGE_ASPECT_STENCIL_BIT))
+		{
 			range.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		}
 

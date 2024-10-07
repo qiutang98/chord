@@ -67,6 +67,7 @@ void instanceCullingCS(uint workGroupId : SV_GroupID, uint localThreadIndex : SV
         const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
 
         const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
+        const float4x4 localToClip = mul(instanceView.translatedWorldToClip, localToTranslatedWorld);
 
         const float3 posMin    = primitiveInfo.posMin;
         const float3 posMax    = primitiveInfo.posMax;
@@ -76,11 +77,15 @@ void instanceCullingCS(uint workGroupId : SV_GroupID, uint localThreadIndex : SV
         // Frustum visible culling: use obb.
         if (bVisible && shaderHasFlag(pushConsts.switchFlags, kFrustumCullingEnableBit))
         {
-            if (frustumCulling(instanceView.frustumPlanesRS, posCenter, extent, localToTranslatedWorld))
+            if (isOrthoProjection(localToClip))
             {
-                bVisible = false;
+                bVisible = !orthoFrustumCulling(posCenter, extent, localToClip);
+            } 
+            else 
+            {
+                bVisible = !frustumCulling(instanceView.frustumPlanesRS, posCenter, extent, localToTranslatedWorld);
             }
-        }
+        } 
 
         if (bVisible)
         {
@@ -156,10 +161,13 @@ void clusterGroupCullingCS(uint threadId : SV_DispatchThreadID)
     float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
 
     // Use main view's factor to know what lod should we use.
-    float4x4 localToView = mul(perView.translatedWorldToView, localToTranslatedWorld);
+    const float4x4 localToView = mul(perView.translatedWorldToView, localToTranslatedWorld);
+    const float4x4 localToClip = mul(instanceView.translatedWorldToClip, localToTranslatedWorld);
 
     uint visibleMeshletCount = 0;
     uint visibleMeshletId[kClusterGroupMergeMaxCount];
+
+    // Use main view's factor to know what lod should we use.
     if (isMeshletGroupVisibile(perView.renderDimension.y, perView.cameraFovy, objectInfo, localToView, meshletGroup))
     {
         for (uint i = 0; i < meshletGroup.meshletCount; i ++)
@@ -168,7 +176,7 @@ void clusterGroupCullingCS(uint threadId : SV_DispatchThreadID)
             const uint meshletIndex = primitiveInfo.meshletOffset + meshletGroupIndicesBuffer.TypeLoad(uint, meshletIndicesLoadId);
             const GPUGLTFMeshlet meshlet = meshletBuffer.TypeLoad(GPUGLTFMeshlet, meshletIndex);
 
-            if (isMeshletVisible(pushConsts.switchFlags, instanceView.frustumPlanesRS, objectInfo, localToTranslatedWorld, meshlet, materialInfo))
+            if (isMeshletVisible(pushConsts.switchFlags, instanceView.frustumPlanesRS, objectInfo, localToTranslatedWorld, localToClip, meshlet, materialInfo))
             {
                 visibleMeshletId[visibleMeshletCount] = meshletIndex;
                 visibleMeshletCount ++;

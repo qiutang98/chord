@@ -16,7 +16,7 @@ CHORD_PUSHCONST(TonemappingPushConsts, pushConsts);
 
 #include "bindless.hlsli" 
 #include "fullscreen.hlsl"
-#include "blue_noise.hlsli"
+#include "noise.hlsli"
 #include "aces.hlsli"
 
 static const float3x3 sRGB_2_AP1 = mul(XYZ_2_AP1_MAT,  mul(D65_2_D60_CAT, sRGB_2_XYZ_MAT));
@@ -147,7 +147,7 @@ void mainPS(
     float4 sampleColor = inputTexture.Sample(pointClampSampler, input.uv);
 
 
-    float3 colorAp1 = mul(sRGB_2_AP1, sampleColor.xyz);
+    float3 colorAp1 = sampleColor.xyz; // mul(sRGB_2_AP1, sampleColor.xyz);
 
     colorAp1 = filmToneMap(
         colorAp1, 

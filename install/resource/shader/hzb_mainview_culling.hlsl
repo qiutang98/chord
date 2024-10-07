@@ -11,11 +11,6 @@ struct HZBCullingPushConst
     uint switchFlags;
 
     uint  hzb; // hzb texture id.  
-    uint  hzbMipCount;
-    float uv2HzbX;
-    float uv2HzbY;
-    uint  hzbMip0Width;
-    uint  hzbMip0Height;
 
     uint drawedMeshletCountId;
     uint drawedMeshletCmdId;
@@ -25,7 +20,7 @@ struct HZBCullingPushConst
     uint drawedMeshletCmdId_2;
 };
 CHORD_PUSHCONST(HZBCullingPushConst, pushConsts);
-
+ 
 #ifndef __cplusplus // HLSL only area.
 
 #include "bindless.hlsli"
@@ -115,8 +110,6 @@ void hzbMainViewCullingCS(uint threadId : SV_DispatchThreadID)
             pixelRect.xy = max(0, pixelRect.xy);
             pixelRect.zw = min(perView.renderDimension.xy - 1, pixelRect.zw);
 
-
-
             // 
             if (any(pixelRect.zw < pixelRect.xy))
             {
@@ -178,9 +171,9 @@ void hzbMainViewCullingCS(uint threadId : SV_DispatchThreadID)
     if (WaveIsFirstLane())
     {
         visibleStoreBaseId   = interlockedAddUint(pushConsts.drawedMeshletCountId_1, visibleCount);
-#if DIM_HZB_CULLING_PHASE_0
+    #if DIM_HZB_CULLING_PHASE_0
         unvisibleStoreBaseId = interlockedAddUint(pushConsts.drawedMeshletCountId_2, unVisibleCount);
-#endif
+    #endif
     }
 
     visibleStoreBaseId   = WaveReadLaneFirst(visibleStoreBaseId);

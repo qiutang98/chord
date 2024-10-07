@@ -25,7 +25,7 @@ namespace chord
 				ui::inspectAssetSaveInfo(meshComponent->m_gltfAssetInfo);
 				if (!meshComponent->m_gltfAssetInfo.empty())
 				{
-					ImGui::SameLine(); ImGui::TextDisabled("Choose mesh id: #%d.", meshComponent->m_gltfMeshId);
+					ImGui::TextDisabled("Choose mesh id: #%d.", meshComponent->m_gltfMeshId);
 				}
 			}
 

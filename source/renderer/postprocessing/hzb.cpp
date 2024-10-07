@@ -47,6 +47,9 @@ namespace chord
         uint32 targetWidth  = getNextPOT(depthWdith)  / 2;
         uint32 targetHeight = getNextPOT(depthHeight) / 2;
 
+        if (targetWidth == depthWdith) { targetWidth /= 2; }
+        if (targetHeight == depthHeight) { targetHeight /= 2; }
+
         PoolTextureCreateInfo ci{};
         ci.format    = VK_FORMAT_R16_SFLOAT;
         ci.extent    = { targetWidth, targetHeight, 1 };
@@ -77,7 +80,15 @@ namespace chord
                 pushConst.hzbMinView[i] = asUAV(queue, hzbMinTexture, range);
                 pushConst.hzbMaxView[i] = asUAV(queue, hzbMaxTexture, range);
             }
-            pushConst.sceneDepth = asSRV(queue, depthImage, helper::buildDepthImageSubresource());
+
+            if (isDepthFormat(depthImage))
+            {
+                pushConst.sceneDepth = asSRV(queue, depthImage, helper::buildDepthImageSubresource());
+            }
+            else
+            {
+                pushConst.sceneDepth = asSRV(queue, depthImage);
+            }
 
             pushConst.numWorkGroups = dispatchParam.x * dispatchParam.y;
             pushConst.sceneDepthWidth = depthWdith;
@@ -151,7 +162,15 @@ namespace chord
                 range.levelCount = 1;
                 pushConst.hzbView[i] = asUAV(queue, bBuildMin ? hzbMinTexture : hzbMaxTexture, range);
             }
-            pushConst.sceneDepth = asSRV(queue, depthImage, helper::buildDepthImageSubresource());
+
+            if (isDepthFormat(depthImage))
+            {
+                pushConst.sceneDepth = asSRV(queue, depthImage, helper::buildDepthImageSubresource());
+            }
+            else
+            {
+                pushConst.sceneDepth = asSRV(queue, depthImage);
+            }
 
             pushConst.numWorkGroups = dispatchParam.x * dispatchParam.y;
             pushConst.sceneDepthWidth = depthWdith;

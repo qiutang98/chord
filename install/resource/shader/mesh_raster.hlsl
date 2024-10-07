@@ -1,24 +1,37 @@
 #include "gltf.h"
 
-struct VisibilityBufferPushConst
+#define PASS_TYPE_CLUSTER 0
+#define PASS_TYPE_DEPTH   1
+
+struct MeshRasterPushConst
 {
-    CHORD_DEFAULT_COMPARE_ARCHIVE(VisibilityBufferPushConst);
+    CHORD_DEFAULT_COMPARE_ARCHIVE(MeshRasterPushConst);
     uint cameraViewId;
     uint drawedMeshletCmdId;
+
+    uint instanceViewId;
+    uint instanceViewOffset;
 };
-CHORD_PUSHCONST(VisibilityBufferPushConst, pushConsts);
+CHORD_PUSHCONST(MeshRasterPushConst, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
 
 #include "bindless.hlsli"
 #include "base.hlsli"
+#include "nanite_shared.hlsli"
 
-struct VisibilityPassMS2PS
+struct MeshRasterPassMS2PS
 {
     float4 positionHS : SV_Position;
-    nointerpolation uint2 id : TEXCOORD0;
+
+#if DIM_PASS_TYPE == PASS_TYPE_CLUSTER
+    nointerpolation uint clusterId : TEXCOORD0;
+#endif
+
 #if DIM_MASKED_MATERIAL
     float2 uv : TEXCOORD1;
+    nointerpolation uint2 textureSamplerId : TEXCOORD2;
+    float2 alphaMisc : TEXCOORD3;
 #endif
 };
 
@@ -32,18 +45,19 @@ groupshared float sharedVerticesHS_R[kNaniteMeshletMaxVertices];
 groupshared float sharedVerticesHS_G[kNaniteMeshletMaxVertices];
 groupshared float sharedVerticesHS_B[kNaniteMeshletMaxVertices];
 
-#define kMeshShaderTGSize 128
-
 [numthreads(kMeshShaderTGSize, 1, 1)]
 [outputtopology("triangle")]
-void visibilityPassMS(
+void meshRasterPassMS(
     uint dispatchThreadId : SV_DispatchThreadID,
     uint groupThreadId : SV_GroupThreadID,
     uint groupId : SV_GroupID,
-    out vertices VisibilityPassMS2PS verts[kNaniteMeshletMaxVertices],
+    out vertices MeshRasterPassMS2PS verts[kNaniteMeshletMaxVertices],
     out primitives PrimitiveAttributes prims[kNaniteMeshletMaxTriangle],
     out indices  uint3 tris[kNaniteMeshletMaxTriangle])
 {
+    const InstanceCullingViewInfo instanceView = BATL(InstanceCullingViewInfo, pushConsts.instanceViewId, pushConsts.instanceViewOffset);
+
+
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
     const GPUBasicData scene = perView.basicData;
 
@@ -55,6 +69,7 @@ void visibilityPassMS(
     const GLTFPrimitiveBuffer primitiveInfo = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
     const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
     const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
+    const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
 
     ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
     ByteAddressBuffer meshletDataBuffer  = ByteAddressBindless(primitiveDataInfo.meshletDataBuffer);
@@ -71,11 +86,11 @@ void visibilityPassMS(
         const uint indicesId = primitiveInfo.vertexOffset + verticesIndex;
 
         const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
-        const float4x4 mvp = mul(perView.translatedWorldToClip, localToTranslatedWorld);
+        const float4x4 mvp = mul(instanceView.translatedWorldToClip, localToTranslatedWorld);
 
         const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
 
-        VisibilityPassMS2PS output;
+        MeshRasterPassMS2PS output;
 
         // Get HS position.
         const float4 positionHS = mul(mvp, float4(positionLS, 1.0));
@@ -89,11 +104,14 @@ void visibilityPassMS(
     #if DIM_MASKED_MATERIAL
         ByteAddressBuffer uvDataBuffer = ByteAddressBindless(primitiveDataInfo.textureCoord0Buffer);
         output.uv = uvDataBuffer.TypeLoad(float2, indicesId); //
+        output.textureSamplerId = uint2(materialInfo.baseColorId, materialInfo.baseColorSampler);
+        output.alphaMisc = float2(materialInfo.baseColorFactor.w, materialInfo.alphaCutOff);
     #endif
 
-        output.id.x = drawCmd.z;
-        output.id.y = objectId;
-
+    #if DIM_PASS_TYPE == PASS_TYPE_CLUSTER
+        output.clusterId = drawCmd.z;
+    #endif
+    
         verts[i] = output;
     }
 
@@ -152,8 +170,8 @@ void visibilityPassMS(
         // #3. Small primitive culling.
         if (!bCulled)
         {
-            const float2 maxScreenPosition = maxUv * perView.renderDimension.xy;
-            const float2 minScreenPosition = minUv * perView.renderDimension.xy;
+            const float2 maxScreenPosition = maxUv * instanceView.renderDimension.xy;
+            const float2 minScreenPosition = minUv * instanceView.renderDimension.xy;
             bCulled = any(round(minScreenPosition) == round(maxScreenPosition));
         }
 
@@ -163,29 +181,29 @@ void visibilityPassMS(
     }
 }
 
-void visibilityPassPS(
-    in uint primitiveId : SV_PrimitiveID,
-    in VisibilityPassMS2PS input, 
-    out uint outId : SV_Target0)
+void meshRasterPassPS(
+      in uint primitiveId : SV_PrimitiveID
+    , in MeshRasterPassMS2PS input
+#if DIM_PASS_TYPE == PASS_TYPE_CLUSTER
+    , out uint outId : SV_Target0
+#else 
+    // Default output for compiler.
+    , out float4 dummy : SV_Target0
+#endif
+)
 {
-    uint objectId = input.id.y;
-
 #if DIM_MASKED_MATERIAL
-    PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
-    const GPUBasicData scene = perView.basicData;
+    Texture2D<float4> baseColorTexture = TBindless(Texture2D, float4, input.textureSamplerId.x);
+    SamplerState baseColorSampler = Bindless(SamplerState, input.textureSamplerId.y);
 
-    const GPUObjectGLTFPrimitive objectInfo = BATL(GPUObjectGLTFPrimitive, scene.GLTFObjectBuffer, objectId);
-    const GLTFMaterialGPUData materialInfo = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
-
-    Texture2D<float4> baseColorTexture = TBindless(Texture2D, float4, materialInfo.baseColorId);
-    SamplerState baseColorSampler = Bindless(SamplerState, materialInfo.baseColorSampler);
-
-    float4 sampleColor = baseColorTexture.Sample(baseColorSampler, input.uv) * materialInfo.baseColorFactor;
-    clip(sampleColor.w - materialInfo.alphaCutOff);
+    float4 sampleColor = baseColorTexture.Sample(baseColorSampler, input.uv);
+    clip(sampleColor.w * input.alphaMisc.x - input.alphaMisc.y);
 #endif
 
+#if DIM_PASS_TYPE == PASS_TYPE_CLUSTER
     // Output id.
-    outId = encodeTriangleIdInstanceId(primitiveId, input.id.x);
+    outId = encodeTriangleIdInstanceId(primitiveId, input.clusterId);
+#endif
 }
 
 #endif

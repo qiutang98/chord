@@ -21,11 +21,15 @@ using namespace chord::graphics;
 constexpr uint32 kTimerFramePeriod = 3;
 constexpr uint32 kTimerStampMaxCount = 128;
 
+
+
 DeferredRenderer::DeferredRenderer(const std::string& name)
 	: m_name(name)
 {
 	// Init gpu timer.
 	m_rendererTimer.init(kTimerFramePeriod, kTimerStampMaxCount);
+
+	// 
 }
 
 DeferredRenderer::~DeferredRenderer()
@@ -155,6 +159,7 @@ void DeferredRenderer::render(
 
 		// Update last frame infos.
 		currentFrame.translatedWorldToClipLastFrame = lastFrame.translatedWorldToClip;
+		currentFrame.cameraWorldPosLastFrame = lastFrame.cameraWorldPos;
 		for (uint i = 0; i < 6; i++) { currentFrame.frustumPlaneLastFrame[i] = lastFrame.frustumPlane[i]; }
 	}
 
@@ -180,24 +185,24 @@ void DeferredRenderer::render(
 		if (gltfObjectCount > 0)
 		{
 			gltfBufferId =
-				uploadBufferToGPU(cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfObjectCount);
+				uploadBufferToGPU(cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfObjectCount).second;
 		}
 
 		// GLTF object.
 		{
-			m_perframeCameraView.basicData.GLTFObjectCount = gltfObjectCount;
+			m_perframeCameraView.basicData.GLTFObjectCount  = gltfObjectCount;
 			m_perframeCameraView.basicData.GLTFObjectBuffer = gltfBufferId;
 		}
 
 		// debugline ctx.
 		{
 			m_perframeCameraView.basicData.debuglineMaxCount = debugLineCtx.gpuMaxCount;
-			m_perframeCameraView.basicData.debuglineCount = debugLineCtx.gpuCountBuffer->get().requireView(true, false).storage.get();
+			m_perframeCameraView.basicData.debuglineCount    = debugLineCtx.gpuCountBuffer->get().requireView(true, false).storage.get();
 			m_perframeCameraView.basicData.debuglineVertices = debugLineCtx.gpuVertices->get().requireView(true, false).storage.get();
 		}
 
 		// Allocate view gpu uniform buffer.
-		viewGPUId = uploadBufferToGPU(cmd, "PerViewCamera-" + m_name, &m_perframeCameraView);
+		viewGPUId = uploadBufferToGPU(cmd, "PerViewCamera-" + m_name, &m_perframeCameraView).second;
 
 		// update debugline gpu.
 		debugLineCtx.cameraViewBufferId = viewGPUId;
@@ -208,9 +213,19 @@ void DeferredRenderer::render(
 			{
 				mainViewInstanceCullingInfo.frustumPlanesRS[i] = m_perframeCameraView.frustumPlane[i];
 			}
-			mainViewInstanceCullingInfoId = uploadBufferToGPU(cmd, "MainViewInstanceCullingInfo" + m_name, &mainViewInstanceCullingInfo);
+			mainViewInstanceCullingInfo.translatedWorldToClip = m_perframeCameraView.translatedWorldToClip;
+			mainViewInstanceCullingInfo.clipToTranslatedWorld = math::inverse(mainViewInstanceCullingInfo.translatedWorldToClip);
+			mainViewInstanceCullingInfo.cameraWorldPos = m_perframeCameraView.cameraWorldPos;
+			mainViewInstanceCullingInfo.renderDimension = m_perframeCameraView.renderDimension;
+
+			mainViewInstanceCullingInfoId = uploadBufferToGPU(cmd, "MainViewInstanceCullingInfo" + m_name, &mainViewInstanceCullingInfo).second;
 		}
 	}
+
+	// Cascade shadow for sun
+	const float3 sunDirection = float3(m_perframeCameraView.basicData.sunInfo.direction);
+	const auto& sunCascadeInfos = scene->getShadowManager().update(tickData, *camera, sunDirection);
+	const auto& sunShadowConfig = scene->getShadowManager().getConfig();
 
 	// 
 	auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
@@ -220,20 +235,13 @@ void DeferredRenderer::render(
 		m_rendererTimer.getTimeStamp(queue.getActiveCmd()->commandBuffer, label.c_str());
 	};
 
-	GLTFRenderContext gltfRenderCtx(
-		&perframe,
-		gltfObjectCount,
-		gltfBufferId,
-		viewGPUId,
-		graphics,
-		gbuffers,
-		m_rendererHistory);
+	GLTFRenderContext gltfRenderCtx(&perframe, gltfObjectCount, gltfBufferId, viewGPUId);
 	gltfRenderCtx.timerLambda = [&](const std::string& label, GraphicsOrComputeQueue& queue) { insertTimer(label, queue); };
 
 	debugLineCtx.prepareForRender(graphics);
 
 	HZBContext hzbCtx { };
-
+	CascadeShadowHistory cascadeShadowCurrentFrame{ };
 	{
 		insertTimer("FrameBegin", graphics);
 
@@ -243,25 +251,40 @@ void DeferredRenderer::render(
 		addClearGbufferPass(graphics, gbuffers);
 		insertTimer("Clear GBuffers", graphics);
 
+		CountAndCmdBuffer postInstanceCullingBuffer = {};
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
-			instanceCulling(gltfRenderCtx, mainViewInstanceCullingInfoId, 0);
+			postInstanceCullingBuffer = instanceCulling(graphics, gltfRenderCtx, mainViewInstanceCullingInfoId, 0);
 			insertTimer("GLTF Instance Culling", graphics);
 
 			// Prepass stage0
-			const bool bShouldStage1GLTF = gltfVisibilityRenderingStage0(gltfRenderCtx, m_rendererHistory.hzbCtx);
+			CountAndCmdBuffer stageCountAndCmdBuffer = {};
+			const bool bShouldStage1GLTF = gltfVisibilityRenderingStage0(graphics, gbuffers, gltfRenderCtx, m_rendererHistory.hzbCtx, mainViewInstanceCullingInfoId, 0, postInstanceCullingBuffer, stageCountAndCmdBuffer);
 			insertTimer("GLTF Visibility Stage0", graphics);
 
 			// Prepass stage1
 			if (bShouldStage1GLTF)
 			{
+				check(stageCountAndCmdBuffer.first != nullptr && stageCountAndCmdBuffer.second != nullptr);
+
 				auto tempHzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, false, false);
 				insertTimer("BuildHZB Post Prepass Stage0", graphics);
 
-				gltfVisibilityRenderingStage1(gltfRenderCtx, tempHzbCtx);
+				gltfVisibilityRenderingStage1(graphics, gbuffers, gltfRenderCtx, tempHzbCtx, mainViewInstanceCullingInfoId, 0, stageCountAndCmdBuffer);
 				insertTimer("GLTF Visibility Stage1", graphics);
 			}
 		}
+
+		CascadeShadowContext cascadeContext { };
+		if (shouldRenderGLTF(gltfRenderCtx))
+		{
+			cascadeContext = chord::renderShadow(cmd, graphics, gltfRenderCtx, m_perframeCameraView, m_rendererHistory.cascadeCtx, sunCascadeInfos, sunShadowConfig, tickData, *camera, sunDirection);
+			cascadeShadowCurrentFrame = chord::extractCascadeShadowHistory(graphics, sunDirection, cascadeContext, tickData);
+		}
+
+
+
+		auto mainViewCulledCmdBuffer = postInstanceCullingBuffer.second;
 
 		hzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, true, true);
 		insertTimer("BuildHZB", graphics);
@@ -269,11 +292,15 @@ void DeferredRenderer::render(
 		VisibilityTileMarkerContext visibilityCtx;
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
-			visibilityCtx = visibilityMark(graphics, viewGPUId, gltfRenderCtx.postBasicCullingCtx.meshletCmdBuffer, gbuffers.visibility);
+			visibilityCtx = visibilityMark(graphics, viewGPUId, mainViewCulledCmdBuffer, gbuffers.visibility);
 			insertTimer("Visibility Tile Marker", graphics);
 
-			lighting(graphics, gbuffers, viewGPUId, gltfRenderCtx.postBasicCullingCtx.meshletCmdBuffer, visibilityCtx);
+			lighting(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("lighting Tile", graphics);
+
+			auto cascadeResult = cascadeShadowEvaluate(graphics, gbuffers, viewGPUId, cascadeContext, m_rendererHistory.cascadeCtx.softShadowMask);
+			cascadeShadowCurrentFrame.softShadowMask = cascadeResult.softShadowMask;
+			insertTimer("PCSS", graphics);
 		}
 
 		renderSky(graphics, gbuffers.color, gbuffers.depthStencil, viewGPUId, atmosphereLuts);
@@ -281,10 +308,9 @@ void DeferredRenderer::render(
 		// Visualize for nanite.
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
-			visualizeNanite(graphics, gbuffers, viewGPUId, gltfRenderCtx.postBasicCullingCtx.meshletCmdBuffer, visibilityCtx);
+			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("Nanite visualize", graphics);
 		}
-
 
 
 		check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
@@ -305,6 +331,7 @@ void DeferredRenderer::render(
 	graphics.endCommand();
 
 	m_rendererHistory.hzbCtx = hzbCtx;
+	m_rendererHistory.cascadeCtx = cascadeShadowCurrentFrame;
 }
 
 GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
@@ -339,6 +366,6 @@ GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
 
 
 	result.pointClampEdgeSampler = getContext().getSamplerManager().pointClampEdge().index.get();
-
+	result.linearClampEdgeSampler = getContext().getSamplerManager().linearClampEdge().index.get();
 	return result;
 }

@@ -86,8 +86,27 @@
 
 #endif ///////////////////////////////////////////////////////
 
+#define kMaxCascadeCount 8
+
+struct GPUStorageDouble4
+{
+    uint2 x;
+    uint2 y;
+    uint2 z;
+    uint2 w;
+};
+
 struct InstanceCullingViewInfo
 {
+    float4x4 translatedWorldToClip;
+    float4x4 clipToTranslatedWorld;
+
+    GPUStorageDouble4 cameraWorldPos;
+
+    float4 orthoDepthConvertToView; 
+    float4 renderDimension; // .xy is width and height, .zw is invert of .xy
+
+
     // Frustum plane relative main view world space.
     float4 frustumPlanesRS[6];
 };
@@ -191,11 +210,7 @@ CHORD_CHECK_SIZE_GPU_SAFE(AtmosphereParameters);
 
 struct GPUCascadeShadowMapConfig
 {
-    float basicLodOffset;
-    int physicalPageDim;
-
-    int minMipLevel;
-    int maxMipLevel;
+    float4x4 globalMatrix;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GPUCascadeShadowMapConfig);
 
@@ -250,15 +265,13 @@ struct GPUBasicData
     uint debuglineCount; // current debug line use count buffer index.
     uint debuglineMaxCount; // maximum of debug line can use.
     uint pointClampEdgeSampler; // All point clamp edge sampler. 
-    uint pad2;
+    uint linearClampEdgeSampler;
 };
 
-struct GPUStorageDouble4
-{
-    uint2 x;
-    uint2 y;
-    uint2 z;
-    uint2 w;
+struct CascadeShadowDepthIds 
+{ 
+    // Shadow depth ids.
+    uint shadowDepth[kMaxCascadeCount];
 };
 
 struct PerframeCameraView
@@ -287,10 +300,14 @@ struct PerframeCameraView
 
     // Camera world position, double precision.
     GPUStorageDouble4 cameraWorldPos;
+    GPUStorageDouble4 cameraWorldPosLastFrame; 
+
+    // clip to translated world with z far (no infinite z).
+    float4x4 clipToTranslatedWorldWithZFar;
 
     float cameraFovy;
-    float pad0;
-    float pad1;
+    float zNear;
+    float zFar; // z Far is used for frustum culling.
     float pad2;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);

@@ -483,18 +483,28 @@ namespace chord::graphics
 			pushConstantSize = amplifyShader->getPushConstSize();
 		}
 
-		pushConstantSize = math::max(math::max(pushConstantSize, meshShader->getPushConstSize()), pixelShader->getPushConstSize());
+		if (pixelShader != nullptr)
+		{
+			pushConstantSize = math::max(pushConstantSize, pixelShader->getPushConstSize());
+		}
+
+		pushConstantSize = math::max(pushConstantSize, meshShader->getPushConstSize());
 
 		std::vector<PipelineShaderStageCreateInfo> cis = { };
+		VkShaderStageFlags shaderFlags = VK_SHADER_STAGE_MESH_BIT_EXT;
+
 		if (amplifyShader != nullptr)
 		{
+			shaderFlags |= VK_SHADER_STAGE_TASK_BIT_EXT;
 			cis.push_back(amplifyShader->getShaderStageCreateInfo());
 		}
 		cis.push_back(meshShader->getShaderStageCreateInfo());
-		cis.push_back(pixelShader->getShaderStageCreateInfo());
 
-		constexpr VkShaderStageFlags fullFlags   = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
-		constexpr VkShaderStageFlags noTaskFlags = VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
+		if (pixelShader != nullptr)
+		{
+			shaderFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+			cis.push_back(pixelShader->getShaderStageCreateInfo());
+		}
 
 		const auto graphicsCi = GraphicsPipelineCreateInfo(
 			std::move(cis),
@@ -503,7 +513,7 @@ namespace chord::graphics
 			inDepthFormat,
 			inStencilFormat,
 			inTopology,
-			amplifyShader != nullptr ? fullFlags : noTaskFlags);
+			shaderFlags);
 
 		return getPipelineContainer().graphics(name, graphicsCi);
 	}

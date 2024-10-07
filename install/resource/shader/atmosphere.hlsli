@@ -1371,7 +1371,8 @@ RadianceSpectrum GetSkyRadiance(
     const float3 skySpectralRadianceToLumiance = (atmosphere.luminanceMode != LUMINANCE_MODE_NONE) ? atmosphere.skySpectralRadianceToLumiance : 1.0;
     const float3 skyScattering = scattering * rayleighPhase(nu) + single_mie_scattering * cornetteShanksMiePhase(atmosphere.mie_phase_function_g, nu);
 
-    return skyScattering * skySpectralRadianceToLumiance;
+    const float3 skyLumianceSRGB = skyScattering * skySpectralRadianceToLumiance;
+    return mul(sRGB_2_AP1, skyLumianceSRGB); // SRGB -> ACEScg
 }
 
 /*
@@ -1465,7 +1466,8 @@ RadianceSpectrum GetSkyRadianceToPoint(
     const float3 skySpectralRadianceToLumiance = atmosphere.luminanceMode != LUMINANCE_MODE_NONE ? atmosphere.skySpectralRadianceToLumiance : 1.0;
     const float3 skyScattering = scattering * rayleighPhase(nu) + single_mie_scattering * cornetteShanksMiePhase(atmosphere.mie_phase_function_g, nu);
 
-    return skyScattering * skySpectralRadianceToLumiance;
+    const float3 skyLumianceSRGB = skyScattering * skySpectralRadianceToLumiance; 
+    return mul(sRGB_2_AP1, skyLumianceSRGB); // SRGB -> ACEScg
 }
 
 /*
@@ -1496,12 +1498,14 @@ IrradianceSpectrum GetSunAndSkyIrradiance(
     // Indirect irradiance (approximated if the surface is not horizontal).
     skyIrradiance  = GetIrradiance(atmosphere, irradiance_texture, r, mu_s) * (1.0 + dot(normal, targetPoint) / r) * 0.5;
     skyIrradiance *= skySpectralRadianceToLumiance;
+    skyIrradiance  = mul(sRGB_2_AP1, skyIrradiance); // SRGB -> ACEScg
 
     const float3 sunSpectralRadianceToLumiance = atmosphere.luminanceMode != LUMINANCE_MODE_NONE ? atmosphere.sunSpectralRadianceToLumiance : 1.0;
     const float3 sunRadiance = atmosphere.solar_irradiance * GetTransmittanceToSun(atmosphere, transmittance_texture, r, mu_s) * max(dot(normal, sun_direction), 0.0);
     
     // Direct irradiance.
-    return sunSpectralRadianceToLumiance * sunRadiance;
+    float3 sunLumianceSRGB = sunSpectralRadianceToLumiance * sunRadiance;
+    return mul(sRGB_2_AP1, sunLumianceSRGB); // SRGB -> ACEScg
 }
 
 #endif

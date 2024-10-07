@@ -1,8 +1,16 @@
-#ifndef BLUE_NOISE_HLSLI
-#define BLUE_NOISE_HLSLI
+#ifndef NOISE_HLSLI
+#define NOISE_HLSLI
 
 #include "bindless.hlsli"
 
+
+
+// EGSR 2022: Spatiotemporal Blue Noise Masks, Wolfe et al.
+
+
+
+
+// A Low-Discrepancy Sampler that Distributes Monte Carlo Errors as a Blue Noise in Screen Space, Heitz et al. (2019)
 float samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(
     in GPUBlueNoise noise, 
     uint pixel_i, 

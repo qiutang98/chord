@@ -50,7 +50,7 @@ void mainPS(
     Texture2D<uint> visibilityTexture = TBindless(Texture2D, uint, pushConsts.visibilityTextureId);
     SamplerState pointClampSampler = getPointClampEdgeSampler(perView);
 
-    uint packID = visibilityTexture.Sample(pointClampSampler, input.uv);
+    uint packID = visibilityTexture.SampleLevel(pointClampSampler, input.uv, 0);
 
     // No thing. 
     if (packID == 0)

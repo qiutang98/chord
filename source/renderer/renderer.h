@@ -9,13 +9,14 @@
 #include <graphics/bufferpool.h>
 #include <renderer/postprocessing/postprocessing.h>
 #include <astrophysics/atmosphere.h>
+#include <scene/system/shadow.h>
 
 namespace chord
 {
 	extern GPUBasicData getGPUBasicData(const AtmosphereParameters& atmosphere);
 
 	template<typename T>
-	static inline uint32 uploadBufferToGPU(graphics::CommandList& cmd, const std::string& name, const T* data, uint32 count = 1)
+	static inline std::pair<graphics::PoolBufferHostVisible, uint32> uploadBufferToGPU(graphics::CommandList& cmd, const std::string& name, const T* data, uint32 count = 1)
 	{
 		using namespace graphics;
 
@@ -29,7 +30,7 @@ namespace chord
 		// Insert perframe lazy destroy.
 		cmd.insertPendingResource(newGPUBuffer);
 		const auto& viewC = newGPUBuffer->get().requireView(true, false);
-		return viewC.storage.get();
+		return { newGPUBuffer, viewC.storage.get() };
 	}
 
 	class DeferredRenderer : NonCopyable
@@ -109,5 +110,7 @@ namespace chord
 		// GPU timer.
 		graphics::GPUTimestamps m_rendererTimer;
 		std::vector<graphics::GPUTimestamps::TimeStamp> m_timeStamps;
+
+
 	};
 }

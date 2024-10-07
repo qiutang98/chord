@@ -126,31 +126,9 @@ namespace chord::graphics
 		return VK_ACCESS_NONE;
 	}
 
-	inline VkImageAspectFlags getImageAspectFlags(EDepthStencilOp op)
+	inline bool isFormatExistStencilComponent(VkFormat format)
 	{
-	#if 0
-		switch (op)
-		{
-		case EDepthStencilOp::DepthWrite_StencilWrite:
-		case EDepthStencilOp::DepthWrite_StnecilRead:
-		case EDepthStencilOp::DepthRead_StencilWrite:
-		case EDepthStencilOp::DepthRead_StnecilRead:
-			return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-
-		case EDepthStencilOp::DepthRead_StencilNop:
-		case EDepthStencilOp::DepthWrite_StencilNop:
-			return VK_IMAGE_ASPECT_DEPTH_BIT;
-
-		case EDepthStencilOp::DepthNop_StencilWrite:
-		case EDepthStencilOp::DepthNop_StnecilRead:
-			return VK_IMAGE_ASPECT_STENCIL_BIT;
-		}
-
-		checkEntry();
-		return VK_IMAGE_ASPECT_NONE;
-	#else
-		return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-	#endif
+		return format != VK_FORMAT_D16_UNORM && format != VK_FORMAT_D32_SFLOAT;
 	}
 
 	class ImageView;

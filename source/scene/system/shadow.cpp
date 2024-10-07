@@ -2,16 +2,13 @@
 #include <scene/system/shadow.h>
 #include <fontawsome/IconsFontAwesome6.h>
 #include <ui/ui_helper.h>
+#include <renderer/renderer.h>
+#include <shader/base.h>
 
 using namespace chord;
 using namespace chord::graphics;
 
-static float sVSMBasicMipLevelOffset = -0.5f;
-static AutoCVarRef cVarVSMBasicMipLevelOffset(
-	"r.vsm.basicMipLevelOffset",
-	sVSMBasicMipLevelOffset,
-	"Virtual shadow map basic mip level offset."
-);
+constexpr uint32 kShadowUseMaxCacadeZEnable = 1;
 
 static inline float logCascadeSplit(
 	const float nearZ,
@@ -37,16 +34,22 @@ static inline float logCascadeSplit(
 	return (d - nearZ) / clipRange;
 }
 
-static inline void cascadeSetup(
-	ICamera& camera, 
+static inline std::vector<CascadeInfo> cascadeSetup(
+	const ICamera& camera, 
 	const CascadeShadowMapConfig& config,
-	const float4x4& invertViewProj,
-	const float3& lightDirection,
-	float splitLambda)
+	const float4x4& invertViewProj, // Relative camera world space.
+	const float3& lightDirection)
 {
+	// Always y up.
+	const float3 upDir = float3(0.0, 1.0, 0.0);
+	const float3 lightDir = normalize(lightDirection);
+
+	std::vector<CascadeInfo> result(config.cascadeCount);
+
 	const float nearZ = camera.getZNear();
 	const float farZ  = camera.getZFar();
 
+	// Relative camera world space.
 	float3 frustumCorner[8];
 	{
 		frustumCorner[0] = float3(-1.0f,  1.0f, 1.0f);
@@ -68,6 +71,46 @@ static inline void cascadeSetup(
 		}
 	}
 
+	float4x4 globalMatrix;
+	{
+		// Calculate center pos of view frustum.
+		float3 frustumCenter = float3(0.0f);
+		for (uint i = 0; i < 8; i++)
+		{
+			frustumCenter += frustumCorner[i];
+		}
+		frustumCenter /= 8.0f;
+
+		float sphereRadius = 0.0f;
+		for (uint i = 0; i < 8; ++i)
+		{
+			float dist = length(frustumCorner[i] - frustumCenter);
+			sphereRadius = math::max(sphereRadius, dist);
+		}
+
+		float3 maxExtents = float3(sphereRadius);
+		float3 minExtents = -maxExtents;
+
+		float3 extents = maxExtents - minExtents;
+
+		// create temporary view project matrix for cascade.
+		float3 shadowCameraPos = frustumCenter - normalize(lightDir) * extents.z * 0.5f;
+
+		float nearZProj = 0.0f;
+		float farZProj = extents.z;
+
+		float4x4 shadowView = math::lookAtRH(shadowCameraPos, frustumCenter, upDir);
+		float4x4 shadowProj = math::orthoRH_ZO(
+			minExtents.x,
+			maxExtents.x,
+			minExtents.y,
+			maxExtents.y,
+			farZProj, // Also reverse z for shadow depth.
+			nearZProj);
+
+		globalMatrix = shadowProj * shadowView;
+	}
+
 	const float clipRange = farZ - nearZ;
 	const float minZ = nearZ + config.cascadeStartDistance;
 	const float maxZ = nearZ + config.cascadeEndDistance;
@@ -75,17 +118,17 @@ static inline void cascadeSetup(
 
 	std::vector<float> cascadeSplits(config.cascadeCount);
 
-	// Always y up.
-	const float3 upDir = float3(0.0, 1.0, 0.0);
-	const float3 lightDir = normalize(lightDirection);
+
 
 	// Get split factor.
 	for (uint cascadeId = 0; cascadeId < config.cascadeCount; cascadeId++)
 	{
-		cascadeSplits[cascadeId] = logCascadeSplit(nearZ, maxZ, minZ, clipRange, cascadeId, config.cascadeCount, splitLambda);
+		cascadeSplits[cascadeId] = logCascadeSplit(nearZ, maxZ, minZ, clipRange, cascadeId, config.cascadeCount, config.splitLambda);
 	}
 
 	// 
+	std::vector<float> cascadeSphereRadius(config.cascadeCount);
+	std::vector<float3> cascadeFrustumCenters(config.cascadeCount);
 	for (uint cascadeId = 0; cascadeId < config.cascadeCount; cascadeId++)
 	{
 		float splitDist = cascadeSplits[cascadeId];
@@ -103,7 +146,7 @@ static inline void cascadeSetup(
 			float3 cornerRay = cascadeFrustumCorner[i + 4] - cascadeFrustumCorner[i]; // distance ray.
 
 			float3 nearCornerRay = cornerRay * prevSplitDist;
-			float3 farCornerRay  = cornerRay * splitDist;
+			float3 farCornerRay = cornerRay * splitDist;
 
 			cascadeFrustumCorner[i + 4] = cascadeFrustumCorner[i] + farCornerRay;
 			cascadeFrustumCorner[i + 0] = cascadeFrustumCorner[i] + nearCornerRay;
@@ -125,27 +168,42 @@ static inline void cascadeSetup(
 			sphereRadius = math::max(sphereRadius, dist);
 		}
 		// Round 16.
-		sphereRadius = ceil(sphereRadius * 16.0f) / 16.0f;
+		cascadeSphereRadius[cascadeId] = ceil(sphereRadius * 16.0f) / 16.0f;
+		
+		// 
+		cascadeFrustumCenters[cascadeId] = cascadeFrustumCenter;
+	}
 
-		float3 maxExtents = float3(sphereRadius);
+	for (uint cascadeId = 0; cascadeId < config.cascadeCount; cascadeId++)
+	{
+		float3 maxExtents = float3(cascadeSphereRadius[cascadeId]);
 		float3 minExtents = -maxExtents;
+
 		float3 cascadeExtents = maxExtents - minExtents;
 
+		const uint lastCascade = config.cascadeCount - 1;
+		if (kShadowUseMaxCacadeZEnable != 0)
+		{
+			cascadeExtents.z = cascadeSphereRadius[lastCascade] * 2.0f;
+		}
+
+		// 
+		float radiusScale = cascadeSphereRadius[0] / cascadeSphereRadius[cascadeId];
+
 		// create temporary view project matrix for cascade.
-		float3 shadowCameraPos = cascadeFrustumCenter - normalize(lightDir) * cascadeExtents.z * 0.5f;
+		float3 shadowCameraPos = cascadeFrustumCenters[cascadeId] - normalize(lightDir) * cascadeExtents.z * 0.5f;
 
 		float nearZProj = 0.0f;
 		float farZProj  = cascadeExtents.z;
 
-		float4x4 shadowView = math::lookAtRH(shadowCameraPos, cascadeFrustumCenter, upDir);
+		float4x4 shadowView = math::lookAtRH(shadowCameraPos, cascadeFrustumCenters[cascadeId], upDir);
 		float4x4 shadowProj = math::orthoRH_ZO(
 			minExtents.x,
 			maxExtents.x,
 			minExtents.y,
 			maxExtents.y,
 			farZProj, // Also reverse z for shadow depth.
-			nearZProj
-		);
+			nearZProj);
 
 		// Texel align.
 		const float sMapSize = float(config.cascadeDim);
@@ -170,7 +228,7 @@ static inline void cascadeSetup(
 
 		// Build frustum plane.
 		float3 p[8];
-		float4 planes[6];
+		float4 planes[6] { };
 		{
 			p[0] = float3(-1.0f,  1.0f, 1.0f);
 			p[1] = float3( 1.0f,  1.0f, 1.0f);
@@ -212,7 +270,37 @@ static inline void cascadeSetup(
 			float3 backN = normalize(cross((p[5] - p[6]), (p[7] - p[6])));
 			planes[Frustum::eBack] = float4(backN, -dot(frontN, p[6]));
 		}
+
+		{
+			// Construct cascade shadow map corner position and reproject to world space.
+			float3 position00_RS = float3(-1.0,  1.0, 1.0); // reverse z.
+			float3 position11_RS = float3( 1.0, -1.0, 0.0); // reverse z.
+			{
+				float4 invCorner_00 = reverseToWorld * float4(position00_RS, 1.0f);
+				position00_RS = float3(invCorner_00) / invCorner_00.w;
+
+				float4 invCorner_11 = reverseToWorld * float4(position11_RS, 1.0f);
+				position11_RS = float3(invCorner_11) / invCorner_11.w;
+			}
+
+
+			float4 v00 = globalMatrix * float4(position00_RS, 1.0f);
+			float4 v11 = globalMatrix * float4(position11_RS, 1.0f);
+
+			result[cascadeId].globalMatrix = globalMatrix;
+			result[cascadeId].cascadeGlobalScale = float4(float3(1.0f) / abs(float3(v00) / v00.w - float3(v11) / v11.w), 1.0f);
+		}
+
+		// 
+		result[cascadeId].orthoDepthConvertToView = { shadowProj[2][2], shadowProj[3][2], cascadeSphereRadius[cascadeId], radiusScale };
+		result[cascadeId].viewProjectMatrix = shadowFinalViewProj;
+		for (uint i = 0; i < 6; i++)
+		{
+			result[cascadeId].frustumPlanes[i] = planes[i];
+		}
 	}
+
+	return result;
 }
 
 ShadowManager::ShadowManager()
@@ -221,13 +309,120 @@ ShadowManager::ShadowManager()
 
 }
 
-void ShadowManager::update(const ApplicationTickData& tickData)
+const std::vector<CascadeInfo>& ShadowManager::update(const ApplicationTickData& tickData, const ICamera& camera, const float3& lightDirection)
 {
+	if (m_updateFrame != tickData.tickCount)
+	{
+		// Update once per frame.
+		m_updateFrame = tickData.tickCount;
 
 
+		//
+		const float4x4& projectionWithZFar    = camera.getProjectMatrixExistZFar();
+		const float4x4& relativeView          = camera.getRelativeCameraViewMatrix();
+		const float4x4 relativeViewProjection = projectionWithZFar * relativeView;
+		const float4x4 invertViewProj         = math::inverse(relativeViewProjection);
+
+		// Update cascade infos.
+		m_cacheCascadeInfos = cascadeSetup(camera, m_shadowConfig.cascadeConfig, invertViewProj, lightDirection);
+	}
+
+	return m_cacheCascadeInfos;
+}
+
+static inline bool drawCascadeConfig(CascadeShadowMapConfig& inout)
+{
+	bool bChangedValue = false;
+	auto copyValue = inout;
+
+	if (ImGui::CollapsingHeader("Cascade Shadow Setting"))
+	{
+		ui::beginGroupPanel("Cascade Config");
+		ImGui::PushItemWidth(100.0f);
+		{
+			ImGui::DragInt("Count", &copyValue.cascadeCount, 1.0f, 1, (int)kMaxCascadeCount);
+			ImGui::DragInt("Realtime Count", &copyValue.realtimeCascadeCount, 1.0f, 1, copyValue.cascadeCount);
+
+			int cascadeDim = copyValue.cascadeDim;
+			ImGui::DragInt("Dimension", &cascadeDim, 512, 512, 4096);
+			copyValue.cascadeDim = cascadeDim;
+
+			ImGui::DragFloat("Split Lambda", &copyValue.splitLambda, 0.01f, 0.00f, 1.00f);
+
+			ImGui::DragFloat("Start Distance", &copyValue.cascadeStartDistance, 10.0f, 0.0f, 200.0f);
+			ImGui::DragFloat("End Distance", &copyValue.cascadeEndDistance, 10.0f, copyValue.cascadeStartDistance + 1.0f, 2000.0f);
+
+
+		}
+		ImGui::PopItemWidth();
+		ui::endGroupPanel();
+
+		ImGui::Separator();
+
+		ui::beginGroupPanel("Filtered Config");
+		ImGui::PushItemWidth(100.0f);
+		{
+			ImGui::Checkbox("CoD PCF", &copyValue.bContactHardenPCF);
+
+			ImGui::DragFloat("Light Size", &copyValue.lightSize, 0.01f, 0.5f, 10.0f);
+
+			ImGui::DragInt("Min PCF", &copyValue.minPCFSampleCount, 1, 2, 127);
+			ImGui::DragInt("Max PCF", &copyValue.maxPCFSampleCount, 1, copyValue.minPCFSampleCount, 128);
+			ImGui::DragInt("Min Blocker Search", &copyValue.minBlockerSearchSampleCount, 1, 2, 127);
+			ImGui::DragInt("Max Blocker Search", &copyValue.maxBlockerSearchSampleCount, 1, copyValue.minBlockerSearchSampleCount, 128);
+			ImGui::DragFloat("Blocker Range Scale", &copyValue.blockerSearchMaxRangeScale, 0.01f, 0.01f, 1.0f);
+
+			copyValue.blockerSearchMaxRangeScale = math::clamp(copyValue.blockerSearchMaxRangeScale, 0.01f, 1.0f);
+		}
+		ImGui::PopItemWidth();
+		ui::endGroupPanel();
+
+		ImGui::Separator();
+
+		ui::beginGroupPanel("Bias Config");
+		ImGui::PushItemWidth(100.0f);
+		{
+			ImGui::DragFloat("Cascade Border Jitter", &copyValue.cascadeBorderJitterCount, 0.01f, 1.0, 4.0f);
+
+			ImGui::DragFloat("PCF Bias Scale", &copyValue.pcfBiasScale, 0.01f, 0.0f, 40.0f);
+			ImGui::DragFloat("Bias Lerp Min", &copyValue.biasLerpMin_const, 0.01f, 1.0f, 10.0f);
+			ImGui::DragFloat("Bias Lerp Max", &copyValue.biasLerpMax_const, 0.01f, 5.0f, 100.0f);
+
+			ImGui::DragFloat("Normal Offset Scale", &copyValue.normalOffsetScale, 0.1f, 0.0f, 100.0f);
+			ImGui::DragFloat("Bias Const", &copyValue.shadowBiasConst, 0.01f, -5.0f, 5.0f);
+			ImGui::DragFloat("Bias Slope", &copyValue.shadowBiasSlope, 0.01f, -5.0f, 5.0f);
+
+			ImGui::DragInt("ShadowMask Blur Pass Count", &copyValue.shadowMaskFilterCount, 0, 5);
+		}
+		ImGui::PopItemWidth();
+		ui::endGroupPanel();
+	}
+
+	copyValue.minPCFSampleCount = math::min(copyValue.minPCFSampleCount, 127);
+	copyValue.maxPCFSampleCount = math::min(copyValue.maxPCFSampleCount, 128);
+	copyValue.minBlockerSearchSampleCount = math::min(copyValue.minBlockerSearchSampleCount, 127);
+	copyValue.maxBlockerSearchSampleCount = math::min(copyValue.maxBlockerSearchSampleCount, 128);
+
+	copyValue.cascadeDim = math::clamp(getNextPOT(copyValue.cascadeDim), 512U, 4096U);
+	copyValue.cascadeCount = math::clamp(copyValue.cascadeCount, 1, (int)kMaxCascadeCount);
+
+	copyValue.biasLerpMax_const = math::max(copyValue.biasLerpMax_const, copyValue.biasLerpMin_const);
+
+	copyValue.shadowMaskFilterCount = math::clamp(copyValue.shadowMaskFilterCount, 0, 5);
+	if (copyValue != inout)
+	{
+		inout = copyValue;
+		bChangedValue = true;
+	}
+
+	return bChangedValue;
 }
 
 void ShadowManager::onDrawUI(SceneRef scene)
 {
+	auto cacheConfig = m_shadowConfig;
 
+	bool bChange = false;
+	
+	bChange |= drawCascadeConfig(m_shadowConfig.cascadeConfig);
 }

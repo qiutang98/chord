@@ -4,6 +4,7 @@
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
 #include <graphics/bufferpool.h>
+#include <graphics/common.h>
 
 namespace chord
 {
@@ -135,9 +136,20 @@ namespace chord
 			return std::move(result);
 		}
 
-		VkFormat getDepthStencilFormat() const
+		VkFormat getDepthFormat() const
 		{
-			if(depthStencil.RT == nullptr) return VK_FORMAT_UNDEFINED;
+			if (depthStencil.RT == nullptr) return VK_FORMAT_UNDEFINED;
+			return depthStencil.RT->get().getFormat();
+		}
+
+		VkFormat getStencilFormat() const
+		{
+			if (depthStencil.RT == nullptr) return VK_FORMAT_UNDEFINED;
+			if (!graphics::isFormatExistStencilComponent(depthStencil.RT->get().getFormat()))
+			{
+				return VK_FORMAT_UNDEFINED;
+			}
+
 			return depthStencil.RT->get().getFormat();
 		}
 
@@ -158,8 +170,15 @@ namespace chord
 				width = depthStencil.RT->get().getExtent().width;
 				height = depthStencil.RT->get().getExtent().height;
 
+				
+				VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
+				if (graphics::isFormatExistStencilComponent(depthStencil.RT->get().getFormat()))
+				{
+					flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
+				}
+
 				depthAttachmentInfo.imageView = depthStencil.RT->get().requireView(
-					graphics::helper::buildBasicImageSubresource(getImageAspectFlags(depthStencil.depthStencilOp)), VK_IMAGE_VIEW_TYPE_2D, false, false).handle.get();
+					graphics::helper::buildBasicImageSubresource(flags), VK_IMAGE_VIEW_TYPE_2D, false, false).handle.get();
 				depthAttachmentInfo.clearValue = depthStencil.clearValue;
 				depthAttachmentInfo.loadOp = getAttachmentLoadOp(depthStencil.Op);
 				depthAttachmentInfo.storeOp = getAttachmentStoreOp(depthStencil.Op);
@@ -261,13 +280,28 @@ namespace chord
 		}
 	};
 
+	inline bool isDepthFormat(graphics::PoolTextureRef texture)
+	{
+		const auto format = texture->get().getFormat();
+
+		return format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D16_UNORM_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT || format == VK_FORMAT_D32_SFLOAT_S8_UINT;
+	}
+
 	inline static uint32 asSRV(
 		graphics::GraphicsOrComputeQueue& queue, 
 		graphics::PoolTextureRef texture,
 		const VkImageSubresourceRange& range = graphics::helper::buildBasicImageSubresource(),
 		VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D)
 	{
-		queue.transitionSRV(texture, range);
+		auto rangeTransition = range;
+
+		if (hasFlag(range.aspectMask, VK_IMAGE_ASPECT_DEPTH_BIT) && 
+			graphics::isFormatExistStencilComponent(texture->get().getFormat()))
+		{
+			rangeTransition.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+		}
+
+		queue.transitionSRV(texture, rangeTransition);
 		return texture->get().requireView(range, viewType, true, false).SRV.get();
 	}
 
@@ -375,11 +409,14 @@ namespace chord
 		graphics::PoolTextureRef minHZB = nullptr;
 		graphics::PoolTextureRef maxHZB = nullptr;
 
+		// Valid range of depth, excluded sky.
 		graphics::PoolBufferRef validDepthRange = nullptr;
 
-		math::uvec2 dimension; // Texture extent.
+		// Texture extent.
+		math::uvec2 dimension; 
 		uint32 mipmapLevelCount;
 
+		// 
 		math::uvec2 mip0ValidArea;
 		math::vec2  validUv;
 
@@ -409,8 +446,117 @@ namespace chord
 		}
 	};
 
+
+
+	struct CascadeInfo
+	{
+		float4x4 viewProjectMatrix;
+		float4x4 globalMatrix;
+		float4 orthoDepthConvertToView; 
+		float4 cascadeGlobalScale;
+		float4 frustumPlanes[6];
+	};
+
+
+	struct CascadeShadowMapConfig
+	{
+		CHORD_DEFAULT_COMPARE_ARCHIVE(CascadeShadowMapConfig);
+
+		int32  cascadeCount         = 8;
+		int32  realtimeCascadeCount = 3;
+		uint32 cascadeDim           = 2048;
+
+		// 
+		float cascadeStartDistance = 0.0f;
+		float cascadeEndDistance   = 200.0f;
+		float splitLambda          = 0.8f;
+
+		// 
+		float normalOffsetScale    = 0.0f;
+		float shadowBiasConst      = 0.0f;
+		float shadowBiasSlope      = 0.0f;
+
+		//
+		float lightSize                = 1.0f;
+		float cascadeBorderJitterCount = 2.0f;
+		float pcfBiasScale             = 20.0f;
+
+		float biasLerpMin_const = 5.0f;
+		float biasLerpMax_const = 10.0f;
+		bool  bContactHardenPCF = false;
+
+		// 
+		int shadowMaskFilterCount = 0;
+
+		int minPCFSampleCount = 4;
+		int maxPCFSampleCount = 32;
+
+		int minBlockerSearchSampleCount = 2;
+		int maxBlockerSearchSampleCount = 16;
+		float blockerSearchMaxRangeScale = 0.125f;
+	};
+
+	struct ShadowConfig
+	{
+		CHORD_DEFAULT_COMPARE_ARCHIVE(ShadowConfig);
+
+		CascadeShadowMapConfig cascadeConfig;
+	};
+
+	struct CascadeShadowContext
+	{
+		// Cache render config.
+		CascadeShadowMapConfig config;
+		uint32 cascadeShadowDepthIds;
+
+		//
+		bool bDirectionChange = true;
+
+		float3 direction = { 0.0f, 0.0f, 0.0f };
+
+		// Cascade views.
+		std::vector<InstanceCullingViewInfo> viewInfos{ };
+		graphics::PoolBufferHostVisible views = nullptr;
+		uint32 viewsSRV = ~0;
+
+		// Shadow depths.
+		std::vector<graphics::PoolTextureRef> depths;
+
+		CascadeShadowContext() {};
+		CascadeShadowContext(const CascadeShadowMapConfig& config)
+			: config(config)
+		{
+
+		}
+
+		bool isValid() const
+		{
+			return views != nullptr;
+		}
+	};
+
+	struct CascadeShadowHistory
+	{
+		float3 direction = { 0.0f, 0.0f, 0.0f }; 
+
+		// Cache render config.
+		CascadeShadowMapConfig config;
+
+		// Cascade views.
+		std::vector<InstanceCullingViewInfo> viewInfos { };
+		graphics::PoolBufferHostVisible views = nullptr;
+		uint32 viewsSRV = ~0U;
+
+		// Cache render depths.
+		std::vector<graphics::PoolTextureRef> depths;
+		std::vector<graphics::PoolTextureRef> depthSATs;
+
+		graphics::PoolTextureRef softShadowMask = nullptr;
+	};
+
 	struct DeferredRendererHistory
 	{
 		HZBContext hzbCtx;
+		CascadeShadowHistory cascadeCtx;
 	};
 }

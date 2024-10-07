@@ -39,6 +39,7 @@ public:
 	// Cache matrix.
 	chord::math::mat4 m_relativeCameraViewMatrix { 1.0f };
 	chord::math::mat4 m_projectMatrix { 1.0f };
+	chord::math::mat4 m_projectMatrixExistZFar { 1.0f };
 
 	bool isControlingCamera() const 
 	{ 
@@ -68,6 +69,11 @@ public:
 	virtual const chord::math::mat4& getProjectMatrix() const override
 	{
 		return m_projectMatrix;
+	}
+
+	virtual const chord::math::mat4& getProjectMatrixExistZFar() const override
+	{
+		return m_projectMatrixExistZFar;
 	}
 
 	ViewportCamera(class WidgetViewport* inViewport);

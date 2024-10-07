@@ -420,6 +420,9 @@ void ViewportCamera::updateMatrixMisc()
 
 	// Reset z far to zero ensure we use infinite invert z.
 	m_projectMatrix = chord::infiniteInvertZPerspectiveRH_ZO(getAspect(), m_fovy, m_zNear);
+
+	// Still reverse z.
+	m_projectMatrixExistZFar = math::perspectiveRH_ZO(m_fovy, getAspect(), float(m_zFar), float(m_zNear));
 }
 
 ProfilerViewer::ProfilerViewer()

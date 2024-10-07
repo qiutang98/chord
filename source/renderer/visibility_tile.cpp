@@ -12,7 +12,7 @@ namespace chord
 {
 	using namespace graphics;
 
-	PRIVATE_GLOBAL_SHADER(VisibilityTileMarkerCS, "resource/shader/visibility_tile.hlsl", "tilerMarkerCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(VisibilityTileMarkerCS,  "resource/shader/visibility_tile.hlsl", "tilerMarkerCS", EShaderStage::Compute);
 	PRIVATE_GLOBAL_SHADER(VisibilityTilePrepareCS, "resource/shader/visibility_tile.hlsl", "tilePrepareCS", EShaderStage::Compute);
 	PRIVATE_GLOBAL_SHADER(VisibilityTileCmdFillCS, "resource/shader/visibility_tile.hlsl", "prepareTileParamCS", EShaderStage::Compute);
 
@@ -34,7 +34,6 @@ namespace chord
 			VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
 		VisibilityTilePushConsts pushConst { };
-
 		pushConst.visibilityTexelSize = math::vec2(1.0f) / math::vec2(ctx.visibilityDim);
 		pushConst.markerDim           = ctx.markerDim;
 		pushConst.visibilityId        = asSRV(queue, visibilityImage);

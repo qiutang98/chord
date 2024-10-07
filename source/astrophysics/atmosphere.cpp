@@ -603,7 +603,7 @@ void AtmosphereManager::precompute(
 
     AtmospherePushConsts pushTemplate{ };
     pushTemplate.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
-    pushTemplate.constBufferId = uploadBufferToGPU(cmd, "AtmosphereParam", &constParams);
+    pushTemplate.constBufferId = uploadBufferToGPU(cmd, "AtmosphereParam", &constParams).second;
 
     // Transmittance.
     {
@@ -826,7 +826,7 @@ void AtmosphereManager::computeLuts(graphics::CommandList& cmd, GraphicsQueue& q
 
             AtmospherePushConsts pushConst{ };
             pushConst.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
-            pushConst.constBufferId = uploadBufferToGPU(cmd, "AtmosphereParam", &constParams);
+            pushConst.constBufferId = uploadBufferToGPU(cmd, "AtmosphereParam", &constParams).second;
             pushConst.uav0          = asUAV(queue, m_luts.transmittance);
 
             auto computeShader = getContext().getShaderLibrary().getShader<AtmosphereTransmittanceLutCS>();

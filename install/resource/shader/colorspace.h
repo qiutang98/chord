@@ -100,6 +100,13 @@ static const float3x3 Rec2020_2_XYZ_MAT =
     0.0000000000, 0.0280726930, 1.0609850577,
 };
 
+#ifndef __cplusplus
+static const float3x3 sRGB_2_AP1 = mul(XYZ_2_AP1_MAT,  mul(D65_2_D60_CAT, sRGB_2_XYZ_MAT));
+static const float3x3 AP1_2_sRGB = mul(XYZ_2_sRGB_MAT, mul(D60_2_D65_CAT,  AP1_2_XYZ_MAT));
+static const float3x3 AP0_2_AP1  = mul(XYZ_2_AP1_MAT, AP0_2_XYZ_MAT);
+static const float3x3 AP1_2_AP0  = mul(XYZ_2_AP0_MAT, AP1_2_XYZ_MAT);
+#endif 
+
 #ifdef __cplusplus
 inline float rec709GammaDecode(float gammaRec709)
 {

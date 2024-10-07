@@ -80,14 +80,20 @@ void fillPipelineDrawParamCS(uint threadId : SV_DispatchThreadID)
         const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
         const GPUGLTFMeshlet meshlet = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
 
-        const uint bTwoSided = materialInfo.bTwoSided;
-        const uint alphaMode = materialInfo.alphaMode;
-
-        FILTER_CHECK(bTwoSided == 0 || bTwoSided == 1);
-        FILTER_CHECK(alphaMode == 0 || alphaMode == 1 || alphaMode == 2);
-
         // Update visibility.
-        bVisible[i] = (pushConsts.targetAlphaMode == alphaMode) && (pushConsts.targetTwoSide == bTwoSided);
+        bVisible[i]  = true;
+
+        if (pushConsts.targetTwoSide != ~0U)
+        {
+            const uint bTwoSided = materialInfo.bTwoSided;
+            FILTER_CHECK(bTwoSided == 0 || bTwoSided == 1);
+            bVisible[i] &= (pushConsts.targetTwoSide == bTwoSided);
+        }
+
+        const uint alphaMode = materialInfo.alphaMode;
+        FILTER_CHECK(alphaMode == 0 || alphaMode == 1 || alphaMode == 2);
+        bVisible[i] &= (pushConsts.targetAlphaMode == alphaMode);
+
         if (bVisible[i])
         {
             visibleCount ++;

@@ -33,8 +33,8 @@ namespace chord
 		auto graphicsPipeline = getContext().graphicsPipe<FullScreenVS, PixelShader>(
 			name, 
 			std::move(RTs.getRTsFormats()), 
-			RTs.getDepthStencilFormat(), 
-			RTs.getDepthStencilFormat());
+			RTs.getDepthFormat(), 
+			RTs.getStencilFormat());
 
 		addFullScreenPass(queue, name, std::dynamic_pointer_cast<GraphicsPipeline>(graphicsPipeline), RTs, std::move(lambda));
     }

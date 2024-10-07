@@ -30,6 +30,9 @@ namespace chord
 		// return camera project matrix.
 		virtual const math::mat4& getProjectMatrix() const = 0;
 
+		// Default project matrix use infinite z, this function provide matrix exist valid zfar.
+		virtual const math::mat4& getProjectMatrixExistZFar() const = 0;
+
 	public:
 		// return camera aspect.
 		inline float getAspect() const 
@@ -98,7 +101,7 @@ namespace chord
 		double m_zNear = 0.001; //
 
 		// z far.
-		double m_zFar = 20000.0; // 
+		double m_zFar = 20000.0; // z far use for distance culling or other things.
 
 		// render width.
 		size_t m_width = 1;

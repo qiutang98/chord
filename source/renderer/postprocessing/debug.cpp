@@ -89,8 +89,8 @@ namespace chord
                 vertexShader, pixelShader,
                 "DebugLine-CPU",
                 std::move(RTs.getRTsFormats()),
-                RTs.getDepthStencilFormat(),
-                RTs.getDepthStencilFormat());
+                RTs.getDepthFormat(),
+                RTs.getStencilFormat());
 
             addDrawPass(
                 queue,
@@ -145,8 +145,8 @@ namespace chord
                     vertexShader, pixelShader,
                     "DebugLine-GPU",
                     std::move(RTs.getRTsFormats()),
-                    RTs.getDepthStencilFormat(),
-                    RTs.getDepthStencilFormat(),
+                    RTs.getDepthFormat(),
+                    RTs.getStencilFormat(),
                     VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
 
                 addDrawPass(

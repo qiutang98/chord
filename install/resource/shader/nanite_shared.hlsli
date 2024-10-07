@@ -5,6 +5,8 @@
 #include "base.hlsli"
 #include "debug.hlsli"
 
+#define kMeshShaderTGSize 128
+
 // One pixel threshold.
 #define kErrorPixelThreshold 1.0f
 #define kErrorRadiusRoot     3e38f
@@ -51,16 +53,19 @@ bool isMeshletVisible(
     in const float4 frustumPlanes[6], 
     in const GPUObjectGLTFPrimitive objectInfo,
     in const float4x4 localToTranslatedWorld,
+    in const float4x4 localToClip,
     in const GPUGLTFMeshlet meshlet,
     in const GLTFMaterialGPUData materialInfo)
 {
+    bool bVisible = true;
+
     // Do cone culling before frustum culling, it compute faster.
-    if ((materialInfo.bTwoSided == 0) && shaderHasFlag(switchFlags, kMeshletConeCullEnableBit))
+    if (bVisible && (materialInfo.bTwoSided == 0) && shaderHasFlag(switchFlags, kMeshletConeCullEnableBit))
     {
     	float3 cameraPosLS = mul(objectInfo.basicData.translatedWorldToLocal, float4(0, 0, 0, 1)).xyz;
         if (dot(normalize(meshlet.coneApex - cameraPosLS), meshlet.coneAxis) >= meshlet.coneCutOff)
         {
-            return false;
+            bVisible = false;
         }
     }
 
@@ -70,15 +75,19 @@ bool isMeshletVisible(
     const float3 extent    = posMax - posCenter;
 
     // Frustum visible culling: use obb.
-    if (shaderHasFlag(switchFlags, kFrustumCullingEnableBit))
+    if (bVisible && shaderHasFlag(switchFlags, kFrustumCullingEnableBit))
     {
-        if (frustumCulling(frustumPlanes, posCenter, extent, localToTranslatedWorld))
+        if (isOrthoProjection(localToClip))
         {
-            return false;
+            bVisible = !orthoFrustumCulling(posCenter, extent, localToClip);
+        }
+        else
+        {
+            bVisible = !frustumCulling(frustumPlanes, posCenter, extent, localToTranslatedWorld);
         }
     }
 
-    return true;
+    return bVisible;
 }
 
 struct TriangleMiscInfo

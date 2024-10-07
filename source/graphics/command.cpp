@@ -317,7 +317,13 @@ namespace chord::graphics
 		mask.barrierMasks.accesMask = getAccessFlagBits(op);
 		mask.barrierMasks.queueFamilyIndex = getFamily();
 
-		image->get().transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource(getImageAspectFlags(op)));
+		VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
+		if (isFormatExistStencilComponent(image->get().getFormat()))
+		{
+			flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
+		}
+
+		image->get().transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource(flags));
 	}
 
 	GraphicsOrComputeQueue::GraphicsOrComputeQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)

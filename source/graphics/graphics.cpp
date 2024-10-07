@@ -234,6 +234,11 @@ namespace chord::graphics
 		return pNext;
 	}
 
+	uint32 Context::getWhiteTextureSRV() const
+	{
+		return getBuiltinTextures().white->getSRV(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D);
+	}
+
 	HostVisibleGPUBufferRef Context::createStageUploadBuffer(const std::string& name, SizedBuffer data)
 	{
 		VkBufferCreateInfo ci{ };
@@ -676,10 +681,13 @@ namespace chord::graphics
 					FORCE_ENABLE(core10Features.multiViewport);
 					FORCE_ENABLE(core10Features.fragmentStoresAndAtomics);
 					FORCE_ENABLE(core10Features.shaderInt16);
+					FORCE_ENABLE(core10Features.shaderInt64);
 					FORCE_ENABLE(core10Features.fillModeNonSolid);
 					FORCE_ENABLE(core10Features.depthBiasClamp);
 					FORCE_ENABLE(core10Features.geometryShader);
 					FORCE_ENABLE(core10Features.shaderFloat64);
+					FORCE_ENABLE(core10Features.depthBounds);
+					
 
 					// Vulkan 1.1 core.
 					FORCE_ENABLE(core11Features.shaderDrawParameters);

@@ -16,13 +16,15 @@ namespace chord
 
     void ICamera::fillViewUniformParameter(PerframeCameraView& outUB) const
     {
-        const math::mat4& realtiveView = getRelativeCameraViewMatrix();
+		const float4x4& projectionWithZFar = getProjectMatrixExistZFar();
 
-        const math::mat4& projection = getProjectMatrix();
-        const math::mat4 viewProjection = projection * realtiveView;
+        const math::mat4& relativeView = getRelativeCameraViewMatrix();
+        const math::mat4& projection   = getProjectMatrix();
 
-        outUB.translatedWorldToView = realtiveView;
-        outUB.viewToTranslatedWorld = math::inverse(realtiveView);
+        const math::mat4 viewProjection = projection * relativeView;
+
+        outUB.translatedWorldToView = relativeView;
+        outUB.viewToTranslatedWorld = math::inverse(relativeView);
 
         outUB.viewToClip = projection;
         outUB.clipToView = math::inverse(projection);
@@ -46,6 +48,12 @@ namespace chord
 		
 		//
 		outUB.cameraFovy = m_fovy;
+		outUB.zNear = float(m_zNear);
+		outUB.zFar  = float(m_zFar);
+
+		//
+		const float4x4 relativeViewProjectionWithZFar = projectionWithZFar * relativeView;
+		outUB.clipToTranslatedWorldWithZFar = math::inverse(relativeViewProjectionWithZFar);
 
 		outUB.cameraWorldPos = fillDouble3(m_position);
     }
@@ -63,6 +71,7 @@ namespace chord
         const float tanFovyHalf = math::tan(getFovY() * 0.5f);
         const float aspect = getAspect();
 
+		// zFar still working here.
         const math::vec3 nearC = camWorldPos + forwardVector * float(m_zNear);
         const math::vec3 farC  = camWorldPos + forwardVector * float(m_zFar);
 
@@ -75,11 +84,13 @@ namespace chord
 		const math::vec3 yFarHalfV = yFarHalf * upVector;
 		const math::vec3 xFarHalfV = yFarHalf * aspect * rightVector;
 
+		// Near plane corner.
 		const math::vec3 nrt = nearC + xNearHalfV + yNearHalfV;
 		const math::vec3 nrd = nearC + xNearHalfV - yNearHalfV;
 		const math::vec3 nlt = nearC - xNearHalfV + yNearHalfV;
 		const math::vec3 nld = nearC - xNearHalfV - yNearHalfV;
 
+		// Far plane corner.
 		const math::vec3 frt = farC + xFarHalfV + yFarHalfV;
 		const math::vec3 frd = farC + xFarHalfV - yFarHalfV;
 		const math::vec3 flt = farC - xFarHalfV + yFarHalfV;

@@ -99,7 +99,7 @@ void skyRenderCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_Grou
             groundRadiance = scene.atmosphere.ground_albedo * (1.0 / kPI) * (sunIrradiance * sunVis + skyIrradiance * skyVis);
 
             float3 transmittance;
-            float3 inScatter = GetSkyRadianceToPoint(
+            float3 inScatter = GetSkyRadianceToPoint( 
                 scene.atmosphere, 
                 transmittanceTexture,
                 scatteringTexture, 

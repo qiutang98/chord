@@ -28,7 +28,7 @@ namespace chord
         result.depthStencil = pool.create("Gbuffer.DepthStencil", width, height, GBufferTextures::depthStencilFormat(), kDepthVkImageUsage);
 
         // Extract gbuffer.
-        result.gbufferA = pool.create("Gbuffer.A", width, height, GBufferTextures::gbufferAFormat(), kGBufferVkImageUsage);
+        result.gbufferA = pool.create("Gbuffer.A", width, height, GBufferTextures::gbufferAFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
         result.gbufferB = pool.create("Gbuffer.B", width, height, GBufferTextures::gbufferBFormat(), kGBufferVkImageUsage);
         result.gbufferC = pool.create("Gbuffer.C", width, height, GBufferTextures::gbufferCFormat(), kGBufferVkImageUsage);
 
