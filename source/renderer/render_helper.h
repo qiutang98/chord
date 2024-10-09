@@ -549,8 +549,6 @@ namespace chord
 
 		// Cache render depths.
 		std::vector<graphics::PoolTextureRef> depths;
-		std::vector<graphics::PoolTextureRef> depthSATs;
-
 		graphics::PoolTextureRef softShadowMask = nullptr;
 	};
 

@@ -337,7 +337,6 @@ CascadeShadowContext chord::renderShadow(
     // Only valid if direction is same.
     const bool bCacheValid =
         !cascadeHistory.depths.empty()              &&
-        !cascadeHistory.depthSATs.empty()           &&
         cascadeHistory.direction == lightDirection  &&
         cascadeHistory.config    == config.cascadeConfig;
     
@@ -418,7 +417,7 @@ CascadeShadowContext chord::renderShadow(
         if (!isCascadeCacheValid(cascadeId))
         {
             chord::CountAndCmdBuffer countAndCmdBuffers = {};
-            countAndCmdBuffers = instanceCulling(queue, renderCtx, viewBufferAndId.second, cascadeId);
+            countAndCmdBuffers = instanceCulling(queue, renderCtx, viewBufferAndId.second, cascadeId, false);
             if (bCacheValid && sShadowHZBCullingEnable)
             {
                 auto hzbCtx = buildHZB(queue, cascadeHistory.depths[cascadeId], true, false, false);
@@ -465,7 +464,13 @@ CascadeShadowContext chord::renderShadow(
         shadowDepthIds.shadowDepth[i] = asSRV(queue, resultCtx.depths[i], helper::buildDepthImageSubresource());
     }
 
-    resultCtx.cascadeShadowDepthIds = uploadBufferToGPU(cmd, "AtmosphereParam", &shadowDepthIds).second;
+    resultCtx.cascadeShadowDepthIds = uploadBufferToGPU(cmd, "cascadeShadowDepthIds", &shadowDepthIds).second;
+
+    if (renderCtx.timerLambda)
+    {
+        renderCtx.timerLambda("ShadowDepths", queue);
+    }
+
 
     return resultCtx;
 }

@@ -439,6 +439,7 @@ void percentageCloserSoftShadowCS(
             shadowValue = contactHardenPCFKernal(occluders, occluderDistSum, ctx.shadowCoord.z, 4);
         }
 
+        // Current wave inner soft shadow mask.
         {
             const bool bFullInShadow   = (shadowValue <       SOFT_SHADOW_EPSOLON);
             const bool bFullNoInShadow = (shadowValue > 1.0 - SOFT_SHADOW_EPSOLON);

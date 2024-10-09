@@ -78,7 +78,8 @@ CountAndCmdBuffer chord::instanceCulling(
     graphics::GraphicsQueue& queue, 
     const GLTFRenderContext& ctx, 
     uint instanceCullingViewInfo, 
-    uint instanceCullingViewInfoOffset)
+    uint instanceCullingViewInfoOffset, 
+    bool bPrintTimer)
 {
     if (!shouldRenderGLTF(ctx))
     {
@@ -120,7 +121,7 @@ CountAndCmdBuffer chord::instanceCulling(
             math::uvec3(objectCount, 1, 1));
     }
 
-    if (ctx.timerLambda)
+    if (ctx.timerLambda && bPrintTimer)
     {
         ctx.timerLambda("GLTF Object Culling", queue);
     }

@@ -40,7 +40,8 @@ namespace chord
 		graphics::GraphicsQueue& queue, 
 		const GLTFRenderContext& ctx, 
 		uint instanceCullingViewInfo, 
-		uint instanceCullingViewInfoOffset);
+		uint instanceCullingViewInfoOffset, 
+		bool bPrintTimer = false);
 
 	namespace detail
 	{
