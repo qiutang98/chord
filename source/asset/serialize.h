@@ -78,6 +78,9 @@ registerPODClassMember(GLTFPrimitive)
 	ar(bColor0Exist, bSmoothNormalExist, bTextureCoord1Exist);
 	ar(posMin, posMax, posAverage, colors0Offset, textureCoord1Offset, smoothNormalOffset);
 	ar(meshletOffset, lod0meshletCount, bvhNodeOffset, meshletGroupOffset, meshletGroupIndicesOffset, bvhNodeCount, meshletGroupCount);
+
+	ar(lod0IndicesOffset, lod0IndicesCount);
+
 }
 
 registerPODClassMember(GLTFMesh)
@@ -109,6 +112,7 @@ registerPODClassMember(GLTFBinary)
 	ar(primitiveData.bvhNodes);
 	ar(primitiveData.meshletGroups);
 	ar(primitiveData.meshletGroupIndices);
+	ar(primitiveData.lod0Indices);
 }
 
 registerClassMember(IAsset)

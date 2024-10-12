@@ -604,6 +604,32 @@ static const int2 k3x3QuadSampleOffset[4] =
     int2(0, 1),
     int2(1, 0),
 };
+// Example usage:
+/*
+    float shadowMask[9];
+    [unroll(4)]
+    for (int i = 0; i < 4; i ++)
+    {
+        int2 samplePos = workPos + k3x3QuadSampleOffset[i] * k3x3QuadSampleSigned[i];
+        samplePos = clamp(samplePos, 0, pushConsts.dim - 1);
+
+        shadowMask[i] = shadowMaskTexture[samplePos];
+    }
+
+    shadowMask[4] =        QuadReadAcrossX(shadowMask[0]);
+    shadowMask[5] =        QuadReadAcrossY(shadowMask[0]);
+    shadowMask[6] = QuadReadAcrossDiagonal(shadowMask[0]);
+    shadowMask[7] = QuadReadAcrossX(shadowMask[2]);
+    shadowMask[8] = QuadReadAcrossY(shadowMask[3]);
+
+    float shadowMaskSum = 0.0;
+    [unroll(9)]
+    for (int i = 0; i < 9; i ++)
+    {
+        shadowMaskSum += shadowMask[i];
+    }
+*/
+
 
 
 // 

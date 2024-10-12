@@ -18,6 +18,21 @@ namespace chord
     using SceneRef      = std::shared_ptr<Scene>;
     using SceneWeak     = std::weak_ptr<Scene>;
 
+    class AccelerationStructureInstanceCollector
+    {
+    public:
+        // Should TLAS fully rebuild or not.
+        bool bTLASFullyRebuild = false;
+
+        // Collected instances.
+        std::vector<VkAccelerationStructureInstanceKHR> asInstances = {};
+
+        bool isExistInstance() const
+        {
+            return !asInstances.empty();
+        }
+    };
+
     struct PerframeCollected
     {
         std::atomic_uint32_t gltfLod0MeshletCount  = 0;
@@ -25,6 +40,7 @@ namespace chord
         std::vector<GPUObjectGLTFPrimitive> gltfPrimitives;
 
         DebugLineCtx* debugLineCtx = nullptr;
+        AccelerationStructureInstanceCollector asInstances;
     };
 
     class UIComponentDrawDetails
@@ -58,4 +74,6 @@ namespace chord
         std::string m_name;
         std::string m_decoratedName;
     };
+
+
 }

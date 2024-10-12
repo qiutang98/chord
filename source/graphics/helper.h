@@ -529,4 +529,111 @@ namespace chord::graphics::helper
 		}
 	};
 
+	class AccelKHR : public IResource
+	{
+	public:
+		VkAccelerationStructureCreateInfoKHR createInfo;
+		VkAccelerationStructureKHR accel = VK_NULL_HANDLE;
+		VkDeviceAddress accelDeviceAddress;
+		PoolBufferRef buffer = nullptr;
+
+		explicit AccelKHR(const VkAccelerationStructureCreateInfoKHR& accelInfo);
+		virtual ~AccelKHR();
+	};
+	using AccelKHRRef = std::shared_ptr<AccelKHR>;
+
+	class TLASBuilder : NonCopyable
+	{
+	public:
+		~TLASBuilder() 
+		{ 
+			destroy(); 
+		}
+
+		// 
+		void destroy();
+
+		// TLAS
+		bool isInit() const;
+
+		void buildTlas(
+			graphics::GraphicsOrComputeQueue& queue,
+			const std::vector<VkAccelerationStructureInstanceKHR>& instances,
+			bool update,
+			VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+
+	private:
+		// 
+		AccelKHRRef m_tlas;
+
+		// Cached build sized info.
+		VkAccelerationStructureBuildSizesInfoKHR m_buildSizeInfo;
+
+		// 
+		PoolBufferRef m_scratchBuffer = nullptr;
+	};
+
+	class BLASBuilder : NonCopyable
+	{
+	public:
+		struct BlasInput
+		{
+			std::vector<VkAccelerationStructureGeometryKHR> asGeometry;
+			std::vector<VkAccelerationStructureBuildRangeInfoKHR> asBuildOffsetInfo;
+			VkBuildAccelerationStructureFlagsKHR flags{ 0 };
+		};
+
+		~BLASBuilder() 
+		{ 
+			destroy(); 
+		}
+
+		void destroy();
+
+		// 
+		VkDeviceAddress getBlasDeviceAddress(uint32 blasId) const;
+
+		bool isInit() const;
+
+		void build(const std::vector<BlasInput>& input,
+			VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+		
+		// Used for skeleton mesh.
+		void update(
+			graphics::GraphicsOrComputeQueue& queue, 
+			const std::vector<BlasInput>& input,
+			VkBuildAccelerationStructureFlagsKHR flags);
+
+	private:
+		class BuildAccelerationStructure : NonCopyable
+		{
+		public:
+			VkAccelerationStructureBuildGeometryInfoKHR buildInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
+			VkAccelerationStructureBuildSizesInfoKHR sizeInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR };
+			const VkAccelerationStructureBuildRangeInfoKHR* rangeInfo;
+			AccelKHRRef as;
+			AccelKHRRef cleanupAS;
+		};
+
+		void cmdCreateBlas(
+			VkCommandBuffer cmd,
+			std::vector<uint32> indices,
+			std::vector<BuildAccelerationStructure>& buildAs,
+			VkDeviceAddress scratchAddress,
+			VkQueryPool queryPool);
+
+		void cmdCompactBlas(
+			VkCommandBuffer cmd,
+			std::vector<uint32> indices,
+			std::vector<BuildAccelerationStructure>& buildAs,
+			VkQueryPool queryPool);
+
+		void destroyNonCompacted(
+			std::vector<uint32> indices,
+			std::vector<BuildAccelerationStructure>& buildAs);
+
+	protected:
+		PoolBufferRef m_updateScratchBuffer;
+		std::vector<AccelKHRRef> m_blas{ };
+	};
 }

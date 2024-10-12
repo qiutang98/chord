@@ -123,6 +123,14 @@ namespace chord
 						(uint32)gltfBin.primitiveData.meshletGroupIndices.size());
 					copyBuffer(*newGPUPrimitives->meshletGroupIndices, gltfBin.primitiveData.meshletGroupIndices.data());
 
+					newGPUPrimitives->lod0Indices = std::make_unique<ComponentBuffer>(
+						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_lod0Indices"),
+						bufferFlagBasic,
+						bufferFlagVMA,
+						(uint32)sizeof(gltfBin.primitiveData.lod0Indices[0]),
+						(uint32)gltfBin.primitiveData.lod0Indices.size());
+					copyBuffer(*newGPUPrimitives->lod0Indices, gltfBin.primitiveData.lod0Indices.data());
+
 					newGPUPrimitives->positions = std::make_unique<ComponentBuffer>(
 						getRuntimeUniqueGPUAssetName(assetPtr->getName().u8() + "_positions"),
 						bufferFlagBasic | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -198,6 +206,7 @@ namespace chord
 			{
 				newGPUPrimitives->setLoadingState(false);
 				newGPUPrimitives->updateGPUScene();
+				newGPUPrimitives->buildBLAS();
 			});
 
 		m_gpuPrimitives = newGPUPrimitives;
@@ -469,6 +478,88 @@ namespace chord
 		return m_gpuSceneGLTFPrimitiveDetailAssetId.at(meshId).at(primitiveId);
 	}
 
+	static inline uint32 getGLTFPrimitiveBLASIndex(uint meshIndex, uint primitiveId, uint meshCount)
+	{
+
+	}
+
+	// Current BVH from LOD0, maybe we can reduce lod level.
+	void GPUGLTFPrimitiveAsset::buildBLAS()
+	{
+		auto assetPtr = m_gltfAssetWeak.lock();
+		if(assetPtr == nullptr) 
+		{
+			return;
+		}
+
+		if (m_blasBuilder.isInit())
+		{
+			return;
+		}
+
+		using namespace graphics;
+		using namespace graphics::helper;
+
+		// Clear mesh primitive id.
+		m_meshPrimIdMap = {};
+		const auto& meshes = assetPtr->getMeshes();
+
+		std::vector<BLASBuilder::BlasInput> allBlas{ };
+
+		for (uint32 meshIndex = 0; meshIndex < meshes.size(); meshIndex++)
+		{
+			const auto& primitives = meshes[meshIndex].primitives;
+			for (uint32 primitiveId = 0; primitiveId < primitives.size(); primitiveId++)
+			{
+				const auto& gltfPrimtive = primitives[primitiveId];
+
+				GLTFPrimitiveIndexing indexing{ .meshId = meshIndex, .primitiveId = primitiveId };
+				m_meshPrimIdMap[indexing.getHash()] = allBlas.size();
+
+				BLASBuilder::BlasInput subMesh{ };
+
+				{
+					// Describe buffer as array of VertexObj.
+					VkAccelerationStructureGeometryTrianglesDataKHR triangles{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR };
+					triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;  // float3 vertex position data.
+					triangles.vertexData.deviceAddress = positions->buffer->getDeviceAddress();
+					triangles.vertexStride = positions->stripe;
+					triangles.indexType = VK_INDEX_TYPE_UINT32;
+					triangles.indexData.deviceAddress = lod0Indices->buffer->getDeviceAddress();
+					triangles.maxVertex = gltfPrimtive.vertexCount;
+
+					// Identify the above data as containing opaque triangles.
+					VkAccelerationStructureGeometryKHR asGeom{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
+					asGeom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+					asGeom.flags = VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
+					asGeom.geometry.triangles = triangles;
+
+					VkAccelerationStructureBuildRangeInfoKHR offset{ };
+					offset.firstVertex = gltfPrimtive.vertexOffset;
+					offset.primitiveCount = gltfPrimtive.lod0IndicesCount / 3;
+					offset.primitiveOffset = gltfPrimtive.lod0IndicesOffset * sizeof(uint32);
+					offset.transformOffset = 0;
+
+					subMesh.asGeometry.emplace_back(asGeom);
+					subMesh.asBuildOffsetInfo.emplace_back(offset);
+				}
+
+				allBlas.push_back(std::move(subMesh));
+			}
+		}
+
+		// 
+		m_blasBuilder.build(allBlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR);
+	}
+
+	const VkDeviceAddress GPUGLTFPrimitiveAsset::getBLASDeviceAddress(uint32 meshId, uint32 primitiveId) const
+	{
+		GLTFPrimitiveIndexing indexing{ .meshId = meshId, .primitiveId = primitiveId };
+
+		uint objectId = m_meshPrimIdMap.at(indexing.getHash());
+		return m_blasBuilder.getBlasDeviceAddress(objectId);
+	}
+
 	static inline uint64 getPrimitiveDetailHash(uint64 GPUSceneHash, uint32 meshId, uint32 primitiveId)
 	{
 		uint64 pack = (uint64(meshId) << 32) | primitiveId;
@@ -611,7 +702,8 @@ namespace chord
 			+ getValidSize(meshletData)
 			+ getValidSize(bvhNodeData)
 			+ getValidSize(meshletGroup)
-			+ getValidSize(meshletGroupIndices);
+			+ getValidSize(meshletGroupIndices)
+			+ getValidSize(lod0Indices);
 	}
 
 	uint32 GLTFMaterialProxy::TextureInfo::requireSRV(bool bReturnUnValidIfNoExist) const

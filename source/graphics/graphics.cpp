@@ -883,7 +883,8 @@ namespace chord::graphics
 			}
 
 			// Create graphics command pool.
-			m_graphicsCommandPool = std::make_unique<CommandPoolResetable>("GraphicsBuiltinCommandPool");
+			m_graphicsCommandPool = std::make_unique<CommandPoolResetable>("GraphicsBuiltinCommandPool", getContext().getQueuesInfo().graphicsFamily.get());
+			m_computeCommandPool  = std::make_unique<CommandPoolResetable>("ComputeBuiltinCommandPool",  getContext().getQueuesInfo().computeFamily.get());
 
 			// Create pipeline cache
 			{
@@ -1060,6 +1061,7 @@ namespace chord::graphics
 
 		// Clear command pool.
 		m_graphicsCommandPool.reset();
+		m_computeCommandPool.reset();
 
 		if (m_device != VK_NULL_HANDLE)
 		{
@@ -1183,6 +1185,11 @@ namespace chord::graphics
 	void Context::executeImmediatelyMajorGraphics(std::function<void(VkCommandBuffer cb, uint32 family, VkQueue queue)>&& func) const
 	{
 		executeImmediately(getGraphicsCommandPool().pool(), getGraphicsCommandPool().family(), getMajorGraphicsQueue(), std::move(func));
+	}
+
+	void Context::executeImmediatelyMajorCompute(std::function<void(VkCommandBuffer cb, uint32 family, VkQueue queue)>&& func) const
+	{
+		executeImmediately(getComputeCommandPool().pool(), getComputeCommandPool().family(), getMajorComputeQueue(), std::move(func));
 	}
 
 	std::string getRuntimeUniqueGPUAssetName(const std::string& in)

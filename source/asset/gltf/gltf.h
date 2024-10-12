@@ -208,6 +208,9 @@ namespace chord
 		uint32 vertexOffset = 0; // used for required attributes.
 		uint32 vertexCount  = 0;
 
+		uint32 lod0IndicesOffset = 0;
+		uint32 lod0IndicesCount  = 0;
+		 
 		bool bColor0Exist = false;
 		bool bSmoothNormalExist = false;
 		bool bTextureCoord1Exist = false;
@@ -257,13 +260,14 @@ namespace chord
 		struct PrimitiveDatas
 		{
 			// Meshlet need to push to gpu buffer directly, take care of size pad.
-			std::vector<GLTFMeshlet> meshlets;
-			std::vector<uint32> meshletDatas;
-
-			std::vector<GLTFBVHNode> bvhNodes;
+			std::vector<GLTFMeshlet>      meshlets;
+			std::vector<uint32>           meshletDatas;
+			std::vector<GLTFBVHNode>      bvhNodes;
 			std::vector<GLTFMeshletGroup> meshletGroups;
-			std::vector<uint32> meshletGroupIndices;
+			std::vector<uint32>           meshletGroupIndices;
 
+			// LOD0 indices.
+			std::vector<uint32> lod0Indices;
 
 			// required.
 			std::vector<math::vec3> positions;
@@ -291,7 +295,8 @@ namespace chord
 					+ sizeofV(meshletDatas)
 					+ sizeofV(bvhNodes)
 					+ sizeofV(meshletGroups)
-					+ sizeofV(meshletGroupIndices);
+					+ sizeofV(meshletGroupIndices)
+					+ sizeofV(lod0Indices);
 			}
 		} primitiveData;
 	};

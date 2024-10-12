@@ -111,6 +111,8 @@ namespace chord
 		graphics::GPUTimestamps m_rendererTimer;
 		std::vector<graphics::GPUTimestamps::TimeStamp> m_timeStamps;
 
-
+		// 
+		bool m_bTLASValidCurrentFrame = false;
+		graphics::helper::TLASBuilder m_tlas;
 	};
 }

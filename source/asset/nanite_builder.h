@@ -78,6 +78,7 @@ namespace chord::nanite
 		MeshletContainer build() const;
 
 		const std::vector<Vertex>& getVertices() const { return m_vertices; }
+		const std::vector<uint32>& getIndices()  const { return m_indices;  }
 
 	private:
 		void MeshletsGMSS(

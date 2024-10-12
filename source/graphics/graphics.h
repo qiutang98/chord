@@ -91,6 +91,7 @@ namespace chord::graphics
 
 		// Major graphics queue is most importance queue with highest priority.
 		VkQueue getMajorGraphicsQueue() const { return m_gpuQueuesInfo.graphcisQueues[0].queue; }
+		VkQueue getMajorComputeQueue() const { return m_gpuQueuesInfo.computeQueues[0].queue; }
 
 		// Get graphics queues info.
 		const auto& getQueuesInfo() const { return m_gpuQueuesInfo; }
@@ -138,9 +139,12 @@ namespace chord::graphics
 
 		// Sync execute command buffer in main graphics queue, only used for engine init, should not call in actually render pipeline.
 		void executeImmediatelyMajorGraphics(std::function<void(VkCommandBuffer cb, uint32 family, VkQueue queue)>&& func) const;
+		void executeImmediatelyMajorCompute(std::function<void(VkCommandBuffer cb, uint32 family, VkQueue queue)>&& func) const;
 
 		// Builtin graphics command pool with RESET bit.
 		const CommandPoolResetable& getGraphicsCommandPool() const { return *m_graphicsCommandPool; }
+
+		const CommandPoolResetable& getComputeCommandPool() const { return *m_computeCommandPool; }
 
 		const auto& getPipelineLayoutManager() const { return *m_pipelineLayoutManager; }
 		auto& getPipelineLayoutManager() { return *m_pipelineLayoutManager; }
@@ -300,6 +304,9 @@ namespace chord::graphics
 
 		// Graphics family command pool with RESET bit flag.
 		std::unique_ptr<CommandPoolResetable> m_graphicsCommandPool;
+
+		//
+		std::unique_ptr<CommandPoolResetable> m_computeCommandPool;
 
 		// Shader compiler of context.
 		std::unique_ptr<ShaderCompilerManager> m_shaderCompiler = nullptr;

@@ -245,6 +245,13 @@ void DeferredRenderer::render(
 	{
 		insertTimer("FrameBegin", graphics);
 
+		m_bTLASValidCurrentFrame = perframe.asInstances.isExistInstance();
+		if (m_bTLASValidCurrentFrame)
+		{
+			m_tlas.buildTlas(graphics, perframe.asInstances.asInstances, false, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+			insertTimer("TLAS", graphics);
+		}
+
 		const AtmosphereLut& atmosphereLuts = scene->getAtmosphereManager().render(tickData, cmd, graphics);
 
 		// Clear all gbuffer textures.
@@ -281,8 +288,6 @@ void DeferredRenderer::render(
 			cascadeContext = chord::renderShadow(cmd, graphics, gltfRenderCtx, m_perframeCameraView, m_rendererHistory.cascadeCtx, sunCascadeInfos, sunShadowConfig, tickData, *camera, sunDirection);
 			cascadeShadowCurrentFrame = chord::extractCascadeShadowHistory(graphics, sunDirection, cascadeContext, tickData);
 		}
-
-
 
 		auto mainViewCulledCmdBuffer = postInstanceCullingBuffer.second;
 

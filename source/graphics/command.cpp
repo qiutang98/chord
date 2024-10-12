@@ -237,6 +237,8 @@ namespace chord::graphics
 	void GraphicsOrComputeQueue::clearUAV(PoolBufferRef buffer, uint32 data)
 	{
 		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(buffer);
+
 		transitionUAV(buffer);
 		vkCmdFillBuffer(cmd->commandBuffer, buffer->get(), 0, buffer->get().getSize(), data);
 	}
@@ -246,6 +248,8 @@ namespace chord::graphics
 		check(offset + size <= buffer->get().getSize());
 
 		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(buffer);
+
 		transitionUAV(buffer);
 
 
@@ -257,6 +261,8 @@ namespace chord::graphics
 		check(offset + size <= buffer->get().getSize());
 
 		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(buffer);
+
 		transitionUAV(buffer);
 		
 

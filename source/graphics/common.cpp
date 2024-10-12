@@ -5,10 +5,10 @@
 
 namespace chord::graphics
 {
-	CommandPoolResetable::CommandPoolResetable(const std::string& name)
+	CommandPoolResetable::CommandPoolResetable(const std::string& name, uint32 family)
 	{
 		// Create commandpool RESET bit per family.
-		m_family = getContext().getQueuesInfo().graphicsFamily.get();
+		m_family = family; // getContext().getQueuesInfo().graphicsFamily.get();
 		m_pool = helper::createCommandPool(m_family, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
 		setResourceName(VK_OBJECT_TYPE_COMMAND_POOL, (uint64)m_pool, name.c_str());

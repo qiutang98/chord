@@ -280,7 +280,7 @@ namespace chord::graphics
 		VkCommandPool pool() const { return m_pool; }
 		uint32 family() const { return m_family; }
 
-		explicit CommandPoolResetable(const std::string& name);
+		explicit CommandPoolResetable(const std::string& name, uint32 family);
 		~CommandPoolResetable();
 	};
 

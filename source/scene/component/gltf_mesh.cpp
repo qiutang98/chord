@@ -41,7 +41,22 @@ namespace chord
 		m_gltfGPU = m_gltfAsset->getGPUPrimitives();
 	}
 
-	void GLTFMeshComponent::onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const
+	static inline void fillVkAccelerationStructureInstance(VkAccelerationStructureInstanceKHR& as, uint64_t address)
+	{
+		as.accelerationStructureReference = address;
+		as.mask = 0xFF;
+
+		// NOTE: VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR // Faster.
+		//       VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR // Two side.
+		as.flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR; // We current just use opaque bit.
+		as.instanceShaderBindingTableRecordOffset = 0;
+	}
+
+	// TODO: Add some cache.
+	void GLTFMeshComponent::onPerViewPerframeCollect(
+		PerframeCollected& collector, 
+		const PerframeCameraView& cameraView, 
+		const ICamera* camera) const
 	{
 		Super::onPerViewPerframeCollect(collector, cameraView, camera);
 		auto materialComp = getNode()->getComponent<GLTFMaterialComponent>();
@@ -61,10 +76,21 @@ namespace chord
 
 		const auto& meshes = m_gltfAsset->getMeshes().at(m_gltfMeshId);
 
+		VkAccelerationStructureInstanceKHR instanceTamplate{};
+		{
+			// We use local to translated world matrix to build a precision TLAS.
+			math::mat4 temp = math::transpose(templatePrimitive.basicData.localToTranslatedWorld);
+			// 
+			memcpy(&instanceTamplate.transform, &temp, sizeof(VkTransformMatrixKHR));
+		}
+		const bool bASReady = m_gltfGPU->isBLASInit();
+
 		uint lod0MeshletCount = 0;
 		uint meshletGroupCount = 0;
 		for (uint32 primitiveId = 0; primitiveId < meshes.primitives.size(); primitiveId++)
 		{
+			uint32 primitiveObjectId = collector.gltfPrimitives.size();
+
 			auto materialProxy = materialComp->getProxy(primitiveId);
 
 			templatePrimitive.GLTFPrimitiveDetail = m_gltfGPU->getGPUScenePrimitiveDetailId(m_gltfMeshId, primitiveId);
@@ -74,6 +100,17 @@ namespace chord
 			meshletGroupCount += meshes.primitives[primitiveId].meshletGroupCount;
 
 			collector.gltfPrimitives.push_back(templatePrimitive);
+
+			if (bASReady)
+			{
+				VkDeviceAddress blasAddress = m_gltfGPU->getBLASDeviceAddress(m_gltfMeshId, primitiveId);
+				// Update primitive object id, used for ray hit indexing object.
+				instanceTamplate.instanceCustomIndex = primitiveObjectId;
+				fillVkAccelerationStructureInstance(instanceTamplate, blasAddress);
+
+				//
+				collector.asInstances.asInstances.push_back(instanceTamplate);
+			}
 		}
 
 		collector.gltfLod0MeshletCount.fetch_add(lod0MeshletCount);

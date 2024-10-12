@@ -1202,5 +1202,6 @@ namespace chord
 
 		return result;
 	};
-
 }
+
+

@@ -1000,8 +1000,7 @@ NaniteBuilder::NaniteBuilder(
 	size_t indexCount = m_indices.size();
 
 	std::vector<uint32> remap(m_indices.size()); // allocate temporary memory for the remap table
-	size_t vertexCount = meshopt_generateVertexRemap(&remap[0], 
-		m_indices.data(), indexCount, &m_vertices[0], indexCount, sizeof(Vertex));
+	size_t vertexCount = meshopt_generateVertexRemap(&remap[0], m_indices.data(), indexCount, &m_vertices[0], indexCount, sizeof(Vertex));
 
 	std::vector<Vertex> remapVertices(vertexCount);
 	std::vector<uint32> remapIndices(indexCount);

@@ -1190,6 +1190,8 @@ namespace chord
 
 					// Get vertex offset.
 					primitiveMesh.vertexOffset = gltfBin.primitiveData.positions.size();
+					primitiveMesh.lod0IndicesOffset = gltfBin.primitiveData.lod0Indices.size();
+
 					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.normals.size());
 					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.texcoords0.size());
 					check(primitiveMesh.vertexOffset == gltfBin.primitiveData.tangents.size());
@@ -1210,6 +1212,8 @@ namespace chord
 					primitiveMesh.posMin = meshPosMin;
 					primitiveMesh.posMax = meshPosMax;
 					primitiveMesh.posAverage = meshPosAvg;
+
+
 
 					nanite::NaniteBuilder builder(
 						std::move(rawIndices), 
@@ -1260,19 +1264,22 @@ namespace chord
 						{
 							if (meshlet.lod == 0) { primitiveMesh.lod0meshletCount ++; }
 						}
-
-
 					}
 
 					const std::vector<nanite::Vertex>& builderVertices = builder.getVertices();
+					const std::vector<uint32> lod0Indices = builder.getIndices();
 
 					// 
 					primitiveMesh.vertexCount = builderVertices.size();
+					primitiveMesh.lod0IndicesCount = lod0Indices.size();
 
 					// Fill exist state.
 					primitiveMesh.bColor0Exist = optionalAttri.bColor0;
 					primitiveMesh.bSmoothNormalExist = optionalAttri.bSmoothNormal;
 					primitiveMesh.bTextureCoord1Exist = optionalAttri.bUv1;
+
+					// Fill lod0 indices. (Used for voxelize, ray tracing or sdf generation, etc.)
+					gltfBin.primitiveData.lod0Indices.insert(gltfBin.primitiveData.lod0Indices.end(), lod0Indices.begin(), lod0Indices.end());
 
 					// Insert back to binary data.
 					for (auto& vertex : builderVertices)
