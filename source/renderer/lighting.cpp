@@ -73,7 +73,7 @@ namespace chord
 
 		pushConst.bContactHardenPCF = cascadeCtx.config.bContactHardenPCF;
 		pushConst.shadowDepthIds = cascadeCtx.cascadeShadowDepthIds;
-
+		pushConst.realtimeCascadeCount = cascadeCtx.config.realtimeCascadeCount;
 		pushConst.blockerMinSampleCount = cascadeCtx.config.minBlockerSearchSampleCount;
 		pushConst.blockerMaxSampleCount = cascadeCtx.config.maxBlockerSearchSampleCount;
 		pushConst.pcfMinSampleCount = cascadeCtx.config.minPCFSampleCount;

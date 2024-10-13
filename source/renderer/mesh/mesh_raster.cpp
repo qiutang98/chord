@@ -14,6 +14,7 @@
 #include <renderer/postprocessing/postprocessing.h>
 #include <scene/system/shadow.h>
 #include <renderer/renderer.h>
+#include <shader/cascade_setup.hlsl>
 
 using namespace chord;
 using namespace chord::graphics;
@@ -56,6 +57,8 @@ public:
     using Permutation = TShaderVariantVector<SV_bMaskedMaterial, SV_bTwoSide, SV_PassType>;
 };
 IMPLEMENT_GLOBAL_SHADER(MeshRasterPassPS, "resource/shader/mesh_raster.hlsl", "meshRasterPassPS", EShaderStage::Pixel);
+
+PRIVATE_GLOBAL_SHADER(CascadeSetupCS, "resource/shader/cascade_setup.hlsl", "cascadeComputeCS", EShaderStage::Compute);
 
 static inline void renderMeshRasterPipe(
     graphics::GraphicsQueue& queue,
@@ -314,11 +317,11 @@ CascadeShadowContext chord::renderShadow(
     const GLTFRenderContext& renderCtx,
     const PerframeCameraView& cameraView,
     const CascadeShadowHistory& cascadeHistory,
-    const std::vector<CascadeInfo>& cacsadeInfos,
     const ShadowConfig& config, 
     const ApplicationTickData& tickData, 
     const ICamera& camera, 
-    const float3& lightDirection)
+    const float3& lightDirection,
+    const HZBContext& hzbCtx)
 {
     if (!shouldRenderGLTF(renderCtx))
     {
@@ -330,9 +333,9 @@ CascadeShadowContext chord::renderShadow(
     resultCtx.bDirectionChange = (cascadeHistory.direction != lightDirection);
 
     const uint realtimeCount = config.cascadeConfig.realtimeCascadeCount;
+    check(realtimeCount <= config.cascadeConfig.cascadeCount);
 
-    check(realtimeCount <= cacsadeInfos.size());
-    const uint intervalUpdatePeriod = cacsadeInfos.size() - realtimeCount;
+    const uint intervalUpdatePeriod = config.cascadeConfig.cascadeCount - realtimeCount;
 
     // Only valid if direction is same.
     const bool bCacheValid =
@@ -340,28 +343,10 @@ CascadeShadowContext chord::renderShadow(
         cascadeHistory.direction == lightDirection  &&
         cascadeHistory.config    == config.cascadeConfig;
     
-    resultCtx.viewInfos.resize(cacsadeInfos.size());
-    resultCtx.depths.resize(cacsadeInfos.size());
+    resultCtx.depths.resize(config.cascadeConfig.cascadeCount);
 
     auto updateCascade = [&](int32 cascadeId)
     {
-        // View infos.
-        {
-            const auto& cascade = cacsadeInfos[cascadeId];
-            for (uint i = 0; i < 6; i++)
-            {
-                resultCtx.viewInfos[cascadeId].frustumPlanesRS[i] = cascade.frustumPlanes[i];
-            }
-            resultCtx.viewInfos[cascadeId].translatedWorldToClip = cascade.viewProjectMatrix;
-            resultCtx.viewInfos[cascadeId].clipToTranslatedWorld = math::inverse(cascade.viewProjectMatrix);
-            resultCtx.viewInfos[cascadeId].orthoDepthConvertToView = cascade.orthoDepthConvertToView;
-            resultCtx.viewInfos[cascadeId].cameraWorldPos = cameraView.cameraWorldPos;
-            resultCtx.viewInfos[cascadeId].renderDimension.x = (float)config.cascadeConfig.cascadeDim;
-            resultCtx.viewInfos[cascadeId].renderDimension.y = (float)config.cascadeConfig.cascadeDim;
-            resultCtx.viewInfos[cascadeId].renderDimension.z = 1.0f / (float)config.cascadeConfig.cascadeDim;
-            resultCtx.viewInfos[cascadeId].renderDimension.w = 1.0f / (float)config.cascadeConfig.cascadeDim;
-        }
-
         if (bCacheValid)
         {
             resultCtx.depths[cascadeId] = cascadeHistory.depths[cascadeId];
@@ -384,21 +369,15 @@ CascadeShadowContext chord::renderShadow(
         }
     };
 
-    auto isCascadeCacheValid = [=](int32 cascadeId) -> bool
+    auto isCascadeCacheValidGPU = [&](uint cascadeId)
     {
-        if (!bCacheValid || cascadeId < realtimeCount)
-        {
-            return false;
-        }
-
-        return (tickData.tickCount % intervalUpdatePeriod) != (cascadeId - realtimeCount);
+        return isCascadeCacheValid(bCacheValid, realtimeCount, config.cascadeConfig.cascadeCount, cameraView.basicData.frameCounter, cascadeId);
     };
 
-    for (int32 cascadeId = 0; cascadeId < cacsadeInfos.size(); cascadeId++)
+    for (int32 cascadeId = 0; cascadeId < config.cascadeConfig.cascadeCount; cascadeId++)
     {
-        if (isCascadeCacheValid(cascadeId))
+        if (isCascadeCacheValidGPU(cascadeId))
         {
-            resultCtx.viewInfos[cascadeId] = cascadeHistory.viewInfos[cascadeId];
             resultCtx.depths[cascadeId]    = cascadeHistory.depths[cascadeId];
         }
         else
@@ -407,33 +386,92 @@ CascadeShadowContext chord::renderShadow(
         }
     }
 
-    // Upload to GPU.
-    auto viewBufferAndId = uploadBufferToGPU(cmd, "CascadeViewInstanceCullingInfo", resultCtx.viewInfos.data(), resultCtx.viewInfos.size());
-    resultCtx.views = viewBufferAndId.first;
-    resultCtx.viewsSRV = viewBufferAndId.second;
-
-    for (int32 cascadeId = 0; cascadeId < config.cascadeConfig.cascadeCount; cascadeId++)
+    // Setup cascade info pass.
+    auto viewInfosBuffer = cascadeHistory.views;
+    if (viewInfosBuffer == nullptr)
     {
-        if (!isCascadeCacheValid(cascadeId))
+        viewInfosBuffer = getContext().getBufferPool().createGPUOnly("CascadeViewInfos", sizeof(InstanceCullingViewInfo) * kMaxCascadeCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    }
+    {
+        CascadeSetupPushConsts pushConsts{};
+        pushConsts.lightDir = math::normalize(lightDirection);
+        pushConsts.cameraViewId = renderCtx.cameraView;
+        pushConsts.cascadeStartDistance = config.cascadeConfig.cascadeStartDistance;
+        pushConsts.cascadeEndDistance = config.cascadeConfig.cascadeEndDistance;
+        pushConsts.farCascadeSplitLambda = config.cascadeConfig.farCascadeSplitLambda;
+        pushConsts.farCsacadeEndDistance = config.cascadeConfig.farCascadeEndDistance;
+        pushConsts.validDepthMinMaxBufferId = hzbCtx.validDepthRange != nullptr ? asSRV(queue, hzbCtx.validDepthRange) : kUnvalidIdUint32;
+        pushConsts.cascadeCount = config.cascadeConfig.cascadeCount;
+        pushConsts.splitLambda = config.cascadeConfig.splitLambda;
+        pushConsts.cascadeDim = config.cascadeConfig.cascadeDim;
+        pushConsts.cascadeViewInfos = asUAV(queue, viewInfosBuffer);
+        pushConsts.bCacheValid = bCacheValid;
+        pushConsts.realtimeCount = config.cascadeConfig.realtimeCascadeCount;
+        pushConsts.tickCount = cameraView.basicData.frameCounter;
+        pushConsts.radiusScale = config.cascadeConfig.radiusScaleFixed;
+        auto computeShader = getContext().getShaderLibrary().getShader<CascadeSetupCS>();
+
+        addComputePass2(queue,
+            "CascadeSetupCS",
+            getContext().computePipe(computeShader, "CascadeSetupCSPipe"),
+            pushConsts,
+            math::uvec3(1, 1, 1));
+    }
+
+    resultCtx.viewsSRV = asSRV(queue, viewInfosBuffer);
+    resultCtx.views = viewInfosBuffer;
+
+    HZBContext prevCascadeHZBCtx{};
+    int32 prevCascadeId;
+    for (int32 cascadeId = config.cascadeConfig.cascadeCount - 1; cascadeId >= 0; cascadeId--)
+    {
+        if (!isCascadeCacheValidGPU(cascadeId))
         {
             chord::CountAndCmdBuffer countAndCmdBuffers = {};
-            countAndCmdBuffers = instanceCulling(queue, renderCtx, viewBufferAndId.second, cascadeId, false);
-            if (bCacheValid && sShadowHZBCullingEnable)
-            {
-                auto hzbCtx = buildHZB(queue, cascadeHistory.depths[cascadeId], true, false, false);
+            countAndCmdBuffers = instanceCulling(queue, renderCtx, resultCtx.viewsSRV, cascadeId, false);
 
-                constexpr bool bObjectUseLastFrameProject = false;
-                detail::hzbCullingGeneric(
-                    queue, 
-                    hzbCtx, 
-                    cascadeHistory.viewsSRV, 
-                    cascadeId, 
-                    bObjectUseLastFrameProject, 
-                    renderCtx, 
-                    countAndCmdBuffers.first, 
-                    countAndCmdBuffers.second, 
-                    countAndCmdBuffers);
+            constexpr bool bObjectUseLastFrameProject = false;
+
+            if (!prevCascadeHZBCtx.isValid())
+            {
+                check(cascadeId >= config.cascadeConfig.realtimeCascadeCount);
+
+                // If first cacsade and no prev cascade hzb ctx can use, we use cacahe depth hzb to cull.
+                if (bCacheValid && sShadowHZBCullingEnable)
+                {
+                    auto hzbCtx = buildHZB(queue, cascadeHistory.depths[cascadeId], true, false, false);
+
+                    // History view.
+                    detail::hzbCullingGeneric(
+                        queue,
+                        hzbCtx,
+                        cascadeHistory.viewsSRV,
+                        cascadeId,
+                        bObjectUseLastFrameProject,
+                        renderCtx,
+                        countAndCmdBuffers.first,
+                        countAndCmdBuffers.second,
+                        countAndCmdBuffers);
+                }
             }
+            else
+            {
+                // Current view.
+                if (sShadowHZBCullingEnable)
+                {
+                    detail::hzbCullingGeneric(
+                        queue,
+                        prevCascadeHZBCtx,
+                        resultCtx.viewsSRV,
+                        prevCascadeId,
+                        bObjectUseLastFrameProject,
+                        renderCtx,
+                        countAndCmdBuffers.first,
+                        countAndCmdBuffers.second,
+                        countAndCmdBuffers);
+                }
+            }
+
 
             static const auto depthStencilClear = VkClearDepthStencilValue{ 0.0f, 0 };
             queue.clearDepthStencil(resultCtx.depths[cascadeId], &depthStencilClear, VK_IMAGE_ASPECT_DEPTH_BIT);
@@ -451,10 +489,17 @@ CascadeShadowContext chord::renderShadow(
                 true,
                 config.cascadeConfig.shadowBiasConst, 
                 config.cascadeConfig.shadowBiasSlope,
-                viewBufferAndId.second, 
+                resultCtx.viewsSRV,
                 cascadeId, 
                 countAndCmdBuffers.second, 
                 countAndCmdBuffers.first);
+
+            // 
+            if (cascadeId != 0)
+            {
+                prevCascadeHZBCtx = buildHZB(queue, resultCtx.depths[cascadeId], true, false, false);
+                prevCascadeId = cascadeId;
+            }
         }
     }
 
@@ -487,7 +532,6 @@ CascadeShadowHistory chord::extractCascadeShadowHistory(
     result.views     = shadowCtx.views;
     result.viewsSRV  = shadowCtx.viewsSRV;
     result.depths    = shadowCtx.depths;
-    result.viewInfos = shadowCtx.viewInfos;
     // 
 
     return result;

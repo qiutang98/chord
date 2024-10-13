@@ -113,11 +113,11 @@ namespace chord
 		const GLTFRenderContext& renderCtx,
 		const PerframeCameraView& cameraView,
 		const CascadeShadowHistory& cascadeHistory,
-		const std::vector<CascadeInfo>& cascadeInfo,
 		const ShadowConfig& config,
 		const ApplicationTickData& tickData,
 		const ICamera& camera,
-		const float3& lightDirection);
+		const float3& lightDirection,
+		const HZBContext& hzbCtx);
 
 	extern CascadeShadowHistory extractCascadeShadowHistory(
 		graphics::GraphicsQueue& queue,

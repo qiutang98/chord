@@ -29,6 +29,11 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
 **/
 
+/**
+ * NOTE: Atmosphere render in linear srgb color space(Rec709), the engine working color space is
+ *       ACEScg, so when sample the render color (eg: sky color, sun color). Need convert to ACEScg color space.
+**/
+
 #include "base.h"
 #include "debug.hlsli"
 #include "colorspace.h"

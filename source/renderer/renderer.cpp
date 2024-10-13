@@ -224,7 +224,8 @@ void DeferredRenderer::render(
 
 	// Cascade shadow for sun
 	const float3 sunDirection = float3(m_perframeCameraView.basicData.sunInfo.direction);
-	const auto& sunCascadeInfos = scene->getShadowManager().update(tickData, *camera, sunDirection);
+	
+	// 
 	const auto& sunShadowConfig = scene->getShadowManager().getConfig();
 
 	// 
@@ -282,17 +283,20 @@ void DeferredRenderer::render(
 			}
 		}
 
+		{
+			hzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, true, true);
+			insertTimer("BuildHZB", graphics);
+		}
+
 		CascadeShadowContext cascadeContext { };
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
-			cascadeContext = chord::renderShadow(cmd, graphics, gltfRenderCtx, m_perframeCameraView, m_rendererHistory.cascadeCtx, sunCascadeInfos, sunShadowConfig, tickData, *camera, sunDirection);
+			cascadeContext = chord::renderShadow(cmd, graphics, gltfRenderCtx, m_perframeCameraView, m_rendererHistory.cascadeCtx, sunShadowConfig, tickData, *camera, sunDirection, hzbCtx);
 			cascadeShadowCurrentFrame = chord::extractCascadeShadowHistory(graphics, sunDirection, cascadeContext, tickData);
 		}
 
 		auto mainViewCulledCmdBuffer = postInstanceCullingBuffer.second;
 
-		hzbCtx = buildHZB(graphics, gbuffers.depthStencil, true, true, true);
-		insertTimer("BuildHZB", graphics);
 
 		VisibilityTileMarkerContext visibilityCtx;
 		if (shouldRenderGLTF(gltfRenderCtx))

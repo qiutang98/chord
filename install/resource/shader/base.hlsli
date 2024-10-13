@@ -499,6 +499,12 @@ float henyeyGreensteinPhase(float g, float VoL)
 
 // NOTE: henyeyGreensteinPhase looks same with cornetteShanksMiePhase in most case and henyeyGreensteinPhase compute faster.
 
+// Vulkan linearize z.
+// NOTE: viewspace z range is [-zFar, -zNear], linear z is viewspace z mul -1 result on vulkan.
+// if no exist reverse z:
+//       linearZ = zNear * zFar / (zFar +  deviceZ * (zNear - zFar));
+//  when reverse z enable, then the function is:
+//       linearZ = zNear * zFar / (zNear + deviceZ * (zFar - zNear));
 
 // Right hand look at matrix.
 float4x4 lookAt_RH(float3 eye, float3 center, float3 up)
@@ -507,7 +513,7 @@ float4x4 lookAt_RH(float3 eye, float3 center, float3 up)
     const float3 s = normalize(cross(f, up));
     const float3 u = cross(s, f);
 
-    float4x4 ret;
+    float4x4 ret = 0;
 
     ret[0][0] = s.x; 
     ret[0][1] = u.x; 
@@ -529,12 +535,12 @@ float4x4 lookAt_RH(float3 eye, float3 center, float3 up)
     ret[3][2] =  dot(f, eye);
     ret[3][3] = 1.0;
 
-    return ret;
+    return transpose(ret);
 }
 
 float4x4 ortho_RH_ZeroOne(float left, float right, float bottom, float top, float zNear, float zFar)
 {
-    float4x4 ret;
+    float4x4 ret = 0;
 
     ret[0][0] =   2.0f / (right - left);
     ret[1][1] =   2.0f / (top - bottom);
@@ -544,7 +550,8 @@ float4x4 ortho_RH_ZeroOne(float left, float right, float bottom, float top, floa
     ret[3][2] = -zNear / (zFar - zNear);
     ret[3][3] =  1.0;
 
-    return ret;
+    
+    return transpose(ret);
 }
 
 float4x4 matrixInverse(float4x4 m)

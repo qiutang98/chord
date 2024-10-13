@@ -97,12 +97,12 @@ namespace chord
             PoolBufferRef validDepthMinMaxDepthBuffer = nullptr;
             if (bBuildValidRange)
             {
-                auto maxMinDepthBuffer = getContext().getBufferPool().createGPUOnly("MaxMinDepthBuffer", sizeof(uint2), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                validDepthMinMaxDepthBuffer = getContext().getBufferPool().createGPUOnly("MaxMinDepthBuffer", sizeof(uint2), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
                 
                 uint clearRangeValue[2] = { ~0u, 0u }; // Min & Max.
-                queue.updateUAV(maxMinDepthBuffer, 0, sizeof(uint2), clearRangeValue);
+                queue.updateUAV(validDepthMinMaxDepthBuffer, 0, sizeof(uint2), clearRangeValue);
 
-                pushConst.validDepthMinMaxBufferId = asUAV(queue, maxMinDepthBuffer);
+                pushConst.validDepthMinMaxBufferId = asUAV(queue, validDepthMinMaxDepthBuffer);
             }
 
             HZBCS::Permutation permutation;

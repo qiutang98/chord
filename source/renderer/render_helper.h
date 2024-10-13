@@ -451,9 +451,7 @@ namespace chord
 	struct CascadeInfo
 	{
 		float4x4 viewProjectMatrix;
-		float4x4 globalMatrix;
 		float4 orthoDepthConvertToView; 
-		float4 cascadeGlobalScale;
 		float4 frustumPlanes[6];
 	};
 
@@ -468,13 +466,17 @@ namespace chord
 
 		// 
 		float cascadeStartDistance = 0.0f;
-		float cascadeEndDistance   = 200.0f;
-		float splitLambda          = 0.8f;
+		float cascadeEndDistance    = 80.0f;
+		float farCascadeEndDistance = 800.0f;
+		float splitLambda           = 0.8f;
+		float farCascadeSplitLambda = 0.8f;
+
 
 		// 
 		float normalOffsetScale    = 0.0f;
 		float shadowBiasConst      = 0.0f;
 		float shadowBiasSlope      = 0.0f;
+		float radiusScaleFixed     = 1.0f;
 
 		//
 		float lightSize                = 1.0f;
@@ -515,8 +517,7 @@ namespace chord
 		float3 direction = { 0.0f, 0.0f, 0.0f };
 
 		// Cascade views.
-		std::vector<InstanceCullingViewInfo> viewInfos{ };
-		graphics::PoolBufferHostVisible views = nullptr;
+		graphics::PoolBufferGPUOnlyRef views = nullptr;
 		uint32 viewsSRV = ~0;
 
 		// Shadow depths.
@@ -543,8 +544,7 @@ namespace chord
 		CascadeShadowMapConfig config;
 
 		// Cascade views.
-		std::vector<InstanceCullingViewInfo> viewInfos { };
-		graphics::PoolBufferHostVisible views = nullptr;
+		graphics::PoolBufferGPUOnlyRef views = nullptr;
 		uint32 viewsSRV = ~0U;
 
 		// Cache render depths.

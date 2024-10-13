@@ -33,6 +33,7 @@ struct ShadowProjectionPushConsts
     int pcfMaxSampleCount;
 
     float blockerSearchMaxRangeScale;
+    uint realtimeCascadeCount;
 };
 CHORD_PUSHCONST(ShadowProjectionPushConsts, pushConsts);
 
@@ -232,7 +233,7 @@ struct CascadeContext
     float2 cascadeZconvertEye;
 
     // 
-    float cascdeRadius;
+    float cascdeSplit;
     float cascadeRadiusScale;
 };
 
@@ -279,11 +280,17 @@ void cascadeSelected(out CascadeContext ctx, const PerframeCameraView perView, c
 
         // 
         ctx.cascadeZconvertEye = shadowView.orthoDepthConvertToView.xy;
-        ctx.cascdeRadius       = shadowView.orthoDepthConvertToView.z;
+        ctx.cascdeSplit        = shadowView.orthoDepthConvertToView.z;
         ctx.cascadeRadiusScale = shadowView.orthoDepthConvertToView.w;
 
         // Jitter cascade level between 1 - N search width area.
-        const float cascadeUvPadSize = pcssWidth(ctx.cascadeRadiusScale) * lerp(1.0, pushConsts.cascadeBorderJitterCount, n_01);
+        float cascadeUvPadSize = pcssWidth(ctx.cascadeRadiusScale) * lerp(1.0, pushConsts.cascadeBorderJitterCount, n_01);
+        if (cascadeId < pushConsts.realtimeCascadeCount)
+        {
+            // SDSM don't jitter.
+            cascadeUvPadSize = 0.0;
+        }
+
         if ((ctx.shadowCoord.z > 0.0) && (ctx.shadowCoord.z < 1.0))
         {
             if (all(ctx.shadowCoord.xy > cascadeUvPadSize) && all(ctx.shadowCoord.xy < 1.0 - cascadeUvPadSize))
@@ -303,9 +310,10 @@ void cascadeSelected(out CascadeContext ctx, const PerframeCameraView perView, c
 
         //
         float j_bias_const = 1e-5f * lerp(pushConsts.biasLerpMin_const, pushConsts.biasLerpMax_const, n_01);
+
         ctx.pcfBias = (j_bias_const + f4 * j_bias_const + (f8 * f4) * j_bias_const);
 
-        ctx.shadowCoord.z += ctx.pcfBias / ctx.cascadeRadiusScale;
+        ctx.shadowCoord.z += ctx.pcfBias / ctx.cascadeRadiusScale * ctx.cascdeSplit;
     }
 }
 
@@ -411,7 +419,7 @@ void percentageCloserSoftShadowCS(
         cascadeSelected(ctx, perView, scene, workPos, uv, positionRS);
     }
 
-    float penumbraRatio  = -1.0f;
+    float penumbraRatio = -1.0f;
     
     // 
     [branch]
@@ -469,15 +477,11 @@ void percentageCloserSoftShadowCS(
 
             if (blockSearch.y > kFloatEpsilon)
             {
-            #if 1
                 // To light eye space.
                 float zReceiver = -(ctx.shadowCoord.z - ctx.cascadeZconvertEye.y) / ctx.cascadeZconvertEye.x;
                 float blocker   = -(blockSearch.x     - ctx.cascadeZconvertEye.y) / ctx.cascadeZconvertEye.x;
 
                 penumbraRatio = saturate((zReceiver - blocker) / blocker); // (zReceiver - blockSearch.x) / blockSearch.x;
-            #else 
-                penumbraRatio = blockSearch.x - ctx.shadowCoord.z;
-            #endif
             }
 
             [branch]
@@ -503,7 +507,18 @@ void percentageCloserSoftShadowCS(
         }
     }
 
-    rwScreenColor[workPos] = 3.0 * litColor * shadowValue; 
+#if 0
+    float3 debugCacsadeColor = 0.0;
+    if (ctx.bValid)
+    {
+        if(ctx.activeCascadeId == 0) { debugCacsadeColor = float3(0.5, 0.0, 0.0); }
+        if(ctx.activeCascadeId == 1) { debugCacsadeColor = float3(0.5, 0.0, 0.5); }
+        if(ctx.activeCascadeId == 2) { debugCacsadeColor = float3(0.5, 0.5, 0.0); }
+        if(ctx.activeCascadeId == 3) { debugCacsadeColor = float3(0.0, 0.5, 0.0); }
+    } 
+#endif
+
+    rwScreenColor[workPos] = shadowValue; // 3.0 * litColor * shadowValue; 
 
     // Soft shadow mask.
     {

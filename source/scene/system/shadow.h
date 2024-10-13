@@ -9,10 +9,6 @@
 
 namespace chord
 {
-
-
-
-
 	class ShadowManager : NonCopyable, public ISceneSystem
 	{
 	public:
@@ -21,9 +17,9 @@ namespace chord
 		explicit ShadowManager();
 		virtual ~ShadowManager() = default;
 
-		const std::vector<CascadeInfo>& update(const ApplicationTickData& tickData, const ICamera& camera, const float3& lightDirection);
-
+		// 
 		const ShadowConfig& getConfig() const { return m_shadowConfig; }
+
 	protected:
 		virtual void onDrawUI(SceneRef scene) override;
 

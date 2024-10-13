@@ -239,7 +239,7 @@ namespace chord::graphics
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(buffer);
 
-		transitionUAV(buffer);
+		transition(buffer, VK_ACCESS_TRANSFER_WRITE_BIT);
 		vkCmdFillBuffer(cmd->commandBuffer, buffer->get(), 0, buffer->get().getSize(), data);
 	}
 
@@ -250,8 +250,7 @@ namespace chord::graphics
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(buffer);
 
-		transitionUAV(buffer);
-
+		transition(buffer, VK_ACCESS_TRANSFER_WRITE_BIT);
 
 		vkCmdFillBuffer(cmd->commandBuffer, buffer->get(), offset, size, data);
 	}
@@ -263,8 +262,7 @@ namespace chord::graphics
 		auto cmd = m_activeCmdCtx.command;
 		cmd->pendingResources.insert(buffer);
 
-		transitionUAV(buffer);
-		
+		transition(buffer, VK_ACCESS_TRANSFER_WRITE_BIT);
 
 		vkCmdUpdateBuffer(cmd->commandBuffer, buffer->get(), offset, size, data);
 	}
