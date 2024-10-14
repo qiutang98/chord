@@ -217,6 +217,7 @@ static void fillHZBPushParam(graphics::GraphicsQueue& queue, const GLTFRenderCon
 void chord::detail::hzbCullingGeneric(
     graphics::GraphicsQueue& queue, 
     const HZBContext& inHzb, 
+    float extentScale,
     uint instanceViewId,
     uint instanceViewOffset,
     bool bObjectUseLastFrameProject,
@@ -244,6 +245,7 @@ void chord::detail::hzbCullingGeneric(
     HZBCullingGenericPushConst pushConst{ .cameraViewId = renderCtx.cameraView, .switchFlags = getInstanceCullingSwitchFlags() };
     fillHZBPushParam(queue, renderCtx, pushConst, inHzb);
 
+    pushConst.extentScale = extentScale;
     pushConst.instanceViewId = instanceViewId;
     pushConst.instanceViewOffset = instanceViewOffset;
     pushConst.drawedMeshletCountId   = asSRV(queue, inCountBuffer);

@@ -33,6 +33,16 @@ static AutoCVarRef cVarShadowHZBCullingEnable(
     "Enable hzb culling for shadow or not."
 );
 
+static float sShadowExtentScaleForHZBCulling = 1.5f;
+static AutoCVarRef cVarShadowExtentScaleForHZBCulling(
+    "r.shadow.hzbCulling.extentScale",
+    sShadowExtentScaleForHZBCulling,
+    "Cascade extent scale for hzb culling."
+    "NOTE: Shadow hzb culling don't do two stage culling, "
+    "      meaning it easy make mistake when nanite enable."
+    "      So add a extent scale avoid culling bug."
+);
+
 bool chord::shouldRenderGLTF(const GLTFRenderContext& renderCtx)
 {
     return (renderCtx.gltfObjectCount != 0) && (sGLTFRenderingEnable != 0);
@@ -445,6 +455,7 @@ CascadeShadowContext chord::renderShadow(
                     detail::hzbCullingGeneric(
                         queue,
                         hzbCtx,
+                        sShadowExtentScaleForHZBCulling,
                         cascadeHistory.viewsSRV,
                         cascadeId,
                         bObjectUseLastFrameProject,
@@ -462,6 +473,7 @@ CascadeShadowContext chord::renderShadow(
                     detail::hzbCullingGeneric(
                         queue,
                         prevCascadeHZBCtx,
+                        sShadowExtentScaleForHZBCulling,
                         resultCtx.viewsSRV,
                         prevCascadeId,
                         bObjectUseLastFrameProject,

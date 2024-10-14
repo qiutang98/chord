@@ -55,6 +55,7 @@ namespace chord
 		extern void hzbCullingGeneric(
 			graphics::GraphicsQueue& queue,
 			const HZBContext& inHzb,
+			float extentScale,
 			uint instanceViewId,
 			uint instanceViewOffset,
 			bool bObjectUseLastFrameProject,

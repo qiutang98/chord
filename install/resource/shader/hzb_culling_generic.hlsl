@@ -11,9 +11,10 @@ struct HZBCullingGenericPushConst
     uint instanceViewId;
     uint instanceViewOffset;
     uint bObjectUseLastFrameProject;
-    uint switchFlags;
 
+    uint switchFlags;
     uint  hzb; // hzb texture id.  
+    float extentScale; // Extent scale: used for NoN two stage culling.
 
     uint drawedMeshletCountId;
     uint drawedMeshletCmdId;
@@ -59,7 +60,7 @@ void mainCS(uint threadId : SV_DispatchThreadID)
     const float3 posMin    = meshlet.posMin;
     const float3 posMax    = meshlet.posMax;
     const float3 posCenter = (posMin + posMax) * 0.5;
-    const float3 extent    = posMax - posCenter;
+    const float3 extent    = (posMax - posCenter);
 
     bool bVisible = true;
     if (shaderHasFlag(pushConsts.switchFlags, kHZBCullingEnableBit))
@@ -77,23 +78,26 @@ void mainCS(uint threadId : SV_DispatchThreadID)
 
         const float4x4 mvp = mul(instanceView.translatedWorldToClip, localToTranslatedWorld);
 
+        bool bCanDoCulling = true;
         for (uint i = 0; i < 8; i ++)
         {
             const float3 extentPos = posCenter + extent * kExtentApplyFactor[i];
             const float3 UVz = projectPosToUVz(extentPos, mvp);
+
+            //
             minUVz = min(minUVz, UVz);
             maxUVz = max(maxUVz, UVz);
+
+            // No cross near or far plane, Only full in render rect can do occlusion test.
+            bCanDoCulling &= (all(UVz < 1.0) && all(UVz > 0.0));
         }
 
-        if (bVisible && all(minUVz < 1.0) && all(maxUVz > 0.0)) // No cross near or far plane.
+        if (bCanDoCulling && bVisible) 
         {
-            minUVz.xy = saturate(minUVz.xy);
-            maxUVz.xy = saturate(maxUVz.xy);
-
             const float4 uvRect = float4(minUVz.xy, maxUVz.xy);
 
             // offset half pixel make box tight.
-            int4 pixelRect = int4(uvRect * instanceView.renderDimension.xyxy);
+            int4 pixelRect = int4(uvRect * instanceView.renderDimension.xyxy + pushConsts.extentScale * float4(-0.5, -0.5, 0.5, 0.5));
 
             // Range clamp.
             pixelRect.xy = max(0, pixelRect.xy);

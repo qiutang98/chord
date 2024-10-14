@@ -1,5 +1,7 @@
 #include "base.h"
 
+// Hybrid sdsm and cached cascaded shadow map.
+
 inline bool isCascadeCacheValid(
     bool bCacheValid,
     uint realtimeCount,

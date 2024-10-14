@@ -507,7 +507,7 @@ void percentageCloserSoftShadowCS(
         }
     }
 
-#if 0
+#if 1
     float3 debugCacsadeColor = 0.0;
     if (ctx.bValid)
     {
@@ -518,7 +518,7 @@ void percentageCloserSoftShadowCS(
     } 
 #endif
 
-    rwScreenColor[workPos] = shadowValue; // 3.0 * litColor * shadowValue; 
+    rwScreenColor[workPos] = 3.0 * litColor * shadowValue; 
 
     // Soft shadow mask.
     {
