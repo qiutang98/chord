@@ -343,7 +343,7 @@ namespace chord
 		uploadData.emissiveFactor           = reference->emissiveFactor;
 		uploadData.metallicFactor           = reference->metallicFactor;
 		uploadData.roughnessFactor          = reference->roughnessFactor;
-		uploadData.metallicRoughnessTexture = metallicRoughnessTexture.requireSRV();
+		uploadData.metallicRoughnessTexture = metallicRoughnessTexture.requireSRV(true);
 		uploadData.normalTexture            = normalTexture.requireSRV(true);
 		uploadData.normalFactorScale        = reference->normalTextureScale;
 		uploadData.bExistOcclusion          = reference->bExistOcclusion;
@@ -486,6 +486,11 @@ namespace chord
 	// Current BVH from LOD0, maybe we can reduce lod level.
 	void GPUGLTFPrimitiveAsset::buildBLAS()
 	{
+		if (!getContext().isRaytraceSupport())
+		{
+			return;
+		}
+
 		auto assetPtr = m_gltfAssetWeak.lock();
 		if(assetPtr == nullptr) 
 		{
@@ -554,6 +559,8 @@ namespace chord
 
 	const VkDeviceAddress GPUGLTFPrimitiveAsset::getBLASDeviceAddress(uint32 meshId, uint32 primitiveId) const
 	{
+		check(getContext().isRaytraceSupport());
+
 		GLTFPrimitiveIndexing indexing{ .meshId = meshId, .primitiveId = primitiveId };
 
 		uint objectId = m_meshPrimIdMap.at(indexing.getHash());

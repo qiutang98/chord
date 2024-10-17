@@ -159,6 +159,9 @@ void DeferredRenderer::render(
 
 		// Update last frame infos.
 		currentFrame.translatedWorldToClipLastFrame = lastFrame.translatedWorldToClip;
+		currentFrame.translatedWorldToClipLastFrame_NoJitter = lastFrame.translatedWorldToClip_NoJitter;
+		currentFrame.clipToTranslatedWorld_LastFrame = lastFrame.clipToTranslatedWorld;
+		
 		currentFrame.cameraWorldPosLastFrame = lastFrame.cameraWorldPos;
 		for (uint i = 0; i < 6; i++) { currentFrame.frustumPlaneLastFrame[i] = lastFrame.frustumPlane[i]; }
 	}
@@ -288,6 +291,7 @@ void DeferredRenderer::render(
 			insertTimer("BuildHZB", graphics);
 		}
 
+		// Shadow depth rendering.
 		CascadeShadowContext cascadeContext { };
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
@@ -296,6 +300,8 @@ void DeferredRenderer::render(
 		}
 
 		auto mainViewCulledCmdBuffer = postInstanceCullingBuffer.second;
+
+		PoolTextureRef disocclusionMask = nullptr;
 
 
 		VisibilityTileMarkerContext visibilityCtx;
@@ -307,7 +313,14 @@ void DeferredRenderer::render(
 			lighting(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("lighting Tile", graphics);
 
-			auto cascadeResult = cascadeShadowEvaluate(graphics, gbuffers, viewGPUId, cascadeContext, m_rendererHistory.cascadeCtx.softShadowMask);
+			if (m_rendererHistory.depth_Half != nullptr && m_rendererHistory.vertexNormalRS_Half != nullptr)
+			{
+				disocclusionMask = computeDisocclusionMask(graphics, gbuffers, viewGPUId, m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half);
+				insertTimer("DisocclusionMask", graphics);
+			}
+
+
+			auto cascadeResult = cascadeShadowEvaluate(graphics, gbuffers, viewGPUId, cascadeContext, m_rendererHistory.cascadeCtx.softShadowMask, disocclusionMask);
 			cascadeShadowCurrentFrame.softShadowMask = cascadeResult.softShadowMask;
 			insertTimer("PCSS", graphics);
 		}
@@ -339,8 +352,14 @@ void DeferredRenderer::render(
 	m_rendererTimer.onEndFrame();
 	graphics.endCommand();
 
-	m_rendererHistory.hzbCtx = hzbCtx;
-	m_rendererHistory.cascadeCtx = cascadeShadowCurrentFrame;
+	// Update history. 
+	{
+		m_rendererHistory.hzbCtx = hzbCtx;
+		m_rendererHistory.cascadeCtx = cascadeShadowCurrentFrame;
+
+		m_rendererHistory.depth_Half = gbuffers.depth_Half;
+		m_rendererHistory.vertexNormalRS_Half = gbuffers.vertexRSNormal_Half;
+	}
 }
 
 GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)

@@ -13,6 +13,8 @@
 	#error "Shader compiler current only support windows."
 #endif 
 
+#include <regex>
+
 namespace chord::graphics
 {
 	IPlatformShaderCompiler::IPlatformShaderCompiler()
@@ -70,6 +72,7 @@ namespace chord::graphics
 		#ifdef CHORD_DEBUG
 		{
 			out.push_back("-D"); out.push_back("CHORD_DEBUG");
+			out.push_back("-D"); out.push_back(std::format("CHORD_SHADER_FILE_ID={0}", m_metaInfo.shaderFileNameHashId));
 		}
 		#endif
 

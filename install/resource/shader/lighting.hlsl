@@ -6,12 +6,16 @@ struct LightingPushConsts
 
     float2 visibilityTexelSize;
     uint2 visibilityDim;
+
     uint cameraViewId;
     uint tileBufferCmdId;
     uint visibilityId;
-
     uint sceneColorId;
-    uint normalRSId;
+
+    uint vertexNormalRSId;   
+    uint pixelNormalRSId;  
+    uint motionVectorId;   
+    uint aoRoughnessMetallicId; 
 
     uint drawedMeshletCmdId;
 };
@@ -21,77 +25,26 @@ CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 
 #include "nanite_shared.hlsli"
 #include "colorspace.h"
+#include "material.hlsli"
 
-float3 gltfMetallicRoughnessPBR(
+#define DEBUG_CHECK_2x2_TILE 0
+
+void exportGbuffer(in const TinyGBufferContext g, uint2 id)
+{
+    storeRWTexture2D_float3(pushConsts.sceneColorId,          id, g.color);
+    storeRWTexture2D_float4(pushConsts.vertexNormalRSId,      id, float4(g.vertexNormalRS * 0.5 + 0.5, 1.0f));
+    storeRWTexture2D_float4(pushConsts.pixelNormalRSId,       id, float4(g.pixelNormalRS  * 0.5 + 0.5, 1.0f));
+    storeRWTexture2D_float2(pushConsts.motionVectorId,        id, g.motionVector);
+    storeRWTexture2D_float4(pushConsts.aoRoughnessMetallicId, id, float4(g.materialAO, g.roughness, g.metallic, 0.0));
+}
+
+void gltfMetallicRoughnessPBR_Lighting(
     in const PerframeCameraView perView,
     in const GPUBasicData scene,
-    in const GPUObjectGLTFPrimitive objectInfo,
-    in const GLTFMaterialGPUData materialInfo,
-    in const TriangleMiscInfo triangleInfo,
-    in const bool bExistNormalTexture,
-    in const uint2 dispatchPos,
-    out float3 worldNormal)
+    inout TinyGBufferContext gbufferCtx)
 {
-    // Screen uv. 
-    const float2 screenUV = (dispatchPos + 0.5) * pushConsts.visibilityTexelSize;
-
-    //
-    Barycentrics barycentricCtx = calculateTriangleBarycentrics(
-        screenUvToNdcUv(screenUV), 
-        triangleInfo.positionHS[0], 
-        triangleInfo.positionHS[1], 
-        triangleInfo.positionHS[2], 
-        pushConsts.visibilityTexelSize);
-
-    const float3 barycentric = barycentricCtx.interpolation;
-    const float3 ddx = barycentricCtx.ddx;
-    const float3 ddy = barycentricCtx.ddy;
-
-
-    float2 meshUv     = triangleInfo.uv[0] * barycentric.x + triangleInfo.uv[1] * barycentric.y + triangleInfo.uv[2] * barycentric.z;
-    float2 meshUv_ddx = triangleInfo.uv[0] * ddx.x         + triangleInfo.uv[1] * ddx.y         + triangleInfo.uv[2] * ddx.z;
-    float2 meshUv_ddy = triangleInfo.uv[0] * ddy.x         + triangleInfo.uv[1] * ddy.y         + triangleInfo.uv[2] * ddy.z;
-
-    float4 baseColor;
-    {
-        Texture2D<float4> baseColorTexture = TBindless(Texture2D, float4, materialInfo.baseColorId);
-        SamplerState baseColorSampler      = Bindless(SamplerState, materialInfo.baseColorSampler);
-        baseColor = baseColorTexture.SampleGrad(baseColorSampler, meshUv, meshUv_ddx, meshUv_ddy) * materialInfo.baseColorFactor;
-    }
-    baseColor.xyz = mul(sRGB_2_AP1, baseColor.xyz);
-
-    // Vertex normal.
-    const float3 vertNormalRS = triangleInfo.normalRS[0] * barycentric.x + triangleInfo.normalRS[1] * barycentric.y + triangleInfo.normalRS[2] * barycentric.z;
-
-    float3 normalRS;
-    [branch]
-    if (bExistNormalTexture)
-    {
-        float3 tangentRS     =   triangleInfo.tangentRS[0] * barycentric.x +   triangleInfo.tangentRS[1] * barycentric.y +   triangleInfo.tangentRS[2] * barycentric.z;
-        float3 bitangentRS   = triangleInfo.bitangentRS[0] * barycentric.x + triangleInfo.bitangentRS[1] * barycentric.y + triangleInfo.bitangentRS[2] * barycentric.z;
-
-        const float3x3 TBN = float3x3(tangentRS, bitangentRS, vertNormalRS);
-
-        Texture2D<float2> normalTexture = TBindless(Texture2D, float2, materialInfo.normalTexture);
-        SamplerState normalSampler      = Bindless(SamplerState, materialInfo.normalSampler);
-
-        float3 xyz;
-        xyz.xy = normalTexture.SampleGrad(normalSampler, meshUv, meshUv_ddx, meshUv_ddy) * 2.0 - 1.0; // Remap to [-1, 1].
-        xyz.z  = sqrt(1.0 - dot(xyz.xy, xyz.xy)); // Construct z.
-
-        // Apply normal scale.
-        xyz.xy *= materialInfo.normalFactorScale;
-
-        // Tangent space to world sapce.
-        normalRS = mul(normalize(xyz), TBN);
-    }
-    else
-    {
-        normalRS = vertNormalRS;
-    }
-    
-    worldNormal = vertNormalRS;
-    return baseColor.xyz * dot(normalRS, -scene.sunInfo.direction);// ;
+    // Motion vector. 
+    gbufferCtx.color = gbufferCtx.baseColor.xyz * dot(gbufferCtx.pixelNormalRS, -scene.sunInfo.direction);// ;
 }
 
 [numthreads(64, 1, 1)]
@@ -104,12 +57,6 @@ void mainCS(
     //
     Texture2D<uint> visibilityTexture  = TBindless(Texture2D, uint,  pushConsts.visibilityId);
 
-    // 
-    RWTexture2D<float3> rwSceneColor = TBindless(RWTexture2D, float3, pushConsts.sceneColorId);
-    RWTexture2D<float4> rwNormalRS   = TBindless(RWTexture2D, float4, pushConsts.normalRSId);
-
-    SamplerState pointClampSampler = getPointClampEdgeSampler(perView);
-
     //
     uint cachePackId = 0;
 
@@ -118,23 +65,41 @@ void mainCS(
     GLTFMaterialGPUData    materialInfo;
     TriangleMiscInfo       triangleInfo;
 
-    // Exist normal texture or not.
-    bool bExistNormalTexture;
-
     const uint  sampleGroup = workGroupId * 4 + localThreadIndex / 16;
     const uint2 tileOffset  = BATL(uint2, pushConsts.tileBufferCmdId, sampleGroup);
+
+    // 
+    TinyGBufferContext gbufferCtx;
+
+
+#if DEBUG_CHECK_2x2_TILE
+    // One lane handle 2x2 tile continually.
+    uint2 halfStorePos = 0;
+#endif
+
     [unroll(4)]
     for (uint i = 0; i < 4; i ++)
     {
         const uint2 dispatchPos = tileOffset + remap8x8((localThreadIndex % 16) * 4 + i);
         const float2 screenUV = (dispatchPos + 0.5) * pushConsts.visibilityTexelSize;
 
+    #if DEBUG_CHECK_2x2_TILE
+        // Continually debugging. 
+        if (i == 0) 
+        { 
+            halfStorePos = dispatchPos / 2; 
+        }
+        else 
+        { 
+            check(all(halfStorePos == (dispatchPos / 2))); 
+        }
+    #endif
+
         uint packID = 0;
         if (all(dispatchPos <= pushConsts.visibilityDim))
         {
             packID = visibilityTexture[dispatchPos];
         }
-
 
         [branch]
         if (packID != 0 && cachePackId != packID)
@@ -153,14 +118,17 @@ void mainCS(
             materialInfo  = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
 
             // Update state. 
-            bExistNormalTexture = (materialInfo.normalTexture != kUnvalidIdUint32);
+            const bool bExistNormalTexture = (materialInfo.normalTexture != kUnvalidIdUint32);
 
             // Load triangle infos.
             const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
             const float4x4 translatedWorldToClip  = perView.translatedWorldToClip;
             const float4x4 localToClip            = mul(translatedWorldToClip, localToTranslatedWorld);
-            uint triangleIndexId;
-            getTriangleMiscInfo(scene, objectInfo, bExistNormalTexture, localToClip, meshletId, triangleId, triangleInfo, triangleIndexId);
+
+            const float4x4 localToClip_NoJitter            = mul(perView.translatedWorldToClip_NoJitter, localToTranslatedWorld);
+            const float4x4 localToClip_LastFrame_NoJitter  = mul(perView.translatedWorldToClipLastFrame_NoJitter, objectInfo.basicData.localToTranslatedWorldLastFrame);
+
+            triangleInfo = getTriangleMiscInfo(scene, objectInfo, bExistNormalTexture, localToClip, localToClip_NoJitter, localToClip_LastFrame_NoJitter, meshletId, triangleId);
 
             // Update cache pack id.
             cachePackId = packID;
@@ -171,11 +139,13 @@ void mainCS(
         [branch]
         if (packID != 0 && materialInfo.materialType == kLightingType_GLTF_MetallicRoughnessPBR)
         {
-            float3 worldNormal;
-            float3 c = gltfMetallicRoughnessPBR(perView, scene, objectInfo, materialInfo, triangleInfo, bExistNormalTexture, dispatchPos, worldNormal);
+            loadGLTFMetallicRoughnessPBRMaterial(materialInfo, triangleInfo, dispatchPos, pushConsts.visibilityTexelSize, gbufferCtx);
 
-            rwSceneColor[dispatchPos] = c;
-            rwNormalRS[dispatchPos]   = float4(worldNormal * 0.5 + 0.5, 1.0f);
+            // Do directional light lighting.
+            gltfMetallicRoughnessPBR_Lighting(perView, scene, gbufferCtx);
+
+            // 
+            exportGbuffer(gbufferCtx, dispatchPos);
         }
     #endif 
     }

@@ -92,31 +92,41 @@ bool isMeshletVisible(
 
 struct TriangleMiscInfo
 {
+    GPUGLTFMeshlet meshlet;
+    uint triangleIndexId;
+
     float4  positionHS[3];
+
+    // Used for motion vector.
+    float3  positionHS_NoJitter[3];
+    float3  positionHS_NoJitter_LastFrame[3];
+
     float3   tangentRS[3];
     float3 bitangentRS[3];
     float3    normalRS[3];
     float2          uv[3];
 };
 
-GPUGLTFMeshlet getTriangleMiscInfo(
+TriangleMiscInfo getTriangleMiscInfo(
     in const GPUBasicData scene,
     in const GPUObjectGLTFPrimitive objectInfo,
     in const bool bExistNormalTexture,
     in const float4x4 localToClip,
+    in const float4x4 localToClip_NoJitter,
+    in const float4x4 localToClip_NoJitter_LastFrame,
     in const uint meshletId, 
-    in const uint triangleId,
-    out TriangleMiscInfo outTriangle,
-    out uint traingleIndexId)
+    in const uint triangleId)
 {
+    TriangleMiscInfo outTriangle;
+
     const GLTFPrimitiveBuffer primitiveInfo          = BATL(GLTFPrimitiveBuffer, scene.GLTFPrimitiveDetailBuffer, objectInfo.GLTFPrimitiveDetail);
     const GLTFPrimitiveDatasBuffer primitiveDataInfo = BATL(GLTFPrimitiveDatasBuffer, scene.GLTFPrimitiveDataBuffer, primitiveInfo.primitiveDatasBufferId);
-    const GPUGLTFMeshlet meshlet                     = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
+    outTriangle.meshlet                              = BATL(GPUGLTFMeshlet, primitiveDataInfo.meshletBuffer, meshletId);
 
     ByteAddressBuffer meshletDataBuffer = ByteAddressBindless(primitiveDataInfo.meshletDataBuffer);
-    uint verticesCount                  = unpackVertexCount(meshlet.vertexTriangleCount);
-    uint triangleIndicesSampleOffset    = (meshlet.dataOffset + verticesCount + triangleId) * 4;
-    uint indexTri                       = meshletDataBuffer.Load(triangleIndicesSampleOffset);
+    uint verticesCount                  = unpackVertexCount(outTriangle.meshlet.vertexTriangleCount);
+    uint triangleIndicesSampleOffset    = (outTriangle.meshlet.dataOffset + verticesCount + triangleId) * 4;
+    outTriangle.triangleIndexId         = meshletDataBuffer.Load(triangleIndicesSampleOffset);
 
     ByteAddressBuffer positionDataBuffer = ByteAddressBindless(primitiveDataInfo.positionBuffer);
     ByteAddressBuffer normalBuffer  = ByteAddressBindless(primitiveDataInfo.normalBuffer);
@@ -126,13 +136,16 @@ GPUGLTFMeshlet getTriangleMiscInfo(
     [unroll(3)]
     for(uint i = 0; i < 3; i ++)
     {
-        const uint verticesSampleOffset = (meshlet.dataOffset + ((indexTri >> (i * 8)) & 0xff)) * 4;
+        const uint verticesSampleOffset = (outTriangle.meshlet.dataOffset + ((outTriangle.triangleIndexId >> (i * 8)) & 0xff)) * 4;
         const uint indicesId = primitiveInfo.vertexOffset + meshletDataBuffer.Load(verticesSampleOffset);
 
         // position load and projection.
         {
             const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
             outTriangle.positionHS[i] = mul(localToClip, float4(positionLS, 1.0));
+
+            outTriangle.positionHS_NoJitter[i] = mul(localToClip_NoJitter, float4(positionLS, 1.0)).xyw;
+            outTriangle.positionHS_NoJitter_LastFrame[i] = mul(localToClip_NoJitter_LastFrame, float4(positionLS, 1.0)).xyw;
         }
 
         // Load uv. 
@@ -160,9 +173,7 @@ GPUGLTFMeshlet getTriangleMiscInfo(
         }
     }
 
-    // Outputs.
-    traingleIndexId = indexTri;
-    return meshlet;
+    return outTriangle;
 }
 
 #endif

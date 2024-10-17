@@ -245,13 +245,13 @@ void chord::detail::hzbCullingGeneric(
     HZBCullingGenericPushConst pushConst{ .cameraViewId = renderCtx.cameraView, .switchFlags = getInstanceCullingSwitchFlags() };
     fillHZBPushParam(queue, renderCtx, pushConst, inHzb);
 
-    pushConst.extentScale = extentScale;
-    pushConst.instanceViewId = instanceViewId;
-    pushConst.instanceViewOffset = instanceViewOffset;
-    pushConst.drawedMeshletCountId   = asSRV(queue, inCountBuffer);
-    pushConst.drawedMeshletCmdId     = asSRV(queue, inCmdBuffer);
-    pushConst.drawedMeshletCountId_1 = asUAV(queue, countBuffer);
-    pushConst.drawedMeshletCmdId_1   = asUAV(queue, drawMeshletCmdBuffer);
+    pushConst.extentScale                = extentScale;
+    pushConst.instanceViewId             = instanceViewId;
+    pushConst.instanceViewOffset         = instanceViewOffset;
+    pushConst.drawedMeshletCountId       = asSRV(queue, inCountBuffer);
+    pushConst.drawedMeshletCmdId         = asSRV(queue, inCmdBuffer);
+    pushConst.drawedMeshletCountId_1     = asUAV(queue, countBuffer);
+    pushConst.drawedMeshletCmdId_1       = asUAV(queue, drawMeshletCmdBuffer);
     pushConst.bObjectUseLastFrameProject = bObjectUseLastFrameProject;
 
     auto computeShader = getContext().getShaderLibrary().getShader<HZBGenericCullingCS>();

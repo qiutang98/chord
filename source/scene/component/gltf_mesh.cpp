@@ -83,7 +83,7 @@ namespace chord
 			// 
 			memcpy(&instanceTamplate.transform, &temp, sizeof(VkTransformMatrixKHR));
 		}
-		const bool bASReady = m_gltfGPU->isBLASInit();
+		const bool bASReady = graphics::getContext().isRaytraceSupport() && m_gltfGPU->isBLASInit();
 
 		uint lod0MeshletCount = 0;
 		uint meshletGroupCount = 0;

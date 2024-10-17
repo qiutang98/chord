@@ -73,21 +73,21 @@ void mainPS(
     GLTFMaterialGPUData materialInfo  = BATL(GLTFMaterialGPUData, scene.GLTFMaterialBuffer, objectInfo.GLTFMaterialData);
     const bool bExistNormalTexture = (materialInfo.normalTexture != kUnvalidIdUint32);
 
-    TriangleMiscInfo triangleInfo;
     const float4x4 localToTranslatedWorld = objectInfo.basicData.localToTranslatedWorld;
     const float4x4 translatedWorldToClip  = perView.translatedWorldToClip;
     const float4x4 localToClip            = mul(translatedWorldToClip, localToTranslatedWorld);
+    const float4x4 localToClip_NoJitter            = mul(perView.translatedWorldToClip_NoJitter, localToTranslatedWorld);
+    const float4x4 localToClip_LastFrame_NoJitter  = mul(perView.translatedWorldToClipLastFrame_NoJitter, objectInfo.basicData.localToTranslatedWorldLastFrame);
 
-    uint triangleIndexId;
-    const GPUGLTFMeshlet meshlet = getTriangleMiscInfo(
+    TriangleMiscInfo triangleInfo = getTriangleMiscInfo(
         scene, 
         objectInfo, 
         bExistNormalTexture, 
         localToClip, 
+        localToClip_NoJitter,
+        localToClip_LastFrame_NoJitter,
         meshletId, 
-        triangleId, 
-        triangleInfo,
-        triangleIndexId);
+        triangleId);
 
     Barycentrics barycentricCtx = calculateTriangleBarycentrics(
         screenUvToNdcUv(input.uv), 
@@ -98,8 +98,9 @@ void mainPS(
 
     const float3 barycentric = barycentricCtx.interpolation;
 
+    // 
     const float3 meshletHashColor = simpleHashColor(meshletId);
-    const float3 lodColor = kLODDebugColor[meshlet.lod];
+    const float3 lodColor = kLODDebugColor[triangleInfo.meshlet.lod];
 
     outColor.w = 1.0;
     if (pushConsts.debugType == kNaniteDebugType_Meshlet)
@@ -108,7 +109,7 @@ void mainPS(
     }
     else if (pushConsts.debugType == kNaniteDebugType_Triangle)
     {
-        outColor.xyz = simpleHashColor(triangleIndexId);
+        outColor.xyz = simpleHashColor(triangleInfo.triangleIndexId);
     }
     else if (pushConsts.debugType == kNaniteDebugType_LOD)
     {

@@ -39,6 +39,7 @@
 // Texture area.
 #define T_BINDLESS_TEXTURE_FORMAT_DECLARE(Type, Binding) \
     T_BINDLESS_DECLARE(Type, Binding, float ) \
+    T_BINDLESS_DECLARE(Type, Binding, float1) \
     T_BINDLESS_DECLARE(Type, Binding, float2) \
     T_BINDLESS_DECLARE(Type, Binding, float3) \
     T_BINDLESS_DECLARE(Type, Binding, float4) \
@@ -170,5 +171,35 @@ SamplerState getLinearClampEdgeSampler(PerframeCameraView perView)
     SamplerState linearClampSampler = Bindless(SamplerState, perView.basicData.linearClampEdgeSampler);
     return linearClampSampler;
 }
+
+#define  storeRWTexture2D_Declare(Type) \
+    void storeRWTexture2D_##Type(uint id, uint2 pos, Type v) { RWTexture2D<Type> rw = TBindless(RWTexture2D, Type, id); rw[pos] = v; }
+
+storeRWTexture2D_Declare(float4)
+storeRWTexture2D_Declare(float3)
+storeRWTexture2D_Declare(float2)
+storeRWTexture2D_Declare(float1)
+
+#undef storeRWTexture2D_Declare
+
+#define loadTexture2D_Declare(Type) \
+    Type loadTexture2D_##Type(uint id, uint2 pos) { Texture2D<Type> r = TBindless(Texture2D, Type, id); return r[pos];  }
+
+loadTexture2D_Declare(float4)
+loadTexture2D_Declare(float3)
+loadTexture2D_Declare(float2)
+loadTexture2D_Declare(float1)
+
+#undef loadTexture2D_Declare
+
+#define sampleTexture2D_Declare(Type) \
+    Type sampleTexture2D_##Type(uint id, float2 uv, SamplerState s, int lod = 0) { Texture2D<Type> r = TBindless(Texture2D, Type, id); return r.SampleLevel(s, uv, lod);  }
+
+sampleTexture2D_Declare(float4)
+sampleTexture2D_Declare(float3)
+sampleTexture2D_Declare(float2)
+sampleTexture2D_Declare(float1)
+
+#undef sampleTexture2D_Declare
 
 #endif // !SHADER_BINDLESS_HLSLI

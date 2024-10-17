@@ -110,6 +110,14 @@ struct GLTFMaterialGPUData
     float3 emissiveFactor;
     uint emissiveTexture;
 
+    // GLTF Specification for metallicRoughnessTexture
+    // 
+
+    // The textures for metalness and roughness properties are packed together in a single texture called metallicRoughnessTexture. 
+    // Its green channel contains roughness values and its blue channel contains metalness values. 
+    // This texture MUST be encoded with linear transfer function and MAY use more than 8 bits per channel.
+
+    // NOTE: I encode linear occlusion in red channel if exist. check by bExistOcclusion value.
     float metallicFactor;
     float roughnessFactor;
     uint metallicRoughnessTexture;

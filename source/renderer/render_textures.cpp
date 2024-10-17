@@ -15,10 +15,16 @@ namespace chord
         | VK_IMAGE_USAGE_SAMPLED_BIT 
         | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
+    static constexpr auto kHalfGbufferImageUsage
+        = VK_IMAGE_USAGE_SAMPLED_BIT
+        | VK_IMAGE_USAGE_STORAGE_BIT;
+
     GBufferTextures chord::allocateGBufferTextures(uint32 width, uint32 height)
     {
         GBufferTextures result { };
         auto& pool = getContext().getTexturePool();
+
+        result.dimension = { width, height };
 
         // Visibility.
         result.visibility = pool.create("Gbuffer.Visibility", width, height, GBufferTextures::visibilityFormat(), kGBufferVkImageUsage);
@@ -28,11 +34,39 @@ namespace chord
         result.depthStencil = pool.create("Gbuffer.DepthStencil", width, height, GBufferTextures::depthStencilFormat(), kDepthVkImageUsage);
 
         // Extract gbuffer.
-        result.gbufferA = pool.create("Gbuffer.A", width, height, GBufferTextures::gbufferAFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
-        result.gbufferB = pool.create("Gbuffer.B", width, height, GBufferTextures::gbufferBFormat(), kGBufferVkImageUsage);
-        result.gbufferC = pool.create("Gbuffer.C", width, height, GBufferTextures::gbufferCFormat(), kGBufferVkImageUsage);
+        result.vertexRSNormal = pool.create("Gbuffer.vertexRSNormal", width, height, GBufferTextures::vertexRSNormalFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
+        result.pixelRSNormal  = pool.create("Gbuffer.pixelRSNormal", width, height, GBufferTextures::pixelRSNormalFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
+        result.motionVector   = pool.create("Gbuffer.motionVector", width, height, GBufferTextures::motionVectorFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
+        result.aoRoughnessMetallic = pool.create("Gbuffer.aoRoughnessMetallic", width, height, GBufferTextures::aoRoughnessMetallicFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
 
+        // 
         return result;
+    }
+
+    void chord::GBufferTextures::generateHalfGbuffer()
+    {
+        check(dimension.x != 0 && dimension.y != 0);
+
+        uint halfWidth  = dimension.x / 2;
+        uint halfHeight = dimension.y / 2;
+
+        auto& pool = getContext().getTexturePool();
+
+        // Half resolution gbuffers.
+        check(depth_Half == nullptr);
+        depth_Half = pool.create("Gbuffer.depth_Half", halfWidth, halfHeight, GBufferTextures::depthHalfFormat(), kHalfGbufferImageUsage);
+
+        check(pixelRSNormal_Half == nullptr);
+        pixelRSNormal_Half = pool.create("Gbuffer.pixelRSNormal_Half", halfWidth, halfHeight, GBufferTextures::pixelRSNormalFormat(), kHalfGbufferImageUsage);
+
+        check(vertexRSNormal_Half == nullptr);
+        vertexRSNormal_Half = pool.create("Gbuffer.vertexRSNormal_Half", halfWidth, halfHeight, GBufferTextures::vertexRSNormalFormat(), kHalfGbufferImageUsage);
+
+        check(motionVector_Half == nullptr);
+        motionVector_Half = pool.create("Gbuffer.motionVector_Half", halfWidth, halfHeight, GBufferTextures::motionVectorFormat(), kHalfGbufferImageUsage);
+
+        check(roughness_Half == nullptr);
+        roughness_Half = pool.create("Gbuffer.roughness_Half", halfWidth, halfHeight, GBufferTextures::roughnessHalfFormat(), kHalfGbufferImageUsage);
     }
 
     void chord::addClearGbufferPass(GraphicsQueue& queue, GBufferTextures& textures)
@@ -51,9 +85,10 @@ namespace chord
             queue.clearImage(textures.color, &clearValue, 1, &range);
 
             // Extract gbuffer.
-            queue.clearImage(textures.gbufferA, &clearValue, 1, &range);
-            queue.clearImage(textures.gbufferB, &clearValue, 1, &range);
-            queue.clearImage(textures.gbufferC, &clearValue, 1, &range);
+            queue.clearImage(textures.vertexRSNormal,      &clearValue, 1, &range);
+            queue.clearImage(textures.pixelRSNormal,       &clearValue, 1, &range);
+            queue.clearImage(textures.motionVector,        &clearValue, 1, &range);
+            queue.clearImage(textures.aoRoughnessMetallic, &clearValue, 1, &range);
         }
 
         {

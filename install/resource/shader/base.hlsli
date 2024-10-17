@@ -3,6 +3,30 @@
 
 #include "base.h"
 
+// Ray tracing flags
+/**
+enum RAY_FLAG : uint
+{
+    RAY_FLAG_NONE = 0x00,
+    RAY_FLAG_FORCE_OPAQUE = 0x01,
+    RAY_FLAG_FORCE_NON_OPAQUE = 0x02,
+    RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH = 0x04,
+    RAY_FLAG_SKIP_CLOSEST_HIT_SHADER = 0x08,
+    RAY_FLAG_CULL_BACK_FACING_TRIANGLES = 0x10,
+    RAY_FLAG_CULL_FRONT_FACING_TRIANGLES = 0x20,
+    RAY_FLAG_CULL_OPAQUE = 0x40,
+    RAY_FLAG_CULL_NON_OPAQUE = 0x80,
+    RAY_FLAG_SKIP_TRIANGLES = 0x100,
+    RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES = 0x200,
+};
+**/
+
+// 
+#define ClosestRayQuery RayQuery<RAY_FLAG_NONE>
+
+// Shadow ray query only care first hit geometry (For performance). 
+#define ShadowRayQuery  RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH>
+
 #define kPI 3.14159265358979323846
 #define kInvertPI (1.0 / kPI)
 #define KPIOver2  (kPI / 2.0)
@@ -57,6 +81,7 @@ double3 asDouble3(GPUStorageDouble4 v)
     (-,+),(+,+),(+,-),(-,-), where the magnitude of the deltas are always half a texel.
 
 **/
+static const int2 kGatherOffset[4] = { int2(-1, +1), int2(+1, +1), int2(+1, -1), int2(-1, -1) }; 
 
 // Simple hash uint.
 // from niagara stream. see https://www.youtube.com/watch?v=BR2my8OE1Sc
@@ -89,7 +114,7 @@ float2 screenUvToNdcUv(float2 uv)
 {
     uv.x = 2.0 * (uv.x - 0.5);
     uv.y = 2.0 * (0.5 - uv.y);
-
+ 
     return uv;
 }
 
@@ -97,6 +122,14 @@ float3 getPositionRS(float2 uv, float z, in PerframeCameraView view)
 {
     const float4 posCS   = float4(screenUvToNdcUv(uv), z, 1.0);
     const float4 posRS_H = mul(view.clipToTranslatedWorld, posCS);
+
+    return posRS_H.xyz / posRS_H.w;
+}
+
+float3 getPositionRS_LastFrame(float2 uv, float z, in PerframeCameraView view)
+{
+    const float4 posCS   = float4(screenUvToNdcUv(uv), z, 1.0);
+    const float4 posRS_H = mul(view.clipToTranslatedWorld_LastFrame, posCS);
 
     return posRS_H.xyz / posRS_H.w;
 }
@@ -112,6 +145,12 @@ float3 projectPosToUVz(float3 pos, in const float4x4 projectMatrix)
     // Final project UVz.
     return posHS.xyz;
 }
+
+float4 quantize(float4 x, float count) { return ceil(x * count - 1.0f) / (count - 1.0f); }
+float3 quantize(float3 x, float count) { return ceil(x * count - 1.0f) / (count - 1.0f); }
+float2 quantize(float2 x, float count) { return ceil(x * count - 1.0f) / (count - 1.0f); }
+float1 quantize(float1 x, float count) { return ceil(x * count - 1.0f) / (count - 1.0f); }
+
 
 bool isUVzValid(float3 UVz)
 {

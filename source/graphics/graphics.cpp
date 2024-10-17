@@ -18,6 +18,8 @@
 #include <graphics/bufferpool.h>
 #include <graphics/uploader.h>
 
+#include <shader/shader.h>
+
 namespace chord::graphics
 {
 	static bool bGraphicsQueueMajorPriority = false;
@@ -127,10 +129,39 @@ namespace chord::graphics
 
 			auto validationCallback = [&]()
 			{
-				     if (bVerse)   { getValidationLogger().trace(callbackData->pMessage); }
-				else if (bInfo)    { getValidationLogger().info(callbackData->pMessage); }
-				else if (bWarning) { getValidationLogger().warn(callbackData->pMessage); }
-				else if (bError)   { getValidationLogger().error(callbackData->pMessage); }
+				bool bHandle = false;
+				if (strcmp(callbackData->pMessageIdName, "WARNING-DEBUG-PRINTF") == 0)
+				{
+					std::string shaderMessage { callbackData->pMessage };
+
+					if (shaderMessage.find("check failed at line") != std::string::npos)
+					{
+						bHandle = true;
+
+						static const std::regex pattern(R"(file\((\d+)\))");
+						std::smatch match;
+						if (std::regex_search(shaderMessage, match, pattern)) 
+						{
+							std::string interStr = match[1].str();
+							char* endptr;
+							const uint32 shaderFileId = uint32(std::strtoul(interStr.c_str(), &endptr, 10));
+							const std::string& name = GlobalShaderRegisterTable::get().getShaderFileNameHashTable().at(shaderFileId);
+
+							shaderMessage = std::regex_replace(shaderMessage, pattern, name);
+						}
+
+						//
+						getValidationLogger().error(shaderMessage);
+					}
+				}
+
+				if(!bHandle)
+				{
+			             if (bVerse)   { getValidationLogger().trace(callbackData->pMessage); }
+					else if (bInfo)    { getValidationLogger().info(callbackData->pMessage);  }
+					else if (bWarning) { getValidationLogger().warn(callbackData->pMessage);  }
+					else if (bError)   { getValidationLogger().error(callbackData->pMessage); }
+				}
 			};
 
 			if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
@@ -687,7 +718,7 @@ namespace chord::graphics
 					FORCE_ENABLE(core10Features.geometryShader);
 					FORCE_ENABLE(core10Features.shaderFloat64);
 					FORCE_ENABLE(core10Features.depthBounds);
-					
+					FORCE_ENABLE(core10Features.shaderImageGatherExtended);
 
 					// Vulkan 1.1 core.
 					FORCE_ENABLE(core11Features.shaderDrawParameters);

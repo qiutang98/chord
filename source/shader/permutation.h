@@ -102,22 +102,28 @@ namespace chord::graphics
 		// Runtime cache shader file hash.
 		uint64 m_shaderFileHash;
 
+
+
 	public:
 		// 
 		const std::string shaderName;
 		const std::string shaderFilePath;
 		const std::string entry;
 		const EShaderStage stage;
+		//
+		const uint32 shaderFileNameHashId;
 
 		explicit GlobalShaderRegisteredInfo(
 			const std::string&  shaderNameIn,
 			const std::string&  shaderFilePathIn,
 			const std::string&  entryIn,
-			const EShaderStage& stageIn)
+			const EShaderStage& stageIn,
+			const uint32 shaderFileNameHashIdIn)
 			: shaderName(shaderNameIn)
 			, shaderFilePath(shaderFilePathIn)
 			, entry(entryIn)
 			, stage(stageIn)
+			, shaderFileNameHashId(shaderFileNameHashIdIn)
 		{
 			updateShaderFileHash();
 		}

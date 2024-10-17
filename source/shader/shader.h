@@ -7,6 +7,8 @@
 #include <shader/permutation.h>
 #include <utils/threadpool.h>
 
+#include <regex>
+
 namespace chord::graphics
 {
 	// Shader contain multi permutation.
@@ -263,11 +265,16 @@ namespace chord::graphics
 
 		auto& getBatchCompile() { return m_batchCompile; }
 
+		const auto& getShaderFileNameHashTable() const { return m_shaderFileNameIdMap; }
+
 	private:
 		GlobalShaderRegisterTable() = default;
 		
 		std::unordered_map<size_t, std::unique_ptr<GlobalShaderRegisteredInfo>> m_registeredShaders;
 		std::vector<ShaderPermutationBatchCompile> m_batchCompile;
+
+		// Shader file name id map, used for shader file indexing.
+		std::unordered_map<uint32, std::string> m_shaderFileNameIdMap;
 	};
 
 	template<class ShaderType>
@@ -278,12 +285,25 @@ namespace chord::graphics
 		{
 			auto& table   = GlobalShaderRegisterTable::get().m_registeredShaders;
 			auto& batches = GlobalShaderRegisterTable::get().m_batchCompile;
-
+			
 			const auto& typeHash = getTypeHash<ShaderType>();
 			check(table[typeHash] == nullptr);
 
+			// Hash name id for shader debug.
+			uint32 shaderFileNameHashId;
+			{
+				std::string shaderFilePath = file;
+
+				shaderFilePath = std::regex_replace(shaderFilePath, std::regex("resource/shader/"), "");
+
+				shaderFileNameHashId = crc::crc32(shaderFilePath.data(), shaderFilePath.size(), 0);
+
+				// Register shader name hash id.
+				GlobalShaderRegisterTable::get().m_shaderFileNameIdMap[shaderFileNameHashId] = shaderFilePath;
+			}
+
 			// Register global shader meta info.
-			table[typeHash] = std::make_unique<GlobalShaderRegisteredInfo>(name, file, entry, stage);
+			table[typeHash] = std::make_unique<GlobalShaderRegisteredInfo>(name, file, entry, stage, shaderFileNameHashId);
 			const auto& ref = *table[typeHash];
 
 			// Fetch all shader permutations.

@@ -23,14 +23,15 @@ namespace chord
 
         const math::mat4 viewProjection = projection * relativeView;
 
+		outUB.translatedWorldToClip_NoJitter = viewProjection;
+
         outUB.translatedWorldToView = relativeView;
-        outUB.viewToTranslatedWorld = math::inverse(relativeView);
-
         outUB.viewToClip = projection;
-        outUB.clipToView = math::inverse(projection);
-
         outUB.translatedWorldToClip = viewProjection;
-        outUB.clipToTranslatedWorld = math::inverse(viewProjection);
+
+        outUB.viewToTranslatedWorld = math::inverse(outUB.translatedWorldToView);
+        outUB.clipToView = math::inverse(outUB.viewToClip);
+        outUB.clipToTranslatedWorld = math::inverse(outUB.translatedWorldToClip);
 
 		const Frustum frustum = computeRelativeWorldFrustum();
 		outUB.frustumPlane[0] = frustum.planes[0];

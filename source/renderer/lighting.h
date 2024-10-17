@@ -24,7 +24,8 @@ namespace chord
 		GBufferTextures& gbuffers,
 		uint32 cameraViewId,
 		const CascadeShadowContext& cascadeCtx,
-		graphics::PoolTextureRef softShadowMask);
+		graphics::PoolTextureRef softShadowMask,
+		graphics::PoolTextureRef disocclusionMask);
 
 	extern void lighting(
 		graphics::GraphicsQueue& queue,
@@ -32,6 +33,13 @@ namespace chord
 		uint32 cameraViewId,
 		graphics::PoolBufferGPUOnlyRef drawMeshletCmdBuffer,
 		const VisibilityTileMarkerContext& marker);
+
+	extern graphics::PoolTextureRef computeDisocclusionMask(
+		graphics::GraphicsQueue& queue,
+		GBufferTextures& gbuffers,
+		uint32 cameraViewId,
+		graphics::PoolTextureRef depth_Half_LastFrame,
+		graphics::PoolTextureRef vertexNormalRS_Half_LastFrame);
 
 	extern void visualizeNanite(
 		graphics::GraphicsQueue& queue,

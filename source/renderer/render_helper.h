@@ -555,6 +555,12 @@ namespace chord
 	struct DeferredRendererHistory
 	{
 		HZBContext hzbCtx;
+
+		//
 		CascadeShadowHistory cascadeCtx;
+
+		// 
+		graphics::PoolTextureRef depth_Half;
+		graphics::PoolTextureRef vertexNormalRS_Half;
 	};
 }

@@ -11,20 +11,21 @@
 // PBR material info to evaluate shade.
 struct PBRMaterial
 {
-    EShadingModelType shadingModel;
+    float3 diffuseColor; 
+    // alphaRoughness = perceptualRoughness * perceptualRoughness;
+    float alphaRoughness; 
 
     // perceptualRoughness is texture sample value.
     float perceptualRoughness; 
 
-    // alphaRoughness = perceptualRoughness * perceptualRoughness;
-    float alphaRoughness; 
 
-    float3 diffuseColor; 
+
+
     float3 specularColor;  
 
     float3 reflectance0;
     float3 reflectance90;   
 
-    float3  baseColor;
+    float3 baseColor;
     float curvature;
 };

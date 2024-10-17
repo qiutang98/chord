@@ -99,9 +99,9 @@ void singleScatteringCS(uint3 workPos : SV_DispatchThreadID)
     RWTexture3D<float4> rwDeltaRayleigh = TBindless(RWTexture3D, float4, pushConsts.uav0);
     RWTexture3D<float4> rwDeltaMie = TBindless(RWTexture3D, float4, pushConsts.uav1);
     RWTexture3D<float4> rwScattering = TBindless(RWTexture3D, float4, pushConsts.uav2);
-    rwDeltaRayleigh[workPos] = float4(deltaRayleigh, 1.0);
-    rwDeltaMie[workPos] = float4(deltaMie, 1.0);
 
+    rwDeltaRayleigh[workPos] = float4(deltaRayleigh, 1.0);
+    rwDeltaMie[workPos]      = float4(deltaMie, 1.0); 
 
     // Accumulate.
     if (pushConsts.flag1 == 1)
@@ -110,6 +110,7 @@ void singleScatteringCS(uint3 workPos : SV_DispatchThreadID)
     }
     else
     {
+        // First pass, just fill.
         rwScattering[workPos] = scattering;
     }
 
@@ -126,6 +127,7 @@ void singleScatteringCS(uint3 workPos : SV_DispatchThreadID)
         }
         else
         {
+            // First pass, just fill.
             rwSingleMieScattering[workPos] = float4(singleMieScattering, 1.0);
         }
 

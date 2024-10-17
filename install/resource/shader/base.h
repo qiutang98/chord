@@ -286,11 +286,16 @@ struct PerframeCameraView
     float4x4 clipToView;
 
     float4x4 translatedWorldToClip;
+    float4x4 translatedWorldToClip_NoJitter;
     float4x4 clipToTranslatedWorld;
 
     float4 frustumPlane[6]; // World space frustum plane.
 
     float4x4 translatedWorldToClipLastFrame;
+    float4x4 translatedWorldToClipLastFrame_NoJitter;
+
+    float4x4 clipToTranslatedWorld_LastFrame;
+
     float4 frustumPlaneLastFrame[6];
 
     float4 renderDimension; //  .xy is width and height, .zw is inverse of .xy.

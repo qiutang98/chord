@@ -9,6 +9,8 @@
 #include <shader/pcss.hlsl>
 #include <scene/system/shadow.h>
 #include <shader/blur3x3.hlsl>
+#include <shader/half_downsample.hlsl>
+#include <shader/disocclusion_mask.hlsl>
 
 namespace chord
 {
@@ -23,6 +25,9 @@ namespace chord
 	};
 	IMPLEMENT_GLOBAL_SHADER(LightingCS, "resource/shader/lighting.hlsl", "mainCS", EShaderStage::Compute);
 
+	PRIVATE_GLOBAL_SHADER(HalfGbufferDownsample_CS, "resource/shader/half_downsample.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DisocclusionMask_CS, "resource/shader/disocclusion_mask.hlsl", "mainCS", EShaderStage::Compute);
+
 	PRIVATE_GLOBAL_SHADER(ShadowProjectionMaskBlur_CS, "resource/shader/blur3x3.hlsl", "blurShadowMask", EShaderStage::Compute);
 	PRIVATE_GLOBAL_SHADER(ShadowProjectionPCSS_CS, "resource/shader/pcss.hlsl", "percentageCloserSoftShadowCS", EShaderStage::Compute);
 
@@ -31,7 +36,8 @@ namespace chord
 		GBufferTextures& gbuffers, 
 		uint32 cameraViewId, 
 		const CascadeShadowContext& cascadeCtx, 
-		graphics::PoolTextureRef softShadowMaskHistory)
+		graphics::PoolTextureRef softShadowMaskHistory,
+		graphics::PoolTextureRef disocclusionMask)
 	{
 		CascadeShadowEvaluateResult result{ };
 
@@ -58,12 +64,12 @@ namespace chord
 		pushConst.cascadeCount = cascadeCtx.config.cascadeCount;
 		pushConst.shadowViewId = cascadeCtx.viewsSRV;
 		pushConst.depthId = asSRV(queue, gbuffers.depthStencil, helper::buildDepthImageSubresource());
-
+		pushConst.disocclusionMaskId = disocclusionMask != nullptr ? asSRV(queue, disocclusionMask) : kUnvalidIdUint32;
 		pushConst.lightDirection = math::normalize(cascadeCtx.direction);
-		pushConst.normalId = asSRV(queue, gbuffers.gbufferA);
+		pushConst.normalId = asSRV(queue, gbuffers.vertexRSNormal);
 		pushConst.shadowMapTexelSize = 1.0f / float(cascadeCtx.config.cascadeDim);
 		pushConst.normalOffsetScale = cascadeCtx.config.normalOffsetScale;
-
+		pushConst.motionVectorId = asSRV(queue, gbuffers.motionVector);
 		pushConst.lightSize = cascadeCtx.config.lightSize;
 		pushConst.cascadeBorderJitterCount = cascadeCtx.config.cascadeBorderJitterCount;
 		pushConst.pcfBiasScale = cascadeCtx.config.pcfBiasScale;
@@ -138,8 +144,11 @@ namespace chord
 		const VisibilityTileMarkerContext& marker)
 	{
 
-		uint sceneColorUAV = asUAV(queue, gbuffers.color);
-		uint normalUAV     = asUAV(queue, gbuffers.gbufferA);
+		uint sceneColorUAV          = asUAV(queue, gbuffers.color);
+		uint vertexNormalUAV        = asUAV(queue, gbuffers.vertexRSNormal);
+		uint pixelNormalUAV         = asUAV(queue, gbuffers.pixelRSNormal);
+		uint motionVectorUAV        = asUAV(queue, gbuffers.motionVector);
+		uint aoRoughnessMetallicUAV = asUAV(queue, gbuffers.aoRoughnessMetallic);
 
 		for (uint i = 0; i < uint(EShadingType::MAX); i++)
 		{
@@ -154,7 +163,11 @@ namespace chord
 			pushConst.tileBufferCmdId = asSRV(queue, lightingTileCtx.tileCmdBuffer);
 			pushConst.visibilityId = asSRV(queue, marker.visibilityTexture);
 			pushConst.sceneColorId = sceneColorUAV;
-			pushConst.normalRSId = normalUAV;
+			pushConst.vertexNormalRSId = vertexNormalUAV;
+			pushConst.pixelNormalRSId = pixelNormalUAV;
+			pushConst.motionVectorId = motionVectorUAV;
+			pushConst.aoRoughnessMetallicId = aoRoughnessMetallicUAV;
+
 			pushConst.drawedMeshletCmdId = asSRV(queue, drawMeshletCmdBuffer);
 
 			LightingCS::Permutation CSPermutation;
@@ -167,5 +180,75 @@ namespace chord
 				pushConst,
 				lightingTileCtx.dispatchIndirectBuffer);
 		}
+
+		// Now generate half resolution buffer.
+		gbuffers.generateHalfGbuffer();
+		{
+			HalfDownsamplePushConsts pushConsts{};
+
+			const uint2 dispatchDim = divideRoundingUp(gbuffers.dimension / 2U, uint2(8));
+
+			pushConsts.depthTextureId = asSRV(queue, gbuffers.depthStencil, helper::buildDepthImageSubresource());
+			pushConsts.pixelNormalTextureId = asSRV(queue, gbuffers.pixelRSNormal);
+			pushConsts.aoRoughnessMetallicTextureId = asSRV(queue, gbuffers.aoRoughnessMetallic);
+			pushConsts.motionVectorTextureId = asSRV(queue, gbuffers.motionVector);
+			pushConsts.vertexNormalTextureId = asSRV(queue, gbuffers.vertexRSNormal);
+
+
+			pushConsts.halfPixelNormalRSId = asUAV(queue, gbuffers.pixelRSNormal_Half);
+			pushConsts.halfDeviceZId = asUAV(queue, gbuffers.depth_Half);
+			pushConsts.halfMotionVectorId = asUAV(queue, gbuffers.motionVector_Half);
+			pushConsts.halfRoughnessId = asUAV(queue, gbuffers.roughness_Half);
+			pushConsts.halfVertexNormalId = asUAV(queue, gbuffers.vertexRSNormal_Half);
+
+			pushConsts.workDim = gbuffers.dimension / 2U;
+			pushConsts.workTexelSize = 1.0f / float2(pushConsts.workDim);
+			pushConsts.pointClampedEdgeSampler = getContext().getSamplerManager().pointClampEdge().index.get();
+			pushConsts.linearClampedEdgeSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+
+			auto computeShader = getContext().getShaderLibrary().getShader<HalfGbufferDownsample_CS>();
+			addComputePass2(queue, "GBufferHalfDownSample_CS", getContext().computePipe(computeShader, "GBufferHalfDownSample_Pipe"), pushConsts, { dispatchDim.x, dispatchDim.y, 1 });
+		}
+	}
+
+	graphics::PoolTextureRef chord::computeDisocclusionMask(
+		graphics::GraphicsQueue& queue,
+		GBufferTextures& gbuffers,
+		uint32 cameraViewId,
+		graphics::PoolTextureRef depth_Half_LastFrame,
+		graphics::PoolTextureRef vertexNormalRS_Half_LastFrame)
+	{
+		uint halfWidth = gbuffers.dimension.x / 2;
+		uint halfHeight = gbuffers.dimension.y / 2;
+
+		const uint2 dispatchDim = divideRoundingUp(gbuffers.dimension / 2U, uint2(8));
+		DisocclusionMaskPushConsts pushConsts{};
+
+		pushConsts.workDim = gbuffers.dimension / 2U;
+		pushConsts.workTexelSize = 1.0f / float2(pushConsts.workDim);
+
+		pushConsts.cameraViewId = cameraViewId;
+		pushConsts.motionVectorId = asSRV(queue, gbuffers.motionVector_Half);
+		pushConsts.depthTextureId = asSRV(queue, gbuffers.depth_Half);
+		pushConsts.depthTextureId_LastFrame = asSRV(queue, depth_Half_LastFrame);
+		pushConsts.normalRSId = asSRV(queue, gbuffers.vertexRSNormal_Half);
+		pushConsts.normalRSId_LastFrame = asSRV(queue, vertexNormalRS_Half_LastFrame);
+		pushConsts.pointClampedEdgeSampler = getContext().getSamplerManager().pointClampEdge().index.get();
+		pushConsts.linearClampedEdgeSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+
+
+		auto mask = getContext().getTexturePool().create(
+			"DisocclusionMask_Half", 
+			halfWidth, 
+			halfHeight, 
+			VK_FORMAT_R8_UNORM, 
+			VK_IMAGE_USAGE_SAMPLED_BIT| VK_IMAGE_USAGE_STORAGE_BIT);
+
+		pushConsts.disocclusionMaskUAV = asUAV(queue, mask);
+
+		auto computeShader = getContext().getShaderLibrary().getShader<DisocclusionMask_CS>();
+		addComputePass2(queue, "DisocclusionMask_CS", getContext().computePipe(computeShader, "DisocclusionMask_Pipe"), pushConsts, { dispatchDim.x, dispatchDim.y, 1 });
+	
+		return mask;
 	}
 }

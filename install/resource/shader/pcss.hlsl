@@ -34,6 +34,8 @@ struct ShadowProjectionPushConsts
 
     float blockerSearchMaxRangeScale;
     uint realtimeCascadeCount;
+    uint motionVectorId;
+    uint disocclusionMaskId;
 };
 CHORD_PUSHCONST(ShadowProjectionPushConsts, pushConsts);
 
@@ -322,22 +324,45 @@ const bool IsLitAreaInShadow(float3 litColor)
     return all(litColor < kFloatEpsilon);
 }
 
-const float sampleHistorySoftShadowMask(float3 positionRS, in const PerframeCameraView perView)
+const float sampleHistorySoftShadowMask(float2 uv, float3 positionRS, in const PerframeCameraView perView, float disocclusionMask)
 {
     float softShadowMask = 1.0;
+
+    if (disocclusionMask > 0.5)
+    {
+        return softShadowMask;
+    }
+
     SamplerState linearClampSampler = getLinearClampEdgeSampler(perView);
 
-    // TODO: Use motion vector to get better precision. 
-    // TODO: Use depth invalid mask to know history mask is valid or not.
-    const float3 positionRS_prev = positionRS + float3(asDouble3(perView.cameraWorldPos) - asDouble3(perView.cameraWorldPosLastFrame));
-    const float3 UVz_prev = projectPosToUVz(positionRS_prev, perView.translatedWorldToClipLastFrame);
+    float2 historyUv = 0.0;
+    bool bHistoryValid = false;
+    #if 0
+    {
+        const float3 positionRS_prev = positionRS + float3(asDouble3(perView.cameraWorldPos) - asDouble3(perView.cameraWorldPosLastFrame));
+        float3 UVz_prev = projectPosToUVz(positionRS_prev, perView.translatedWorldToClipLastFrame);
 
-    if (all(UVz_prev < 1.0) && all(UVz_prev > 0.0))
+        // 
+        bHistoryValid = all(UVz_prev < 1.0) && all(UVz_prev > 0.0);
+        historyUv = UVz_prev.xy;
+    }
+    #else
+    {
+        Texture2D<float2> motionVectorTexture = TBindless(Texture2D, float2, pushConsts.motionVectorId);
+        float2 motionVector = motionVectorTexture.SampleLevel(linearClampSampler, uv, 0);
+        historyUv = uv + motionVector;
+
+        //
+        bHistoryValid = all(historyUv < 1.0) && all(historyUv > 0.0);
+    }
+    #endif
+
+    if (bHistoryValid)
     {
         Texture2D<float> softShadowMaskTexture = TBindless(Texture2D, float, pushConsts.softShadowMaskTexture);
 
         // Linear sampler cross sample to fix edge problem.
-        softShadowMask = softShadowMaskTexture.SampleLevel(linearClampSampler, UVz_prev.xy, 0);
+        softShadowMask = softShadowMaskTexture.SampleLevel(linearClampSampler, historyUv, 0);
     }
 
     return softShadowMask;
@@ -403,10 +428,16 @@ void percentageCloserSoftShadowCS(
     // Get relative world position.
     const float3 positionRS = getPositionRS(uv, max(deviceZ, kFloatEpsilon), perView);
 
+    float disocclusionMask = 1.0f;
+    if (pushConsts.disocclusionMaskId != kUnvalidIdUint32)
+    {
+        disocclusionMask = sampleTexture2D_float1(pushConsts.disocclusionMaskId, uv, pointClampSampler);
+    }
+
     float softShadowMask = 1.0;
     if (pushConsts.softShadowMaskTexture != kUnvalidIdUint32)
     {
-        softShadowMask = sampleHistorySoftShadowMask(positionRS, perView);
+        softShadowMask = sampleHistorySoftShadowMask(uv, positionRS, perView, disocclusionMask);
     }
 
     CascadeContext ctx;
@@ -456,7 +487,11 @@ void percentageCloserSoftShadowCS(
             const bool bFullNoInShadow_Wave = WaveActiveAllTrue(bFullNoInShadow);
 
             const bool bSoftShadowInWave = (!bFullInShadow_Wave) && (!bFullNoInShadow_Wave);
-            if (bSoftShadowInWave) { softShadowMask = 1.0; }
+            if (bSoftShadowInWave) 
+            { 
+                // Always evaluate soft shadow if wave found current lane under soft shadow area.
+                softShadowMask = 1.0; 
+            }
         }
 
         [branch]

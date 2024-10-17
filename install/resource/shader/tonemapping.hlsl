@@ -19,11 +19,6 @@ CHORD_PUSHCONST(TonemappingPushConsts, pushConsts);
 #include "noise.hlsli"
 #include "aces.hlsli"
 
-static const float3x3 sRGB_2_AP1 = mul(XYZ_2_AP1_MAT,  mul(D65_2_D60_CAT, sRGB_2_XYZ_MAT));
-static const float3x3 AP1_2_sRGB = mul(XYZ_2_sRGB_MAT, mul(D60_2_D65_CAT,  AP1_2_XYZ_MAT));
-static const float3x3 AP0_2_AP1  = mul(XYZ_2_AP1_MAT, AP0_2_XYZ_MAT);
-static const float3x3 AP1_2_AP0  = mul(XYZ_2_AP0_MAT, AP1_2_XYZ_MAT);
-
 // Customize film tonemapper, See RRT in aces.hlsli.
 float3 filmToneMap(
 	float3 colorAP1, 
