@@ -47,4 +47,10 @@ namespace chord
 		uint32 cameraViewId,
 		graphics::PoolBufferGPUOnlyRef drawMeshletCmdBuffer,
 		const VisibilityTileMarkerContext& marker);
+
+	extern void visualizeAccelerateStructure(
+		graphics::GraphicsQueue& queue,
+		GBufferTextures& gbuffers,
+		uint32 cameraViewId,
+		graphics::helper::AccelKHRRef tlas);
 }

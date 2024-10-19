@@ -79,10 +79,10 @@ namespace chord::graphics
         static DescriptorFactory begin(DescriptorLayoutCache* layoutCache, DescriptorAllocator* allocator);
 
         // use for buffers.
-        DescriptorFactory& bindBuffers(uint32_t binding, uint32_t count, VkDescriptorBufferInfo* bufferInfo, VkDescriptorType type, VkShaderStageFlags stageFlags);
+        DescriptorFactory& bindBuffers(uint32 binding, uint32 count, VkDescriptorBufferInfo* bufferInfo, VkDescriptorType type, VkShaderStageFlags stageFlags);
 
         // use for textures.
-        DescriptorFactory& bindImages(uint32_t binding, uint32_t count, VkDescriptorImageInfo*, VkDescriptorType type, VkShaderStageFlags stageFlags);
+        DescriptorFactory& bindImages(uint32 binding, uint32 count, VkDescriptorImageInfo*, VkDescriptorType type, VkShaderStageFlags stageFlags);
 
         bool build(VkDescriptorSet& set, VkDescriptorSetLayout& layout);
         bool build(VkDescriptorSet& set);
@@ -92,28 +92,33 @@ namespace chord::graphics
         DescriptorFactory& bindNoInfoStage(
             VkDescriptorType type,
             VkShaderStageFlags stageFlags,
-            uint32_t binding,
-            uint32_t count = 1);
+            uint32 binding,
+            uint32 count = 1);
 
         DescriptorFactory& bindNoInfo(
             VkDescriptorType type,
-            uint32_t binding,
-            uint32_t count = 1)
+            uint32 binding,
+            uint32 count = 1)
         {
             return bindNoInfoStage(type, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, binding, count);
         }
 
-        DescriptorFactory& buffer(uint32_t binding)
+        DescriptorFactory& buffer(uint32 binding)
         {
             return bindNoInfo(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, binding);
         }
 
-        DescriptorFactory& textureUAV(uint32_t binding)
+        DescriptorFactory& textureUAV(uint32 binding)
         {
             return bindNoInfo(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, binding);
         }
 
-        DescriptorFactory& textureSRV(uint32_t binding)
+        DescriptorFactory& accelerateStructure(uint32 binding)
+        {
+            return bindNoInfo(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, binding);
+        }
+
+        DescriptorFactory& textureSRV(uint32 binding)
         {
             return bindNoInfo(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, binding);
         }
@@ -125,11 +130,11 @@ namespace chord::graphics
     private:
         struct DescriptorWriteContainer
         {
-            VkDescriptorImageInfo* imgInfo;
+            VkDescriptorImageInfo*  imgInfo;
             VkDescriptorBufferInfo* bufInfo;
-            uint32_t binding;
+            uint32 binding;
             VkDescriptorType type;
-            uint32_t count;
+            uint32 count;
             bool isImg = false;
         };
 

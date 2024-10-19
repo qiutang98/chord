@@ -367,6 +367,7 @@ namespace chord
 
 		PushSetBuilder& addSRV(graphics::PoolBufferRef buffer);
 		PushSetBuilder& addUAV(graphics::PoolBufferRef buffer);
+		PushSetBuilder& addAccelerateStructure(graphics::helper::AccelKHRRef as);
 
 		PushSetBuilder& addSRV(
 			graphics::PoolTextureRef image,
@@ -389,7 +390,10 @@ namespace chord
 				BufferUAV,
 				TextureSRV,
 				TextureUAV,
+				AccelerateStructure,
 			} type;
+
+			graphics::helper::AccelKHRRef accelerateStructure;
 
 			graphics::PoolTextureRef image;
 			VkImageSubresourceRange imageRange;

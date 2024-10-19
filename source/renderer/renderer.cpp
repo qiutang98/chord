@@ -332,8 +332,12 @@ void DeferredRenderer::render(
 		{
 			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("Nanite visualize", graphics);
-		}
 
+			if (m_bTLASValidCurrentFrame)
+			{
+				visualizeAccelerateStructure(graphics, gbuffers, viewGPUId, m_tlas.getTLAS());
+			}
+		}
 
 		check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 		check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);

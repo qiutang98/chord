@@ -412,6 +412,9 @@ enum class EShadingType
 // 4 meshlet per cluster group.
 #define kClusterGroupMergeMaxCount 4
 
+// If position construct from barycentrics, it will don't need tMin anymore.
+#define kDefaultRayQueryTMin 1e-2f
+#define kDefaultRayQueryTMax 1e9f
 
 // NV 3070Ti, see VkPhysicalDeviceLimits::subpixelPrecisionBits
 #define subpixelPrecisionBits  8

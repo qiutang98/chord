@@ -1,2 +1,0 @@
-// Temporal based super resolution.
-

@@ -22,10 +22,7 @@ enum RAY_FLAG : uint
 **/
 
 // 
-#define ClosestRayQuery RayQuery<RAY_FLAG_NONE>
-
-// Shadow ray query only care first hit geometry (For performance). 
-#define ShadowRayQuery  RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH>
+#define GIRayQuery RayQuery<RAY_FLAG_NONE>
 
 #define kPI 3.14159265358979323846
 #define kInvertPI (1.0 / kPI)
@@ -473,6 +470,22 @@ uint2 jitterSequence2(uint index, uint2 dimension, uint2 dispatchId)
 	return offsetId;
 }
 
+// Radical inverse based on http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
+float2 hammersley2d(uint i, uint N) 
+{
+    // Efficient VanDerCorpus calculation.
+	uint bits = (i << 16u) | (i >> 16u);
+         bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+         bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+         bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+         bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    //
+	float rdi = float(bits) * 2.3283064365386963e-10;
+
+    // Hammersley sequence.
+	return float2(float(i) / float(N), rdi);
+}
+
 // high frequency dither pattern appearing almost random without banding steps
 // note: from "NEXT GENERATION POST PROCESSING IN CALL OF DUTY: ADVANCED WARFARE"
 //      http://advances.realtimerendering.com/s2014/index.html
@@ -695,5 +708,159 @@ float chebyshevUpperBound(float2 moments, float mean, float minVariance)
     return max(p, p_max);
 }
 
+// https://www.pcg-random.org/
+
+uint pcgHash(uint value)
+{
+    uint state = value * 747796405u + 2891336453u;
+    
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+
+    return (word >> 22u) ^ word;
+}
+
+uint pcgHash(uint2 values)
+{
+    values = values * 1664525u + 1013904223u;
+
+    values.x += values.y * 1664525u;
+    values.y += values.x * 1664525u;
+
+    values = values ^ (values >> 16u);
+
+    values.x += values.y * 1664525u;
+    values.y += values.x * 1664525u;
+
+    values = values ^ (values >> 16u);
+
+    return dot(values, 1);
+}
+
+uint pcgHash(uint3 values)
+{
+    values = values * 1664525u + 1013904223u;
+
+    values.x += values.y * values.z;
+    values.y += values.z * values.x;
+    values.z += values.x * values.y;
+
+    values ^= values >> 16u;
+
+    values.x += values.y * values.z;
+    values.y += values.z * values.x;
+    values.z += values.x * values.y;
+
+    return dot(values, 1);
+}
+
+uint pcgHash(uint4 values)
+{
+    values = values * 1664525u + 1013904223u;
+
+    values.x += values.y * values.w;
+    values.y += values.z * values.x;
+    values.z += values.x * values.y;
+    values.w += values.y * values.z;
+
+    values ^= values >> 16u;
+
+    values.x += values.y * values.w;
+    values.y += values.z * values.x;
+    values.z += values.x * values.y;
+    values.w += values.y * values.z;
+
+    return dot(values, 1);
+}
+
+// xxhash (https://github.com/Cyan4973/xxHash)
+uint xxHash(uint value)
+{
+    const uint prime32_2 = 2246822519u, prime32_3 = 3266489917u;
+    const uint prime32_4 = 668265263u,  prime32_5 = 374761393u;
+
+    uint ret = value + prime32_5;
+         ret = prime32_4 * ((ret << 17) | (ret >> (32 - 17)));
+         ret = prime32_2 * (ret ^ (ret >> 15));
+         ret = prime32_3 * (ret ^ (ret >> 13));
+
+    return ret ^ (ret >> 16);
+}
+
+uint xxHash(uint2 values)
+{
+    const uint prime32_2 = 2246822519u, prime32_3 = 3266489917u;
+    const uint prime32_4 = 668265263u,  prime32_5 = 374761393u;
+
+    uint ret = values.y + prime32_5 + values.x * prime32_3;
+         ret = prime32_4 * ((ret << 17) | (ret >> (32 - 17)));
+         ret = prime32_2 * (ret ^ (ret >> 15));
+         ret = prime32_3 * (ret ^ (ret >> 13));
+
+    return ret ^ (ret >> 16);
+}
+
+uint xxHash(uint3 values)
+{
+    const uint prime32_2 = 2246822519u, prime32_3 = 3266489917u;
+    const uint prime32_4 = 668265263u,  prime32_5 = 374761393u;
+
+    uint ret  = values.z + prime32_5 + values.x * prime32_3;
+         ret  = prime32_4 * ((ret << 17) | (ret >> (32 - 17)));
+         ret += values.y * prime32_3;
+         ret  = prime32_4 * ((ret << 17) | (ret >> (32 - 17)));
+         ret  = prime32_2 * (ret ^ (ret >> 15));
+         ret  = prime32_3 * (ret ^ (ret >> 13));
+
+    return ret ^ (ret >> 16);
+}
+
+uint xxHash(uint4 values)
+{
+    const uint prime32_2 = 2246822519u, prime32_3 = 3266489917u;
+    const uint prime32_4 = 668265263u,  prime32_5 = 374761393u;
+
+    uint ret  = values.w + prime32_5 + values.x * prime32_3;
+         ret  = prime32_4 * ((ret << 17) | (ret >> (32 - 17)));
+         ret += values.y * prime32_3;
+         ret  = prime32_4 * ((ret << 17) | (ret >> (32 - 17)));
+         ret += values.z * prime32_3;
+         ret  = prime32_4 * ((ret << 17) | (ret >> (32 - 17)));
+         ret  = prime32_2 * (ret ^ (ret >> 15));
+         ret  = prime32_3 * (ret ^ (ret >> 13));
+
+    return ret ^ (ret >> 16);
+}
+
+float trigHash(float2 value)
+{
+    return frac(43757.5453f * sin(dot(value, float2(12.9898f, 78.233f))));
+}
+
+float trigHash(float3 values)
+{
+    return trigHash(float2(trigHash(values.xy), values.z));
+}
+
+float trigHash(float4 values)
+{
+    return trigHash(float3(trigHash(values.xy), values.z, values.w));
+}
+
+RayDesc getRayDesc(float3 o, float3 d, float tMin = kDefaultRayQueryTMin, float tMax = kDefaultRayQueryTMax)
+{
+    RayDesc ray;
+
+    // check(tMin < tMax)
+
+    // 
+	ray.TMin = tMin;
+	ray.TMax = tMax;
+
+    //
+	ray.Origin    = o;
+	ray.Direction = d;
+
+    return ray;
+}
 
 #endif // !SHADER_BASE_HLSLI

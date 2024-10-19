@@ -6,6 +6,7 @@
 #include <shader/base.h>
 #include <renderer/lighting.h>
 #include <shader/nanite_debug.hlsl>
+#include <shader/accelerate_structure_visualize.hlsl>
 
 using namespace chord;
 using namespace chord::graphics;
@@ -23,8 +24,54 @@ static AutoCVarRef cVarInstanceCullingShaderDebugMode(
 	"   4. draw barycentrics."
 );
 
+static int32 sAccelerateStructureVisualizationConfig = -1;
+static AutoCVarRef cVarAccelerateStructureVisualizationConfig(
+	"r.visualize.accelerateStructure",
+	sAccelerateStructureVisualizationConfig,
+	"**** Accelerate structure visualize mode ****"
+	"  -1. default state, do nothing."
+	"   0. draw visible meshlet hash color."
+);
+
 
 PRIVATE_GLOBAL_SHADER(NaniteVisualizePS, "resource/shader/nanite_debug.hlsl", "mainPS", EShaderStage::Pixel);
+PRIVATE_GLOBAL_SHADER(AccelerateStructureVisualizeCS, "resource/shader/accelerate_structure_visualize.hlsl", "mainCS", EShaderStage::Compute);
+
+void chord::visualizeAccelerateStructure(GraphicsQueue& queue, GBufferTextures& gbuffers, uint32 cameraViewId, helper::AccelKHRRef tlas)
+{
+	if (sAccelerateStructureVisualizationConfig < 0)
+	{
+		return;
+	}
+
+	if (!getContext().isRaytraceSupport())
+	{
+		return;
+	}
+
+	AccelerationStructureVisualizePushConsts pushConst{};
+	pushConst.cameraViewId = cameraViewId;
+	pushConst.uav = asUAV(queue, gbuffers.color);
+
+	uint2 dispatchParam = { (gbuffers.dimension + 7U) / 8U };
+
+	auto computeShader = getContext().getShaderLibrary().getShader<AccelerateStructureVisualizeCS>();
+	addComputePass(queue,
+		"Visualize: AccelerateStructureCS",
+		getContext().computePipe(computeShader, "Visualize: AccelerateStructure", {
+			getContext().descriptorFactoryBegin()
+			.accelerateStructure(0) // TLAS
+			.buildNoInfoPush() }),
+		{ dispatchParam, 1 },
+		[&](GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)
+		{
+			pipe->pushConst(cmd, pushConst);
+
+			PushSetBuilder(queue, cmd)
+				.addAccelerateStructure(tlas)
+				.push(pipe, 1); // Push set 1.
+		});
+}
 
 void chord::visualizeNanite(GraphicsQueue& queue, GBufferTextures& gbuffers, uint32 cameraViewId, PoolBufferGPUOnlyRef drawMeshletCmdBuffer, const VisibilityTileMarkerContext& marker)
 {

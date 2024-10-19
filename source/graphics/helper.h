@@ -562,6 +562,8 @@ namespace chord::graphics::helper
 			bool update,
 			VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 
+		AccelKHRRef getTLAS() const { return m_tlas; }
+
 	private:
 		// 
 		AccelKHRRef m_tlas;

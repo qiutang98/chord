@@ -1,7 +1,7 @@
 #include "gltf.h"
 
-// Two phase stage for main view culling.
-// HZB sample 4x4 in higher level for better culling state.
+// One pass culling for shadow view.
+// HZB sample 2x2 in suitable level with additional scale box.(extentScale)
 
 struct HZBCullingGenericPushConst
 {

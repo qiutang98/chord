@@ -27,14 +27,16 @@ namespace chord::graphics
 
 	}
 
-	constexpr const char* kDebugSourceArg = "-fspv-debug=vulkan-with-source";
-	constexpr const char* kEnable16BitArg = "-enable-16bit-types";
+	constexpr const char* kDebugSourceArg    = "-fspv-debug=vulkan-with-source";
+	constexpr const char* kEnable16BitArg    = "-enable-16bit-types";
+	constexpr const char* kEnableRayQueryArg = "-fspv-extension=SPV_KHR_ray_query";
 
 	void ShaderCompileEnvironment::buildArgs(ShaderCompileArguments& out) const
 	{
 		// Spv.
 		out.push_back("-spirv");
 		out.push_back(kEnable16BitArg);
+		out.push_back(kEnableRayQueryArg);
 	//	out.push_back("-fvk-allow-rwstructuredbuffer-arrays");
 
 		// Included path.

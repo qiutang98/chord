@@ -47,6 +47,7 @@ float disocclusionMaskFactor(float3 normal, float z, float3 positionRS, float3 n
     float normalDiffFalloff   = exp(-normalDiffFalloffFactor   * normalDiff);
     float distanceDiffFallOff = exp(-distanceDiffFalloffFactor * distanceDiff);
 
+    // When add normal factor, easy break geometry edge valid state. 
     // 
     return distanceDiffFallOff * normalDiffFalloff;
 }

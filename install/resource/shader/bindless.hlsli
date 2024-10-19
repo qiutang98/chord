@@ -44,10 +44,12 @@
     T_BINDLESS_DECLARE(Type, Binding, float3) \
     T_BINDLESS_DECLARE(Type, Binding, float4) \
     T_BINDLESS_DECLARE(Type, Binding, uint  ) \
+    T_BINDLESS_DECLARE(Type, Binding, uint1 ) \
     T_BINDLESS_DECLARE(Type, Binding, uint2 ) \
     T_BINDLESS_DECLARE(Type, Binding, uint3 ) \
     T_BINDLESS_DECLARE(Type, Binding, uint4 ) \
     T_BINDLESS_DECLARE(Type, Binding, int   ) \
+    T_BINDLESS_DECLARE(Type, Binding, int1  ) \
     T_BINDLESS_DECLARE(Type, Binding, int2  ) \
     T_BINDLESS_DECLARE(Type, Binding, int3  ) \
     T_BINDLESS_DECLARE(Type, Binding, int4  ) 
@@ -179,6 +181,11 @@ storeRWTexture2D_Declare(float4)
 storeRWTexture2D_Declare(float3)
 storeRWTexture2D_Declare(float2)
 storeRWTexture2D_Declare(float1)
+
+storeRWTexture2D_Declare(uint4)
+storeRWTexture2D_Declare(uint3)
+storeRWTexture2D_Declare(uint2)
+storeRWTexture2D_Declare(uint1)
 
 #undef storeRWTexture2D_Declare
 

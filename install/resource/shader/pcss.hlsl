@@ -46,7 +46,7 @@ CHORD_PUSHCONST(ShadowProjectionPushConsts, pushConsts);
 #include "bindless.hlsli" 
 #include "debug.hlsli"
 #include "base.hlsli"
-#include "noise.hlsli"
+#include "blue_noise.hlsli"
 #include "sample.hlsli"
 
 // Depth Aware Contact harden pcf. See GDC2021: "Shadows of Cold War" for tech detail.

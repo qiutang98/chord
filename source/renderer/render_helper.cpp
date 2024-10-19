@@ -45,6 +45,19 @@ namespace chord
 		return *this;
 	}
 
+    PushSetBuilder& PushSetBuilder::addAccelerateStructure(graphics::helper::AccelKHRRef as)
+    {
+        m_queue.getActiveCmd()->pendingResources.insert(as);
+
+        CacheBindingBuilder builder;
+        builder.type = CacheBindingBuilder::EType::AccelerateStructure;
+        builder.accelerateStructure = as;
+        
+
+        m_cacheBindingBuilder.push_back(builder);
+        return *this;
+    }
+
     PushSetBuilder& PushSetBuilder::addSRV(graphics::PoolTextureRef image, const VkImageSubresourceRange& range, VkImageViewType viewType)
     {
         asSRV(m_queue, image, range, viewType);
@@ -141,6 +154,21 @@ namespace chord
             {
                 images[i] = descriptorImageInfoStorage(binding.image->get().requireView(binding.imageRange, binding.viewType, false, true).handle.get());
                 writes[i] = pushWriteDescriptorSetImage(i, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &images[i]);
+            }
+            break;
+            case CacheBindingBuilder::EType::AccelerateStructure:
+            {
+                VkWriteDescriptorSetAccelerationStructureKHR descriptorAccelerationStructureInfo{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
+                descriptorAccelerationStructureInfo.accelerationStructureCount = 1;
+                descriptorAccelerationStructureInfo.pAccelerationStructures = &binding.accelerateStructure->accel;
+                ases[i] = descriptorAccelerationStructureInfo;
+
+                VkWriteDescriptorSet accelerationStructureWrite { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+                accelerationStructureWrite.pNext = &ases[i];
+                accelerationStructureWrite.dstBinding = i;
+                accelerationStructureWrite.descriptorCount = 1;
+                accelerationStructureWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                writes[i] = accelerationStructureWrite;
             }
             break;
             default:

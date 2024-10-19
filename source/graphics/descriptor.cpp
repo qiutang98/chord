@@ -318,7 +318,7 @@ namespace chord::graphics
             newWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             newWrite.pNext = nullptr;
             newWrite.descriptorCount = dc.count;
-            newWrite.descriptorType = dc.type;
+            newWrite.descriptorType  = dc.type;
 
             if (dc.isImg)
             {
