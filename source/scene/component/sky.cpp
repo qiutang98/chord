@@ -19,7 +19,7 @@ UIComponentDrawDetails SkyComponent::createComponentUIDrawDetails()
 
 	result.onDrawUI = [](ComponentRef component) -> bool
 	{
-		auto meshComponent = std::static_pointer_cast<SkyComponent>(component);
+		auto comp = std::static_pointer_cast<SkyComponent>(component);
 		bool bChanged = false;
 		{
 
@@ -39,6 +39,11 @@ SkyLightInfo chord::getDefaultSkyLightInfo()
 	info.direction = math::normalize(kDefaultSunDirection);
 
 	return info;
+}
+
+void chord::SkyComponent::onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const
+{
+	Super::onPerViewPerframeCollect(collector, cameraView, camera);
 }
 
 SkyLightInfo SkyComponent::getSkyLightInfo() const

@@ -19,6 +19,7 @@
 #include <graphics/uploader.h>
 
 #include <shader/shader.h>
+#include <asset/gltf/gltf_helper.h>
 
 namespace chord::graphics
 {
@@ -267,7 +268,7 @@ namespace chord::graphics
 
 	uint32 Context::getWhiteTextureSRV() const
 	{
-		return getBuiltinTextures().white->getSRV(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D);
+		return getBuiltinResources().white->getSRV(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D);
 	}
 
 	HostVisibleGPUBufferRef Context::createStageUploadBuffer(const std::string& name, SizedBuffer data)
@@ -965,7 +966,7 @@ namespace chord::graphics
 			m_texturePool = std::make_unique<GPUTexturePool>(math::clamp(sPoolTextureFreeFrameCount, 1u, 10u));
 			m_bufferPool = std::make_unique<GPUBufferPool>(math::clamp(sPoolBufferFreeFrameCount, 1u, 10u));
 
-			initBuiltinTextures(); 
+			initBuiltinResources();
 
 			{
 				VkBufferCreateInfo ci{ };
@@ -1062,7 +1063,7 @@ namespace chord::graphics
 		m_dummySSBO = nullptr;
 		m_dummyUniform = nullptr;
 		m_blueNoise = nullptr;
-		m_builtinTextures = {};
+		m_builtinResources = {};
 		m_texturePool.reset();
 		m_bufferPool.reset();
 
@@ -1109,45 +1110,51 @@ namespace chord::graphics
 		}
 	}
 
-	void Context::initBuiltinTextures()
+	void Context::initBuiltinResources()
 	{
-		auto imageCI1x1   = helper::buildBasicUploadImageCreateInfo(1, 1);
-		imageCI1x1.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
-
-		auto uploadVMACI  = helper::buildVMAUploadImageAllocationCI();
-
 		// Sync upload builtin textures.
 		{
-			auto white = std::make_shared<GPUTexture>("Builtin::White", imageCI1x1, uploadVMACI);
+			auto imageCI1x1 = helper::buildBasicUploadImageCreateInfo(1, 1);
+			imageCI1x1.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
 
-			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kWhite.getData());
-			syncUploadTexture(*white, buffer1x1);
+			auto uploadVMACI = helper::buildVMAUploadImageAllocationCI();
+			{
+				auto white = std::make_shared<GPUTexture>("Builtin::White", imageCI1x1, uploadVMACI);
 
-			m_builtinTextures.white = std::make_shared<GPUTextureAsset>(white);
+				SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kWhite.getData());
+				syncUploadTexture(*white, buffer1x1);
+
+				m_builtinResources.white = std::make_shared<GPUTextureAsset>(white);
+			}
+			{
+				auto transparent = std::make_shared<GPUTexture>("Builtin::Transparent", imageCI1x1, uploadVMACI);
+
+				SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kTransparent.getData());
+				syncUploadTexture(*transparent, buffer1x1);
+
+				m_builtinResources.transparent = std::make_shared<GPUTextureAsset>(transparent);
+			}
+			{
+				auto black = std::make_shared<GPUTexture>("Builtin::Black", imageCI1x1, uploadVMACI);
+
+				SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kBlack.getData());
+				syncUploadTexture(*black, buffer1x1);
+
+				m_builtinResources.black = std::make_shared<GPUTextureAsset>(black);
+			}
+			{
+				auto normal = std::make_shared<GPUTexture>("Builtin::Normal", imageCI1x1, uploadVMACI);
+
+				SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kNormal.getData());
+				syncUploadTexture(*normal, buffer1x1);
+
+				m_builtinResources.normal = std::make_shared<GPUTextureAsset>(normal);
+			}
 		}
+
+		// Sync upload builtin meshes.
 		{
-			auto transparent = std::make_shared<GPUTexture>("Builtin::Transparent", imageCI1x1, uploadVMACI);
-
-			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kTransparent.getData());
-			syncUploadTexture(*transparent, buffer1x1);
-
-			m_builtinTextures.transparent = std::make_shared<GPUTextureAsset>(transparent);
-		}
-		{
-			auto black = std::make_shared<GPUTexture>("Builtin::Black", imageCI1x1, uploadVMACI);
-
-			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kBlack.getData());
-			syncUploadTexture(*black, buffer1x1);
-
-			m_builtinTextures.black = std::make_shared<GPUTextureAsset>(black);
-		}
-		{
-			auto normal = std::make_shared<GPUTexture>("Builtin::Normal", imageCI1x1, uploadVMACI);
-
-			SizedBuffer buffer1x1(sizeof(RGBA), (void*)RGBA::kNormal.getData());
-			syncUploadTexture(*normal, buffer1x1);
-
-			m_builtinTextures.normal = std::make_shared<GPUTextureAsset>(normal);
+			m_builtinResources.lowSphere = loadBuiltinMeshFromPath("resource/mesh/low_sphere.glb");
 		}
 	}
 

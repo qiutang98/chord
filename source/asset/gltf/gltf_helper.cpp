@@ -427,10 +427,11 @@ namespace chord
 	{
 		const std::filesystem::path& srcPath = config->importFilePath;
 		const std::filesystem::path& savePath = config->storeFilePath;
+
 		const auto& projectPaths = Project::get().getPath();
-		auto& assetManager = Application::get().getAssetManager();
-		const auto& meta = GLTFAsset::kAssetTypeMeta;
-		const auto srcBaseDir = srcPath.parent_path();
+		      auto& assetManager = Application::get().getAssetManager();
+		const auto& meta         = GLTFAsset::kAssetTypeMeta;
+		const auto srcBaseDir    = srcPath.parent_path();
 
 		tinygltf::Model model;
 		{
@@ -1008,8 +1009,6 @@ namespace chord
 				auto materialPtr = assetManager.createAsset<GLTFMaterialAsset>(saveInfo, true);
 				materialPtr->markDirty();
 
-
-
 				auto assignGLTFTexture = [&](GLTFTextureInfo& info, auto& b)
 				{
 					if (b.index == -1) { return; }
@@ -1423,5 +1422,77 @@ namespace chord
 			// Free buffer bindless index.
 			graphics::getContext().getBindlessManger().freeStorageBuffer(bindless, fallback);
 		}
+	}
+
+	graphics::BuiltinMeshRef loadBuiltinMeshFromPath(const std::string& loadPath)
+	{
+		graphics::BuiltinMeshRef result = std::make_shared<graphics::BuiltinMesh>();
+		result->meshTypeUniqueId = crc::crc32(loadPath.c_str(), loadPath.size(), 0);
+
+		tinygltf::Model model;
+		{
+			tinygltf::TinyGLTF tcontext;
+			std::string warning;
+			std::string error;
+
+			std::filesystem::path srcPath = loadPath;
+
+			auto ext = srcPath.extension().string();
+			bool bSuccess = false;
+			if (ext == ".gltf")
+			{
+				bSuccess = tcontext.LoadASCIIFromFile(&model, &error, &warning, srcPath.string());
+			}
+			else if (ext == ".glb")
+			{
+				bSuccess = tcontext.LoadBinaryFromFile(&model, &error, &warning, srcPath.string());
+			}
+
+			if (!warning.empty()) { LOG_WARN("GLTF '{0} import exist some warnings: '{1}'.", utf8::utf16to8(srcPath.u16string()), warning); }
+			if (!error.empty()) { LOG_ERROR("GLTF '{0} import exist some errors: '{1}'.", utf8::utf16to8(srcPath.u16string()), error); }
+
+			// Must success for builtin mesh loading.
+			check(bSuccess);
+		}
+
+		// Builtin mesh only support one mesh.
+		check(model.meshes.size() == 1); 
+		// Only support one primitive.
+		check(model.meshes[0].primitives.size() == 1);
+
+
+		std::vector<nanite::Vertex> rawVertices;
+		std::vector<uint32> rawIndices;
+		{
+			LoadMeshOptionalAttribute optionalAttri{ };
+			math::vec3 meshPosMin;
+			math::vec3 meshPosMax;
+			math::vec3 meshPosAvg;
+			check(loadMesh(model, model.meshes[0].primitives[0], loadPath, optionalAttri, false, rawVertices, rawIndices, meshPosMin, meshPosMax, meshPosAvg));
+		}
+
+		using namespace graphics;
+
+		result->indicesCount = rawIndices.size();
+		std::vector<BuiltinMesh::BuiltinVertex> vertices(rawVertices.size());
+
+		for(uint32 i = 0; i < rawVertices.size(); i ++)
+		{
+			vertices[i].position = rawVertices[i].position;
+			vertices[i].uv       = rawVertices[i].uv0;
+			vertices[i].normal   = rawVertices[i].normal;
+		}
+
+		result->indices = getContext().getBufferPool().createHostVisible(
+			loadPath + "_indices",
+			VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			SizedBuffer(sizeof(rawIndices[0]) * rawIndices.size(), (void*)rawIndices.data()));
+
+		result->vertices = getContext().getBufferPool().createHostVisible(
+			loadPath + "_vertices",
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			SizedBuffer(sizeof(vertices[0]) * vertices.size(), (void*)vertices.data()));
+
+		return result;
 	}
 }

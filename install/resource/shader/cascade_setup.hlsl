@@ -251,6 +251,8 @@ void cascadeComputeCS(uint localThreadIndex : SV_GroupIndex)
     {
         // radiusScale = WaveReadLaneFirst(sphereRadius) / sphereRadius;
         radiusScale = 10.0 * pushConsts.radiusScale / sphereRadius; // Use fix parameter avoid dynamic change.
+        radiusScale = radiusScale / (radiusScale + 1.0); // Tone curve avoid large radius when sdsm closer.
+
 
         float startDistanceFactor = (minZ - nearZ) / (pushConsts.cascadeEndDistance - pushConsts.cascadeStartDistance);
 
@@ -258,6 +260,7 @@ void cascadeComputeCS(uint localThreadIndex : SV_GroupIndex)
         // SDSM may start with far distance, so add startDistanceFactor avoid acene.
         zStartBiasScale = 0.25 + startDistanceFactor; // + 1.0 - pow(1.0 - df, 2.0);
     }
+    radiusScale = min(radiusScale, 1.0);
 
     // 
     float3 shadowCameraPos = cascadeFrustumCenter - normalize(pushConsts.lightDir) * cascadeExtents.z * 0.5f;

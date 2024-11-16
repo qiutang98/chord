@@ -59,6 +59,11 @@ namespace chord
 			m_shadowManager = std::make_unique<ShadowManager>();
 		}
 
+		if (m_ddgiManager == nullptr)
+		{
+			m_ddgiManager = std::make_unique<DDGIManager>();
+		}
+
 		// Construct root node post construct.
 		if (m_root == nullptr)
 		{

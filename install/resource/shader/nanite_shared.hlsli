@@ -95,6 +95,7 @@ struct TriangleMiscInfo
     GPUGLTFMeshlet meshlet;
     uint triangleIndexId;
 
+    float3  positionRS[3];
     float4  positionHS[3];
 
     // Used for motion vector.
@@ -142,6 +143,7 @@ TriangleMiscInfo getTriangleMiscInfo(
         // position load and projection.
         {
             const float3 positionLS = positionDataBuffer.TypeLoad(float3, indicesId);
+            outTriangle.positionRS[i] = mul(objectInfo.basicData.localToTranslatedWorld, float4(positionLS, 1.0)).xyz;
             outTriangle.positionHS[i] = mul(localToClip, float4(positionLS, 1.0));
 
             outTriangle.positionHS_NoJitter[i] = mul(localToClip_NoJitter, float4(positionLS, 1.0)).xyw;

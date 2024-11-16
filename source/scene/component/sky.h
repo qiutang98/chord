@@ -18,6 +18,8 @@ namespace chord
 		SkyComponent() = default;
 		SkyComponent(SceneNodeRef sceneNode) : Component(sceneNode) { }
 
+		virtual void onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const override;
+
 		virtual ~SkyComponent() = default;
 
 		SkyLightInfo getSkyLightInfo() const;
@@ -26,7 +28,7 @@ namespace chord
 	private:
 		static UIComponentDrawDetails createComponentUIDrawDetails();
 
-	private:
+	public:
 
 	};
 }

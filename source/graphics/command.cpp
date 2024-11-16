@@ -330,6 +330,27 @@ namespace chord::graphics
 		image->get().transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource(flags));
 	}
 
+	void GraphicsQueue::bindIndexBuffer(PoolBufferRef buffer, VkDeviceSize offset, VkIndexType indexType)
+	{
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(buffer);
+
+		// transition(buffer, VK_ACCESS_INDEX_READ_BIT);
+
+		vkCmdBindIndexBuffer(cmd->commandBuffer, buffer->get(), offset, indexType);
+	}
+
+	void GraphicsQueue::bindVertexBuffer(PoolBufferRef buffer)
+	{
+		auto cmd = m_activeCmdCtx.command;
+		// transition(buffer, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT);
+
+		VkBuffer vB = buffer->get();
+		const VkDeviceSize vBOffset = 0;
+
+		vkCmdBindVertexBuffers(cmd->commandBuffer, 0, 1, &vB, &vBOffset);
+	}
+
 	GraphicsOrComputeQueue::GraphicsOrComputeQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
 		: Queue(swapchain, type, queue, family)
 	{

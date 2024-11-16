@@ -78,16 +78,19 @@ float3 filmToneMap(
         const float toeScale = 1.0 + filmBlackClip - filmToe;
         const float shoulderScale = 1.0 + filmWhiteClip - filmShoulder;
         
-        const float inMatch  = 0.18; // 0.18 will be on straight segment
-        const float outMatch = 0.18; // 0.18 will be on toe segment
+        const float inMatch = 0.18;
+        const float outMatch = 0.18;
 
         float toeMatch;
         if (filmToe > 0.8)
         {
+            // 0.18 will be on straight segment
             toeMatch = (1 - filmToe  - outMatch) / filmSlope + log10(inMatch);
         }
         else
         {
+            // 0.18 will be on toe segment
+
             // Solve for toeMatch such that input of inMatch gives output of outMatch.
             const float bt = (outMatch + filmBlackClip) / toeScale - 1;
             toeMatch = log10(inMatch) - 0.5 * log((1+bt) / (1-bt)) * (toeScale / filmSlope);
@@ -99,8 +102,8 @@ float3 filmToneMap(
         float3 logColor = log10(workingColor);
         float3 straightColor = filmSlope * (logColor + straightMatch);
         
-        float3 toeColor		    = (    - filmBlackClip ) + (2.0 *      toeScale) / (1.0 + exp((-2.0 * filmSlope /      toeScale) * (logColor -      toeMatch)));
-        float3 shoulderColor	= (1.0 + filmWhiteClip ) - (2.0 * shoulderScale) / (1.0 + exp(( 2.0 * filmSlope / shoulderScale) * (logColor - shoulderMatch)));
+        float3 toeColor		    = (    - filmBlackClip ) + (2.0 *      toeScale) / (1.0 + exp( (-2.0 * filmSlope /      toeScale) * (logColor -      toeMatch)));
+        float3 shoulderColor	= (1.0 + filmWhiteClip ) - (2.0 * shoulderScale) / (1.0 + exp( ( 2.0 * filmSlope / shoulderScale) * (logColor - shoulderMatch)));
 
         toeColor.x		= logColor.x <      toeMatch ?      toeColor.x : straightColor.x;
         toeColor.y		= logColor.y <      toeMatch ?      toeColor.y : straightColor.y;
@@ -138,7 +141,7 @@ void mainPS(
     uint2 workPos = uint2(pushConsts.textureSize * input.uv);
     float4 sampleColor = inputTexture.Sample(pointClampSampler, input.uv);
 
-
+    // Current engine working in ACEScg color space.
     float3 colorAp1 = sampleColor.xyz; // mul(sRGB_2_AP1, sampleColor.xyz);
 
     colorAp1 = filmToneMap(

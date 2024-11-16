@@ -150,15 +150,16 @@ BINDLESS_DECLARE(SamplerComparisonState, (int)chord::EBindingType::BindlessSampl
 
 #define BATL(Type, BufferId, ElementId) ByteAddressBindless(BufferId).TypeLoad(Type, ElementId)
 #define BATS(Type, BufferId, ElementId, Value) RWByteAddressBindless(BufferId).TypeStore(Type, ElementId, Value)
- 
+#define RWBATL(Type, BufferId, ElementId) RWByteAddressBindless(BufferId).TypeLoad(Type, ElementId)
+
 #define LoadCameraView(Index) BATL(PerframeCameraView, Index, 0)
 
 
-uint interlockedAddUint(uint bufferId, uint count = 1)
+uint interlockedAddUint(uint bufferId, uint count = 1, uint offset = 0)
 {
     uint index;
     RWByteAddressBuffer bufferAcess = RWByteAddressBindless(bufferId);
-    bufferAcess.InterlockedAdd(0, count, index);
+    bufferAcess.InterlockedAdd(offset * 4, count, index);
     return index;
 }
 
@@ -188,6 +189,21 @@ storeRWTexture2D_Declare(uint2)
 storeRWTexture2D_Declare(uint1)
 
 #undef storeRWTexture2D_Declare
+
+#define  loadRWTexture2D_Declare(Type) \
+    Type loadRWTexture2D_##Type(uint id, uint2 pos) { RWTexture2D<Type> rw = TBindless(RWTexture2D, Type, id); return rw[pos]; }
+
+loadRWTexture2D_Declare(float4)
+loadRWTexture2D_Declare(float3)
+loadRWTexture2D_Declare(float2)
+loadRWTexture2D_Declare(float1)
+
+loadRWTexture2D_Declare(uint4)
+loadRWTexture2D_Declare(uint3)
+loadRWTexture2D_Declare(uint2)
+loadRWTexture2D_Declare(uint1)
+
+#undef loadRWTexture2D_Declare
 
 #define loadTexture2D_Declare(Type) \
     Type loadTexture2D_##Type(uint id, uint2 pos) { Texture2D<Type> r = TBindless(Texture2D, Type, id); return r[pos];  }

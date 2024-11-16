@@ -68,7 +68,7 @@ namespace chord::graphics
 		sTotalGPUTextureDeviceSize -= getSize();
 
 		ImageView fallbackView = bAppReleasing ? ImageView{ } :
-			getContext().getBuiltinTextures().white->getOwnHandle()->requireView(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D, false, false);
+			getContext().getBuiltinResources().white->getOwnHandle()->requireView(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D, false, false);
 
 		// Destroy cached image views.
 		for (auto& pair : m_views)

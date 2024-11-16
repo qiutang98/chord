@@ -71,7 +71,7 @@ namespace chord
 
 		auto assetPtr = std::dynamic_pointer_cast<TextureAsset>(shared_from_this());
 		auto newGPUTexture = std::make_shared<GPUTextureAsset>(
-			getContext().getBuiltinTextures().white.get(),
+			getContext().getBuiltinResources().white.get(),
 			m_saveInfo.getName().u8(), 
 			ci,
 			uploadVMACI);

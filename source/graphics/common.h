@@ -10,6 +10,7 @@ namespace chord
 {
 	class ApplicationTickData;
 	class ImGuiManager;
+	class GPUGLTFPrimitiveAsset;
 }
 
 namespace chord::graphics

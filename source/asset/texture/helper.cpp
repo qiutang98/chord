@@ -820,7 +820,7 @@ namespace chord
 			return cacheTexture;
 		}
 
-		auto fallback = getContext().getBuiltinTextures().white;
+		auto fallback = getContext().getBuiltinResources().white;
 		if (m_snapshotDimension.x == 0 || m_snapshotDimension.y == 0)
 		{
 			return fallback;

@@ -13,8 +13,8 @@ struct DisocclusionMaskPushConsts
     uint depthTextureId;
     uint depthTextureId_LastFrame;
 
-    uint normalRSId;
-    uint normalRSId_LastFrame;
+    uint normalRSId; // Vertex normal is better.
+    uint normalRSId_LastFrame; // Vertex normal is better. 
 
     uint pointClampedEdgeSampler;
     uint linearClampedEdgeSampler;
@@ -48,7 +48,6 @@ float disocclusionMaskFactor(float3 normal, float z, float3 positionRS, float3 n
     float distanceDiffFallOff = exp(-distanceDiffFalloffFactor * distanceDiff);
 
     // When add normal factor, easy break geometry edge valid state. 
-    // 
     return distanceDiffFallOff * normalDiffFalloff;
 }
 
@@ -76,7 +75,6 @@ void mainCS(
         if (!bHistoryOutOfBound)
         {
             float3 normalRS = loadTexture2D_float4(pushConsts.normalRSId, workPos).xyz * 2.0 - 1.0;
-            normalRS = quantize(normalRS, 100.0);
             normalRS = normalize(normalRS);
 
             const float1 deviceZ = loadTexture2D_float1(pushConsts.depthTextureId, workPos);
@@ -90,7 +88,6 @@ void mainCS(
 
 
             float3 normalRS_LastFrame = sampleTexture2D_float4(pushConsts.normalRSId_LastFrame, historyUv, pointClampSampler).xyz * 2.0 - 1.0;
-            normalRS_LastFrame = quantize(normalRS_LastFrame, 100.0);
             normalRS_LastFrame = normalize(normalRS_LastFrame);
 
             // Normal don't care relative world space change. 
@@ -98,7 +95,7 @@ void mainCS(
             {
                 const float1 deviceZ_LastFrame = sampleTexture2D_float1(pushConsts.depthTextureId_LastFrame, historyUv, pointClampSampler);
                 positionRS_LastFrame = getPositionRS_LastFrame(historyUv, max(deviceZ_LastFrame, kFloatEpsilon), perView); 
-                positionRS_LastFrame += float3(asDouble3(perView.cameraWorldPosLastFrame) - asDouble3(perView.cameraWorldPos));
+                positionRS_LastFrame += float3(perView.cameraWorldPosLastFrame.getDouble3() - perView.cameraWorldPos.getDouble3());
             }
 
             const float linearZ = perView.zNear / deviceZ;

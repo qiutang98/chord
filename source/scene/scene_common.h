@@ -3,6 +3,7 @@
 #include <asset/asset.h>
 #include <application/application.h>
 #include <shader/base.h>
+#include <utils/camera.h>
 
 namespace chord
 {
@@ -33,6 +34,17 @@ namespace chord
         }
     };
 
+    struct BuiltinMeshDrawInstance
+    {
+        graphics::BuiltinMesh* mesh;
+
+        float3 color;
+
+        float3 offset;
+        float  scale;
+    };
+
+
     struct PerframeCollected
     {
         std::atomic_uint32_t gltfLod0MeshletCount  = 0;
@@ -41,6 +53,12 @@ namespace chord
 
         DebugLineCtx* debugLineCtx = nullptr;
         AccelerationStructureInstanceCollector asInstances;
+
+        // Collect builtin mesh instances.
+        std::vector<BuiltinMeshDrawInstance> builtinMeshInstances;
+
+        // 
+        void drawLowSphere(const ICamera* camera, const double3& position, float scale, const float3& color);
     };
 
     class UIComponentDrawDetails

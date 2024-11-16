@@ -121,6 +121,9 @@ namespace chord::graphics
 
 		void transitionColorAttachment(PoolTextureRef image);
 		void transitionDepthStencilAttachment(PoolTextureRef image, EDepthStencilOp op);
+
+		void bindIndexBuffer(PoolBufferRef buffer, VkDeviceSize offset, VkIndexType indexType = VK_INDEX_TYPE_UINT32);
+		void bindVertexBuffer(PoolBufferRef buffer);
 	};
 
 	// Command list control command open and closed.

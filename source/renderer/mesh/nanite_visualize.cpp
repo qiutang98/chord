@@ -37,7 +37,13 @@ static AutoCVarRef cVarAccelerateStructureVisualizationConfig(
 PRIVATE_GLOBAL_SHADER(NaniteVisualizePS, "resource/shader/nanite_debug.hlsl", "mainPS", EShaderStage::Pixel);
 PRIVATE_GLOBAL_SHADER(AccelerateStructureVisualizeCS, "resource/shader/accelerate_structure_visualize.hlsl", "mainCS", EShaderStage::Compute);
 
-void chord::visualizeAccelerateStructure(GraphicsQueue& queue, GBufferTextures& gbuffers, uint32 cameraViewId, helper::AccelKHRRef tlas)
+void chord::visualizeAccelerateStructure(
+	GraphicsQueue& queue, 
+	const AtmosphereLut& luts,
+	const CascadeShadowContext& cascadeCtx, 
+	GBufferTextures& gbuffers, 
+	uint32 cameraViewId, 
+	helper::AccelKHRRef tlas)
 {
 	if (sAccelerateStructureVisualizationConfig < 0)
 	{
@@ -52,6 +58,16 @@ void chord::visualizeAccelerateStructure(GraphicsQueue& queue, GBufferTextures& 
 	AccelerationStructureVisualizePushConsts pushConst{};
 	pushConst.cameraViewId = cameraViewId;
 	pushConst.uav = asUAV(queue, gbuffers.color);
+	pushConst.cascadeCount = cascadeCtx.depths.size();
+	pushConst.shadowViewId = cascadeCtx.viewsSRV;
+	pushConst.shadowDepthIds = cascadeCtx.cascadeShadowDepthIds;
+	pushConst.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+	pushConst.transmittanceId = asSRV(queue, luts.transmittance);
+	pushConst.scatteringId = asSRV3DTexture(queue, luts.scatteringTexture);
+	if (luts.optionalSingleMieScatteringTexture != nullptr)
+	{
+		pushConst.singleMieScatteringId = asSRV3DTexture(queue, luts.optionalSingleMieScatteringTexture);
+	}
 
 	uint2 dispatchParam = { (gbuffers.dimension + 7U) / 8U };
 

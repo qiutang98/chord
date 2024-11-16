@@ -187,6 +187,49 @@ namespace chord
             uint32_t(writes.size()), 
             writes.data());
     }
+
+    DDGIConfigCPU::DDGIConfigCPU()
+    {
+        {
+            auto& config = volumeConfigs[0];
+
+            config.rayHitSampleTextureLod = 3;
+            config.hysteresis             = 0.92f;
+            config.probeDistanceExponent  = 5.0f;
+            config.probeNormalBias        = 0.2f;
+            config.probeViewBias          = 0.2f;
+        }
+
+        {
+            auto& config = volumeConfigs[1];
+
+            config.rayHitSampleTextureLod = 4;
+            config.hysteresis             = 0.95f;
+            config.probeDistanceExponent = 10.0f;
+            config.probeNormalBias       = 0.8f;
+            config.probeViewBias         = 0.8f;;
+        }
+
+        {
+            auto& config = volumeConfigs[2];
+
+            config.rayHitSampleTextureLod = 6;
+            config.hysteresis             = 0.96f;
+            config.probeDistanceExponent  = 25.0f;
+            config.probeNormalBias        = 6.4f;
+            config.probeViewBias          = 6.4f;
+        }
+
+        {
+            auto& config = volumeConfigs[3];
+
+            config.rayHitSampleTextureLod = 8;
+            config.hysteresis = 0.97f;
+            config.probeDistanceExponent = 50.0f;
+            config.probeNormalBias = 102.4f;
+            config.probeViewBias   = 102.4f;
+        }
+    }
 }
 
 

@@ -71,7 +71,7 @@ void mainCS(uint threadId : SV_DispatchThreadID)
 
         float4x4 localToTranslatedWorld = pushConsts.bObjectUseLastFrameProject != 0 ? objectInfo.basicData.localToTranslatedWorldLastFrame : objectInfo.basicData.localToTranslatedWorld;
 
-        float3 relativeOffset = float3(asDouble3(perView.cameraWorldPos) - asDouble3(instanceView.cameraWorldPos));
+        float3 relativeOffset = float3(perView.cameraWorldPos.getDouble3() - instanceView.cameraWorldPos.getDouble3());
         localToTranslatedWorld[0][3] += relativeOffset.x;
         localToTranslatedWorld[1][3] += relativeOffset.y;
         localToTranslatedWorld[2][3] += relativeOffset.z;
@@ -153,13 +153,12 @@ void mainCS(uint threadId : SV_DispatchThreadID)
     const uint visibleOffsetId = WavePrefixCountBits(bVisible);
 
     uint visibleStoreBaseId;
-    uint unvisibleStoreBaseId;
     if (WaveIsFirstLane())
     {
-        visibleStoreBaseId   = interlockedAddUint(pushConsts.drawedMeshletCountId_1, visibleCount);
+        visibleStoreBaseId = interlockedAddUint(pushConsts.drawedMeshletCountId_1, visibleCount);
     }
 
-    visibleStoreBaseId   = WaveReadLaneFirst(visibleStoreBaseId);
+    visibleStoreBaseId = WaveReadLaneFirst(visibleStoreBaseId);
 
     // If visible, add to draw list.
     if (bVisible)

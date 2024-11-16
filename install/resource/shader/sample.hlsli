@@ -23,7 +23,7 @@ int vogelDiskSampleMinIndex(int sampleCount, float r)
 }
 
 
-// concentric: disc->square
+// square -> concentric disk
 // https://www.shadertoy.com/view/MtySRw
 // https://marc-b-reynolds.github.io/math/2017/01/08/SquareDisc.html
 float2 fastUniformDiskSample(float2 rnd)
@@ -43,6 +43,22 @@ float2 fastUniformDiskSample(float2 rnd)
 	return sf;
 }
 
+// 
+// Computes a low discrepancy spherically distributed direction on the unit sphere.
+float3 sphericalFibonacci(float sampleIndex, float numSamples, float noise = 0.0)
+{
+    const float b = (sqrt(5.f) * 0.5f + 0.5f) - 1.f;
+
+	// Animate phi by noise
+    float phi = kPI * 2.0 * frac(sampleIndex * b + noise);
+
+	//
+    float cosTheta = 1.f - (2.f * sampleIndex + 1.f) * (1.f / numSamples);
+    float sinTheta = sqrt(saturate(1.f - (cosTheta * cosTheta)));
+
+	//
+    return float3((cos(phi) * sinTheta), (sin(phi) * sinTheta), cosTheta);
+}
 
 
 #endif 

@@ -94,6 +94,29 @@ struct GPUStorageDouble4
     uint2 y;
     uint2 z;
     uint2 w;
+
+#ifndef __cplusplus
+    void fill(double3 v)
+    {
+        asuint(v.x, x.x, x.y);
+		asuint(v.y, y.x, y.y);
+		asuint(v.z, z.x, z.y);
+    }
+
+    double3 getDouble3()
+    {
+        double3 d;
+        d.x = asdouble(x.x, x.y);
+        d.y = asdouble(y.x, y.y);
+        d.z = asdouble(z.x, z.y);
+        return d;
+    }
+
+    float3 castFloat3()
+    {
+        return float3(getDouble3());
+    }
+#endif // !__cplusplus
 };
 
 struct InstanceCullingViewInfo

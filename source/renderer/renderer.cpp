@@ -187,8 +187,7 @@ void DeferredRenderer::render(
 		uint gltfBufferId = ~0;
 		if (gltfObjectCount > 0)
 		{
-			gltfBufferId =
-				uploadBufferToGPU(cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfObjectCount).second;
+			gltfBufferId = uploadBufferToGPU(cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfObjectCount).second;
 		}
 
 		// GLTF object.
@@ -230,6 +229,7 @@ void DeferredRenderer::render(
 	
 	// 
 	const auto& sunShadowConfig = scene->getShadowManager().getConfig();
+	const auto& ddgiConfig = scene->getDDGIManager().getConfig();
 
 	// 
 	auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
@@ -310,7 +310,7 @@ void DeferredRenderer::render(
 			visibilityCtx = visibilityMark(graphics, viewGPUId, mainViewCulledCmdBuffer, gbuffers.visibility);
 			insertTimer("Visibility Tile Marker", graphics);
 
-			lighting(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
+			lighting(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, atmosphereLuts, visibilityCtx);
 			insertTimer("lighting Tile", graphics);
 
 			if (m_rendererHistory.depth_Half != nullptr && m_rendererHistory.vertexNormalRS_Half != nullptr)
@@ -325,23 +325,32 @@ void DeferredRenderer::render(
 			insertTimer("PCSS", graphics);
 		}
 
-		renderSky(graphics, gbuffers.color, gbuffers.depthStencil, viewGPUId, atmosphereLuts);
-
-		// Visualize for nanite.
+		graphics::PoolTextureRef giResult = nullptr;
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
+			giResult = ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
 			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("Nanite visualize", graphics);
 
 			if (m_bTLASValidCurrentFrame)
 			{
-				visualizeAccelerateStructure(graphics, gbuffers, viewGPUId, m_tlas.getTLAS());
+				visualizeAccelerateStructure(graphics, atmosphereLuts, cascadeContext, gbuffers, viewGPUId, m_tlas.getTLAS());
 			}
+		}
+
+		if (!perframe.builtinMeshInstances.empty())
+		{
+			debugDrawBuiltinMesh(graphics,
+				perframe.builtinMeshInstances,
+				viewGPUId,
+				gbuffers.depthStencil,
+				gbuffers.color);
+			insertTimer("DebugBuilitinMesh", graphics);
 		}
 
 		check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 		check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);
-		tonemapping(viewGPUId, graphics, gbuffers.color, finalOutput);
+		tonemapping(viewGPUId, graphics, giResult != nullptr ? giResult : gbuffers.color, finalOutput);
 		insertTimer("Tonemapping", graphics);
 
 		check(finalOutput->get().getExtent().width == gbuffers.depthStencil->get().getExtent().width);

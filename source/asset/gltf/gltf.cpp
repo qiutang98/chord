@@ -281,9 +281,9 @@ namespace chord
 
 	void GLTFMaterialProxy::init(std::shared_ptr<GLTFMaterialProxy> proxy)
 	{
-		auto whiteTex = getContext().getBuiltinTextures().white;
-		auto transparentTex = getContext().getBuiltinTextures().transparent;
-		auto normalTex = getContext().getBuiltinTextures().normal;
+		auto whiteTex = getContext().getBuiltinResources().white;
+		auto transparentTex = getContext().getBuiltinResources().transparent;
+		auto normalTex = getContext().getBuiltinResources().normal;
 		std::weak_ptr<GLTFMaterialProxy> weakPtr = proxy;
 
 		// Load texture.
@@ -360,7 +360,7 @@ namespace chord
 		memcpy(uploadDatas.data(), &uploadData, sizeof(uploadData));
 
 		Application::get().getGPUScene().getGLTFMaterialPool().updateId(m_gpuSceneGLTFMaterialAssetId, uploadDatas);
-		if (bAllTextureFinish && uploadData.baseColorId == getContext().getBuiltinTextures().white->getSRV(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D))
+		if (bAllTextureFinish && uploadData.baseColorId == getContext().getBuiltinResources().white->getSRV(helper::buildBasicImageSubresource(), VK_IMAGE_VIEW_TYPE_2D))
 		{
 			LOG_TRACE("Texture {} used fallback.", reference->baseColorTexture.image.getName().u8());
 		}
@@ -628,6 +628,7 @@ namespace chord
 			ASSIGN_DATA(bvhNodeData, bvhNodeBuffer);
 			ASSIGN_DATA(meshletGroup, meshletGroupBuffer);
 			ASSIGN_DATA(meshletGroupIndices, meshletGroupIndicesBuffer);
+			ASSIGN_DATA(lod0Indices, lod0IndicesBuffer);
 		}
 		#undef ASSIGN_DATA
 
@@ -673,6 +674,8 @@ namespace chord
 					primitiveBufferData.meshletGroupOffset        = primitiveInfo.meshletGroupOffset;
 					primitiveBufferData.meshletGroupIndicesOffset = primitiveInfo.meshletGroupIndicesOffset;
 					primitiveBufferData.meshletGroupCount         = primitiveInfo.meshletGroupCount;
+					primitiveBufferData.lod0IndicesCount          = primitiveInfo.lod0IndicesCount;
+					primitiveBufferData.lod0IndicesOffset         = primitiveInfo.lod0IndicesOffset;
 				}
 
 				std::array<math::uvec4, GPUGLTFPrimitiveAsset::kGPUSceneDetailFloat4Count> uploadDatas{};

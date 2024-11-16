@@ -108,7 +108,7 @@ void instanceCullingCS(uint workGroupId : SV_GroupID, uint localThreadIndex : SV
         sharedMehsletGroupCount = meshletGroupCount;
     }
     GroupMemoryBarrierWithGroupSync();
-
+ 
     meshletGroupCount = sharedMehsletGroupCount;
     storeBaseId       = sharedStoreBaseId;
     bVisible          = sharedIsVisible;

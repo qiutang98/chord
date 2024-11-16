@@ -114,5 +114,7 @@ namespace chord
 		// 
 		bool m_bTLASValidCurrentFrame = false;
 		graphics::helper::TLASBuilder m_tlas;
+
+		DDGIContext m_ddgiCtx;
 	};
 }

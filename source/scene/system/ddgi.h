@@ -9,22 +9,21 @@
 
 namespace chord
 {
-	class ShadowManager : NonCopyable, public ISceneSystem
+	class DDGIManager : NonCopyable, public ISceneSystem
 	{
 	public:
 		ARCHIVE_DECLARE;
 
-		explicit ShadowManager();
-		virtual ~ShadowManager() = default;
+		explicit DDGIManager();
+		virtual ~DDGIManager() = default;
 
 		// 
-		const ShadowConfig& getConfig() const { return m_shadowConfig; }
+		const DDGIConfigCPU& getConfig() const { return m_config; }
 
 	protected:
 		virtual void onDrawUI(SceneRef scene) override;
 
-
 	private:
-		ShadowConfig m_shadowConfig;
+		DDGIConfigCPU m_config;
 	};
 }

@@ -509,6 +509,31 @@ namespace chord
 		CascadeShadowMapConfig cascadeConfig;
 	};
 
+	struct DDGIVolumeConfigCPU
+	{
+		CHORD_DEFAULT_COMPARE_ARCHIVE(DDGIVolumeConfigCPU);
+
+		// 
+		int rayHitSampleTextureLod;
+
+		float hysteresis;
+
+		// Exponent for depth testing. A high value will rapidly react to depth discontinuities, but risks causing banding
+		float probeDistanceExponent;
+
+		float probeNormalBias;
+		float probeViewBias;
+	};
+
+	struct DDGIConfigCPU
+	{
+		CHORD_DEFAULT_COMPARE_ARCHIVE(DDGIConfigCPU);
+
+		DDGIConfigCPU();
+
+		std::array<DDGIVolumeConfigCPU, 4> volumeConfigs;
+	};
+
 	struct CascadeShadowContext
 	{
 		// Cache render config.
@@ -566,5 +591,8 @@ namespace chord
 		// 
 		graphics::PoolTextureRef depth_Half;
 		graphics::PoolTextureRef vertexNormalRS_Half;
+
+		// 
+		graphics::PoolTextureRef diffuseColor_Half;
 	};
 }

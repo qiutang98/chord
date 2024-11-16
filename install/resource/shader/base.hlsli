@@ -22,7 +22,7 @@ enum RAY_FLAG : uint
 **/
 
 // 
-#define GIRayQuery RayQuery<RAY_FLAG_NONE>
+#define GIRayQuery RayQuery<RAY_FLAG_CULL_NON_OPAQUE>
 
 #define kPI 3.14159265358979323846
 #define kInvertPI (1.0 / kPI)
@@ -55,15 +55,41 @@ float2 linstep(float2 min, float2 max, float2 v) { return clamp((v - min) / (max
 float3 linstep(float3 min, float3 max, float3 v) { return clamp((v - min) / (max - min), 0, 1); }
 float4 linstep(float4 min, float4 max, float4 v) { return clamp((v - min) / (max - min), 0, 1); }
 
-double3 asDouble3(GPUStorageDouble4 v)
-{
-    double3 d;
-    d.x = asdouble(v.x.x, v.x.y);
-    d.y = asdouble(v.y.x, v.y.y);
-    d.z = asdouble(v.z.x, v.z.y);
+float max3(float x, float y, float z) { return max(x, max(y, z)); }
 
-    return d;
+// https://gpuopen.com/learn/optimized-reversible-tonemapper-for-resolve/
+// https://www.shadertoy.com/view/Xdd3Rr
+float3 fastTonemap(float3 c) { return c * rcp(max3(c.r, c.g, c.b) + 1.0); }
+float3 fastTonemapInvert(float3 c) { return c * rcp(1.0 - max3(c.r, c.g, c.b)); }
+
+// Default sign(x) return zero when x equal to zero. 
+float1 signNotZero(float1 v) { return select(v >= 0.f, 1.f, -1.f); }
+float2 signNotZero(float2 v) { return select(v >= 0.f, 1.f, -1.f); }
+float3 signNotZero(float3 v) { return select(v >= 0.f, 1.f, -1.f); }
+float4 signNotZero(float4 v) { return select(v >= 0.f, 1.f, -1.f); }
+
+float3 getDiffuseColor(float3 baseColor, float metallic, float3 f0 = 0.04)
+{
+    return baseColor * (1.0 - f0) * (1.0 - metallic);
 }
+
+float3 getSpecularColor(float3 baseColor, float metallic, float3 f0 = 0.04)
+{
+    return lerp(f0, baseColor, metallic);
+}
+
+// Lambert lighting
+// see https://seblagarde.wordpress.com/2012/01/08/pi-or-not-to-pi-in-game-lighting-equation/
+float3 Fd_LambertDiffuse(float3 diffuseColor)
+{
+    return diffuseColor / kPI;
+}
+
+float maxComponent(float3 a)
+{
+    return max(a.x, max(a.y, a.z));
+}
+
 
 /**
     Gather pattern
@@ -239,6 +265,38 @@ bool frustumCulling(float4 planesRS[6], float3 centerLS, float3 extentLS, float4
     {
         const float3 extentPos = centerLS + extentLS * kExtentApplyFactor[k];
         extentPosRS[k] = mul(localToTranslatedWorld, float4(extentPos, 1.0)).xyz;
+    }
+
+    [unroll(6)] 
+    for (uint i = 0; i < 6; i ++)
+    {
+        const float4 plane = planesRS[i];
+        bool bAllBackFace = true;
+
+        for (uint j = 0; j < 8; j ++)
+        {
+            if (dot(plane.xyz, extentPosRS[j]) > -plane.w)
+            {
+                bAllBackFace = false;
+                break;
+            }
+        }
+
+        if (bAllBackFace) { return true; }
+    }
+
+    return false;
+}
+
+// Return true if culled. 
+bool frustumCulling(float4 planesRS[6], float3 centerRS, float3 extentRS)
+{
+    // Find one plane which all extent point is back face of it.
+    float3 extentPosRS[8];
+    [unroll(8)] 
+    for (uint k = 0; k < 8; k ++)
+    {
+        extentPosRS[k] = centerRS + extentRS * kExtentApplyFactor[k];
     }
 
     [unroll(6)] 
@@ -470,6 +528,7 @@ uint2 jitterSequence2(uint index, uint2 dimension, uint2 dispatchId)
 	return offsetId;
 }
 
+// https://www.shadertoy.com/view/4lscWj
 // Radical inverse based on http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
 float2 hammersley2d(uint i, uint N) 
 {
@@ -713,9 +772,7 @@ float chebyshevUpperBound(float2 moments, float mean, float minVariance)
 uint pcgHash(uint value)
 {
     uint state = value * 747796405u + 2891336453u;
-    
     uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-
     return (word >> 22u) ^ word;
 }
 
@@ -861,6 +918,35 @@ RayDesc getRayDesc(float3 o, float3 d, float tMin = kDefaultRayQueryTMin, float 
 	ray.Direction = d;
 
     return ray;
+}
+
+// Octahedron Normal Vectors
+// [Cigolle 2014, "A Survey of Efficient Representations for Independent Unit Vectors"]
+
+// result uv in [-1, +1]
+float2 octahedralEncode(float3 direction)
+{
+    float l1norm = abs(direction.x) + abs(direction.y) + abs(direction.z);
+    float2 uv = direction.xy * (1.f / l1norm);
+
+    if (direction.z < 0.f)
+    {
+        uv = (1.f - abs(uv.yx)) * signNotZero(uv.xy);
+    }
+
+    return uv;
+}
+
+// 
+float3 octahedralDecode(float2 coords)
+{
+    float3 direction = float3(coords.x, coords.y, 1.f - abs(coords.x) - abs(coords.y));
+    if (direction.z < 0.f)
+    {
+        direction.xy = (1.f - abs(direction.yx)) * signNotZero(direction.xy);
+    }
+
+    return normalize(direction);
 }
 
 #endif // !SHADER_BASE_HLSLI

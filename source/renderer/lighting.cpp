@@ -141,6 +141,7 @@ namespace chord
 		GBufferTextures& gbuffers, 
 		uint32 cameraViewId, 
 		PoolBufferGPUOnlyRef drawMeshletCmdBuffer, 
+		const AtmosphereLut& skyLuts,
 		const VisibilityTileMarkerContext& marker)
 	{
 
@@ -152,8 +153,6 @@ namespace chord
 
 		for (uint i = 0; i < uint(EShadingType::MAX); i++)
 		{
-			if (i == kLightingType_None) { continue; }
-
 			auto lightingTileCtx = prepareShadingTileParam(queue, EShadingType(i), marker);
 
 			LightingPushConsts pushConst{};
@@ -169,6 +168,15 @@ namespace chord
 			pushConst.aoRoughnessMetallicId = aoRoughnessMetallicUAV;
 
 			pushConst.drawedMeshletCmdId = asSRV(queue, drawMeshletCmdBuffer);
+			pushConst.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+
+			pushConst.irradianceTextureId = asSRV(queue, skyLuts.irradianceTexture);
+			pushConst.transmittanceId = asSRV(queue, skyLuts.transmittance);
+			pushConst.scatteringId = asSRV3DTexture(queue, skyLuts.scatteringTexture);
+			if (skyLuts.optionalSingleMieScatteringTexture != nullptr)
+			{
+				pushConst.singleMieScatteringId = asSRV3DTexture(queue, skyLuts.optionalSingleMieScatteringTexture);
+			}
 
 			LightingCS::Permutation CSPermutation;
 			CSPermutation.set<LightingCS::SV_ShadingType>(EShadingType(i));
@@ -205,6 +213,7 @@ namespace chord
 			pushConsts.workTexelSize = 1.0f / float2(pushConsts.workDim);
 			pushConsts.pointClampedEdgeSampler = getContext().getSamplerManager().pointClampEdge().index.get();
 			pushConsts.linearClampedEdgeSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+			pushConsts.srcTexelSize = 1.0f / float2(gbuffers.dimension);
 
 			auto computeShader = getContext().getShaderLibrary().getShader<HalfGbufferDownsample_CS>();
 			addComputePass2(queue, "GBufferHalfDownSample_CS", getContext().computePipe(computeShader, "GBufferHalfDownSample_Pipe"), pushConsts, { dispatchDim.x, dispatchDim.y, 1 });
@@ -251,4 +260,6 @@ namespace chord
 	
 		return mask;
 	}
+
+
 }

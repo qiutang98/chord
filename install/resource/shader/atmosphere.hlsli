@@ -70,42 +70,11 @@
     #define ATMOSPHERE_CHECK(x)
 #endif
 
-/*
-<h3>Physical units</h3>
-
-<p>We can then define the units for our six base physical quantities:
-meter (m), nanometer (nm), radian (rad), steradian (sr), watt (watt) and lumen
-(lm):
-*/
-
-static const float m    = 1.0;
-static const float nm   = 1.0;
-static const float rad  = 1.0;
-static const float sr   = 1.0;
-static const float watt = 1.0;
-static const float lm   = 1.0;
-
-/*
-<p>From which we can derive the units for some derived physical quantities,
-as well as some derived units (kilometer km, kilocandela kcd, degree deg):
-*/
-
-static const float PI = 3.14159265358979323846;
-
-static const float km = 1000.0 * m;
-static const float m2 = m * m;
-static const float m3 = m * m * m;
-static const float pi = PI * rad;
-static const float deg = pi / 180.0;
-static const float watt_per_square_meter = watt / m2;
-static const float watt_per_square_meter_per_sr = watt / (m2 * sr);
-static const float watt_per_square_meter_per_nm = watt / (m2 * nm);
-static const float watt_per_square_meter_per_sr_per_nm = watt / (m2 * sr * nm);
-static const float watt_per_cubic_meter_per_sr_per_nm = watt / (m3 * sr * nm);
-static const float cd = lm / sr;
-static const float kcd = 1000.0 * cd;
-static const float cd_per_square_meter = cd / m2;
-static const float kcd_per_square_meter = kcd / m2;
+float3 finalRadianceExposureModify(in const GPUBasicData scene, float3 radiance)
+{
+    // This exposure scale should add for every radiance light.
+    return 10.0 * radiance * ((scene.atmosphere.luminanceMode == 0) ? 1.0 : 1e-5f);
+}
 
 float ClampCosine(float mu)
 {
@@ -114,7 +83,7 @@ float ClampCosine(float mu)
 
 float ClampDistance(float d)
 {
-    return max(d, 0.0 * m);
+    return max(d, 0.0);
 }
 
 float ClampRadius(IN(AtmosphereParameters) atmosphere, float r) 
@@ -124,7 +93,7 @@ float ClampRadius(IN(AtmosphereParameters) atmosphere, float r)
 
 float SafeSqrt(float a) 
 {
-    return sqrt(max(a, 0.0 * m2));
+    return sqrt(max(a, 0.0));
 }
 
 float DistanceToTopAtmosphereBoundary(IN(AtmosphereParameters) atmosphere, float r, float mu) 
@@ -148,7 +117,7 @@ bool RayIntersectsGround(IN(AtmosphereParameters) atmosphere, float r, float mu)
 {
     ATMOSPHERE_CHECK(r >= atmosphere.bottom_radius);
     ATMOSPHERE_CHECK(mu >= -1.0 && mu <= 1.0);
-    return mu < 0.0 && r * r * (mu * mu - 1.0) + atmosphere.bottom_radius * atmosphere.bottom_radius >= 0.0 * m2;
+    return mu < 0.0 && r * r * (mu * mu - 1.0) + atmosphere.bottom_radius * atmosphere.bottom_radius >= 0.0;
 }
 
 float GetLayerDensity(IN(DensityProfileLayer) layer, float altitude) 
@@ -179,15 +148,15 @@ float ComputeOpticalLengthToTopAtmosphereBoundary(
     float dx = DistanceToTopAtmosphereBoundary(atmosphere, r, mu) / float(SAMPLE_COUNT);
 
     // Integration loop.
-    float result = 0.0 * m;
+    float result = 0.0;
     for (int i = 0; i <= SAMPLE_COUNT; ++i) 
     {
         float d_i = float(i) * dx;
 
-        // Distance between the current sample point_ and the planet center.
+        // Distance between the current sample inPoint and the planet center.
         float r_i = sqrt(d_i * d_i + 2.0 * r * mu * d_i + r * r);
 
-        // float density at the current sample point_ (divided by the number density
+        // float density at the current sample inPoint (divided by the number density
         // at the bottom of the atmosphere, yielding a dimensionless number).
         float y_i = GetProfileDensity(profile, r_i - atmosphere.bottom_radius);
 
@@ -270,7 +239,7 @@ void GetRMuFromTransmittanceTextureUv(
     float d_min = atmosphere.top_radius - r;
     float d_max = rho + H;
     float d = d_min + x_mu * (d_max - d_min);
-    mu = d == 0.0 * m ? float(1.0) : (H * H - rho * rho - d * d) / (2.0 * r * d);
+    mu = (d == 0.0) ? 1.0 : (H * H - rho * rho - d * d) / (2.0 * r * d);
     mu = ClampCosine(mu);
 }
 
@@ -293,7 +262,7 @@ float3 ComputeTransmittanceToTopAtmosphereBoundaryTexture(
 <h4 id="transmittance_lookup">Lookup</h4>
 
 <p>With the help of the above precomputed texture, we can now get the
-transmittance between a point_ and the top atmosphere boundary with a single
+transmittance between a inPoint and the top atmosphere boundary with a single
 texture lookup (assuming there is no intersection with the ground):
 */
 
@@ -325,7 +294,7 @@ float3 GetTransmittance(
 {
     ATMOSPHERE_CHECK(r >= atmosphere.bottom_radius && r <= atmosphere.top_radius);
     ATMOSPHERE_CHECK(mu >= -1.0 && mu <= 1.0);
-    ATMOSPHERE_CHECK(d >= 0.0 * m);
+    ATMOSPHERE_CHECK(d >= 0.0);
 
     float r_d = ClampRadius(atmosphere, sqrt(d * d + 2.0 * r * mu * d + r * r));
     float mu_d = ClampCosine((r * mu + d) / r_d);
@@ -351,7 +320,7 @@ float3 GetTransmittanceToSun(
     float sin_theta_h = atmosphere.bottom_radius / r;
     float cos_theta_h = -sqrt(max(1.0 - sin_theta_h * sin_theta_h, 0.0));
     return GetTransmittanceToTopAtmosphereBoundary(atmosphere, transmittance_texture, r, mu_s) *
-        smoothstep(-sin_theta_h * atmosphere.sun_angular_radius / rad, sin_theta_h * atmosphere.sun_angular_radius / rad, mu_s - cos_theta_h);
+        smoothstep(-sin_theta_h * atmosphere.sun_angular_radius, sin_theta_h * atmosphere.sun_angular_radius, mu_s - cos_theta_h);
 }
 
 void ComputeSingleScatteringIntegrand(
@@ -412,7 +381,7 @@ void ComputeSingleScattering(
     {
         float d_i = float(i) * dx;
 
-        // The Rayleigh and Mie single scattering at the current sample point_.
+        // The Rayleigh and Mie single scattering at the current sample inPoint.
         float3 rayleigh_i;
         float3 mie_i;
         ComputeSingleScatteringIntegrand(atmosphere, transmittance_texture, r, mu, mu_s, nu, d_i, ray_r_mu_intersects_ground, rayleigh_i, mie_i);
@@ -518,7 +487,7 @@ void GetRMuMuSNuFromScatteringTextureUvwz(IN(AtmosphereParameters) atmosphere,
         float d_max = rho;
         float d = d_min + (d_max - d_min) * GetUnitRangeFromTextureCoord(
             1.0 - 2.0 * uvwz.z, SCATTERING_TEXTURE_MU_SIZE / 2);
-        mu = d == 0.0 * m ? float(-1.0) : ClampCosine(-(rho * rho + d * d) / (2.0 * r * d));
+        mu = (d == 0.0) ? float(-1.0) : ClampCosine(-(rho * rho + d * d) / (2.0 * r * d));
         ray_r_mu_intersects_ground = true;
     } 
     else 
@@ -530,7 +499,7 @@ void GetRMuMuSNuFromScatteringTextureUvwz(IN(AtmosphereParameters) atmosphere,
         float d_max = rho + H;
         float d = d_min + (d_max - d_min) * GetUnitRangeFromTextureCoord(
             2.0 * uvwz.z - 1.0, SCATTERING_TEXTURE_MU_SIZE / 2);
-        mu = d == 0.0 * m ? float(1.0) : ClampCosine((H * H - rho * rho - d * d) / (2.0 * r * d));
+        mu = (d == 0.0) ? float(1.0) : ClampCosine((H * H - rho * rho - d * d) / (2.0 * r * d));
         ray_r_mu_intersects_ground = false;
     }
 
@@ -542,7 +511,7 @@ void GetRMuMuSNuFromScatteringTextureUvwz(IN(AtmosphereParameters) atmosphere,
     float A = (D - d_min) / (d_max - d_min);
     float a = (A - x_mu_s * A) / (1.0 + x_mu_s * A);
     float d = d_min + min(a, A) * (d_max - d_min);
-    mu_s = d == 0.0 * m ? float(1.0) : ClampCosine((H * H - d * d) / (2.0 * atmosphere.bottom_radius * d));
+    mu_s = (d == 0.0) ? float(1.0) : ClampCosine((H * H - d * d) / (2.0 * atmosphere.bottom_radius * d));
 
     nu = ClampCosine(uvwz.x * 2.0 - 1.0);
 }
@@ -590,7 +559,7 @@ void ComputeSingleScatteringTexture(IN(AtmosphereParameters) atmosphere,
 <h4 id="single_scattering_lookup">Lookup</h4>
 
 <p>With the help of the above precomputed texture, we can now get the scattering
-between a point_ and the nearest atmosphere boundary with two texture lookups (we
+between a inPoint and the nearest atmosphere boundary with two texture lookups (we
 need two 3D texture lookups to emulate a single 4D texture lookup with
 quadrilinear interpolation; the 3D texture coordinates are computed using the
 inverse of the 3D-4D mapping defined in
@@ -679,9 +648,9 @@ float3 ComputeScatteringDensity(
     float3 omega_s = float3(sun_dir_x, sun_dir_y, mu_s);
 
     const int SAMPLE_COUNT = 16;
-    const float dphi = pi / float(SAMPLE_COUNT);
-    const float dtheta = pi / float(SAMPLE_COUNT);
-    float3 rayleigh_mie = (0.0 * watt_per_cubic_meter_per_sr_per_nm);
+    const float dphi = kPI / float(SAMPLE_COUNT);
+    const float dtheta = kPI / float(SAMPLE_COUNT);
+    float3 rayleigh_mie = 0.0;
 
     // Nested loops for the integral over all the incident directions omega_i.
     for (int l = 0; l < SAMPLE_COUNT; ++l) 
@@ -693,7 +662,7 @@ float3 ComputeScatteringDensity(
 
         // The distance and transmittance to the ground only depend on theta, so we
         // can compute them in the outer loop for efficiency.
-        float distance_to_ground = 0.0 * m;
+        float distance_to_ground = 0.0;
         float3 transmittance_to_ground = (0.0);
         float3 ground_albedo = (0.0);
         if (ray_r_theta_intersects_ground)
@@ -707,7 +676,7 @@ float3 ComputeScatteringDensity(
         {
             float phi = (float(m) + 0.5) * dphi;
             float3 omega_i = float3(cos(phi) * sin_theta, sin(phi) * sin_theta, cos_theta);
-            float domega_i = (dtheta / rad) * (dphi / rad) * sin(theta) * sr;
+            float domega_i = dtheta * dphi * sin(theta);
 
             // The radiance L_i arriving from direction omega_i after n-1 bounces is
             // the sum of a term given by the precomputed scattering texture for the
@@ -725,7 +694,7 @@ float3 ComputeScatteringDensity(
             float3 ground_normal = normalize(zenith_direction * r + omega_i * distance_to_ground);
 
             float3 ground_irradiance = GetIrradiance(atmosphere, irradiance_texture, atmosphere.bottom_radius, dot(ground_normal, omega_s));
-            incident_radiance += transmittance_to_ground * ground_albedo * (1.0 / (PI * sr)) * ground_irradiance;
+            incident_radiance += transmittance_to_ground * ground_albedo * kInvertPI * ground_irradiance;
 
             // The radiance finally scattered from direction omega_i towards direction
             // -omega is the product of the incident radiance, the scattering
@@ -760,18 +729,18 @@ float3 ComputeMultipleScattering(
     float dx = DistanceToNearestAtmosphereBoundary(atmosphere, r, mu, ray_r_mu_intersects_ground) / float(SAMPLE_COUNT);
 
     // Integration loop.
-    float3 rayleigh_mie_sum = (0.0 * watt_per_square_meter_per_sr_per_nm);
+    float3 rayleigh_mie_sum = 0.0;
     for (int i = 0; i <= SAMPLE_COUNT; ++i) 
     {
         float d_i = float(i) * dx;
 
-        // The r, mu and mu_s parameters at the current integration point_ (see the
+        // The r, mu and mu_s parameters at the current integration inPoint (see the
         // single scattering section for a detailed explanation).
         float r_i = ClampRadius(atmosphere, sqrt(d_i * d_i + 2.0 * r * mu * d_i + r * r));
         float mu_i = ClampCosine((r * mu + d_i) / r_i);
         float mu_s_i = ClampCosine((r * mu_s + d_i * nu) / r_i);
 
-        // The Rayleigh and Mie multiple scattering at the current sample point_.
+        // The Rayleigh and Mie multiple scattering at the current sample inPoint.
         float3 rayleigh_mie_i =
             GetScattering(atmosphere, scattering_density_texture, r_i, mu_i, mu_s_i, nu, ray_r_mu_intersects_ground) *
             GetTransmittance(atmosphere, transmittance_texture, r, mu, d_i, ray_r_mu_intersects_ground) * dx;
@@ -829,7 +798,7 @@ float3 ComputeDirectIrradiance(
     ATMOSPHERE_CHECK(r >= atmosphere.bottom_radius && r <= atmosphere.top_radius);
     ATMOSPHERE_CHECK(mu_s >= -1.0 && mu_s <= 1.0);
 
-    float alpha_s = atmosphere.sun_angular_radius / rad;
+    float alpha_s = atmosphere.sun_angular_radius;
 
     // Approximate average of the cosine factor mu_s over the visible fraction of
     // the Sun disc.
@@ -852,10 +821,10 @@ float3 ComputeIndirectIrradiance(
     ATMOSPHERE_CHECK(scattering_order >= 1);
 
     const int SAMPLE_COUNT = 32;
-    const float dphi = pi / float(SAMPLE_COUNT);
-    const float dtheta = pi / float(SAMPLE_COUNT);
+    const float dphi = kPI / float(SAMPLE_COUNT);
+    const float dtheta = kPI / float(SAMPLE_COUNT);
 
-    float3 result = (0.0 * watt_per_square_meter_per_nm);
+    float3 result = 0.0;
     float3 omega_s = float3(sqrt(1.0 - mu_s * mu_s), 0.0, mu_s);
 
     for (int j = 0; j < SAMPLE_COUNT / 2; ++j) 
@@ -865,7 +834,7 @@ float3 ComputeIndirectIrradiance(
         {
             float phi = (float(i) + 0.5) * dphi;
             float3 omega = float3(cos(phi) * sin(theta), sin(phi) * sin(theta), cos(theta));
-            float domega = (dtheta / rad) * (dphi / rad) * sin(theta) * sr;
+            float domega = dtheta * dphi * sin(theta);
 
             float nu = dot(omega, omega_s);
             result += GetScattering(atmosphere, single_rayleigh_scattering_texture, single_mie_scattering_texture, multiple_scattering_texture, r, omega.z, mu_s, nu, false /* ray_r_theta_intersects_ground */, scattering_order) * omega.z * domega;
@@ -983,7 +952,6 @@ float3 GetSkyRadiance(
     IN(Texture3D<float4>) single_mie_scattering_texture,
     float3 camera, 
     IN(float3) view_ray, 
-    float shadow_length,
     IN(float3) sun_direction, 
     OUT(float3) transmittance) 
 {
@@ -996,7 +964,7 @@ float3 GetSkyRadiance(
     float distance_to_top_atmosphere_boundary = -rmu - sqrt(rmu * rmu - r * r + atmosphere.top_radius * atmosphere.top_radius);
     // If the viewer is in space and the view ray intersects the atmosphere, move
     // the viewer to the top atmosphere boundary (along the view ray):
-    if (distance_to_top_atmosphere_boundary > 0.0 * m) 
+    if (distance_to_top_atmosphere_boundary > 0.0) 
     {
         camera = camera + view_ray * distance_to_top_atmosphere_boundary;
         r = atmosphere.top_radius;
@@ -1005,8 +973,8 @@ float3 GetSkyRadiance(
     else if (r > atmosphere.top_radius) 
     {
         // If the view ray does not intersect the atmosphere, simply return 0.
-        transmittance = (1.0);
-        return (0.0 * watt_per_square_meter_per_sr_per_nm);
+        transmittance = 1.0;
+        return 0.0;
     }
 
     // Compute the r, mu, mu_s and nu parameters needed for the texture lookups.
@@ -1019,27 +987,7 @@ float3 GetSkyRadiance(
     transmittance = ray_r_mu_intersects_ground ? (0.0) : GetTransmittanceToTopAtmosphereBoundary(atmosphere, transmittance_texture, r, mu);
 
     float3 single_mie_scattering;
-    float3 scattering;
-    if (shadow_length == 0.0 * m) 
-    {
-        scattering = GetCombinedScattering(atmosphere, scattering_texture, single_mie_scattering_texture, r, mu, mu_s, nu, ray_r_mu_intersects_ground, single_mie_scattering);
-    } 
-    else 
-    {
-        // Case of light shafts (shadow_length is the total length noted l in our
-        // paper): we omit the scattering between the camera and the point_ at
-        // distance l, by implementing Eq. (18) of the paper (shadow_transmittance
-        // is the T(x,x_s) term, scattering is the S|x_s=x+lv term).
-        float d = shadow_length;
-        float r_p = ClampRadius(atmosphere, sqrt(d * d + 2.0 * r * mu * d + r * r));
-        float mu_p = (r * mu + d) / r_p;
-        float mu_s_p = (r * mu_s + d * nu) / r_p;
-
-        scattering = GetCombinedScattering(atmosphere, scattering_texture, single_mie_scattering_texture, r_p, mu_p, mu_s_p, nu, ray_r_mu_intersects_ground, single_mie_scattering);
-        float3 shadow_transmittance = GetTransmittance(atmosphere, transmittance_texture, r, mu, shadow_length, ray_r_mu_intersects_ground);
-        scattering = scattering * shadow_transmittance;
-        single_mie_scattering = single_mie_scattering * shadow_transmittance;
-    }
+    float3 scattering = GetCombinedScattering(atmosphere, scattering_texture, single_mie_scattering_texture, r, mu, mu_s, nu, ray_r_mu_intersects_ground, single_mie_scattering);
 
     const float3 skySpectralRadianceToLumiance = (atmosphere.luminanceMode != LUMINANCE_MODE_NONE) ? atmosphere.skySpectralRadianceToLumiance : 1.0;
     const float3 skyScattering = scattering * rayleighPhase(nu) + single_mie_scattering * cornetteShanksMiePhase(atmosphere.mie_phase_function_g, nu);
@@ -1054,22 +1002,21 @@ float3 GetSkyRadianceToPoint(
     in const Texture3D<float4> scattering_texture,
     in const Texture3D<float4> single_mie_scattering_texture,
     float3 camera,
-    float3 point_, 
-    float shadow_length,
+    float3 inPoint, 
     float3 sun_direction, 
     out float3 transmittance) 
 {
     // Compute the distance to the top atmosphere boundary along the view ray,
     // assuming the viewer is in space (or NaN if the view ray does not intersect
     // the atmosphere).
-    float3 view_ray = normalize(point_ - camera);
+    float3 view_ray = normalize(inPoint - camera);
     float r = length(camera);
     float rmu = dot(camera, view_ray);
     float distance_to_top_atmosphere_boundary = -rmu - sqrt(rmu * rmu - r * r + atmosphere.top_radius * atmosphere.top_radius);
     
     // If the viewer is in space and the view ray intersects the atmosphere, move
     // the viewer to the top atmosphere boundary (along the view ray):
-    if (distance_to_top_atmosphere_boundary > 0.0 * m) 
+    if (distance_to_top_atmosphere_boundary > 0.0) 
     {
         camera = camera + view_ray * distance_to_top_atmosphere_boundary;
         r = atmosphere.top_radius;
@@ -1080,7 +1027,7 @@ float3 GetSkyRadianceToPoint(
     float mu = rmu / r;
     float mu_s = dot(camera, sun_direction) / r;
     float nu = dot(view_ray, sun_direction);
-    float d = length(point_ - camera);
+    float d = length(inPoint - camera);
     bool ray_r_mu_intersects_ground = RayIntersectsGround(atmosphere, r, mu);
 
     transmittance = GetTransmittance(atmosphere, transmittance_texture, r, mu, d, ray_r_mu_intersects_ground);
@@ -1088,12 +1035,6 @@ float3 GetSkyRadianceToPoint(
     float3 single_mie_scattering;
     float3 scattering = GetCombinedScattering(atmosphere, scattering_texture, single_mie_scattering_texture, r, mu, mu_s, nu, ray_r_mu_intersects_ground, single_mie_scattering);
 
-    // Compute the r, mu, mu_s and nu parameters for the second texture lookup.
-    // If shadow_length is not 0 (case of light shafts), we want to ignore the
-    // scattering along the last shadow_length meters of the view ray, which we
-    // do by subtracting shadow_length from d (this way scattering_p is equal to
-    // the S|x_s=x_0-lv term in Eq. (17) of our paper).
-    d = max(d - shadow_length, 0.0 * m);
     float r_p = ClampRadius(atmosphere, sqrt(d * d + 2.0 * r * mu * d + r * r));
     float mu_p = (r * mu + d) / r_p;
     float mu_s_p = (r * mu_s + d * nu) / r_p;
@@ -1101,16 +1042,8 @@ float3 GetSkyRadianceToPoint(
     float3 single_mie_scattering_p;
     float3 scattering_p = GetCombinedScattering(atmosphere, scattering_texture, single_mie_scattering_texture, r_p, mu_p, mu_s_p, nu, ray_r_mu_intersects_ground, single_mie_scattering_p);
 
-    // Combine the lookup results to get the scattering between camera and point_.
-    float3 shadow_transmittance = transmittance;
-    if (shadow_length > 0.0 * m) 
-    {
-        // This is the T(x,x_s) term in Eq. (17) of our paper, for light shafts.
-        shadow_transmittance = GetTransmittance(atmosphere, transmittance_texture, r, mu, d, ray_r_mu_intersects_ground);
-    }
-
-    scattering = scattering - shadow_transmittance * scattering_p;
-    single_mie_scattering = single_mie_scattering - shadow_transmittance * single_mie_scattering_p;
+    scattering = scattering - transmittance * scattering_p;
+    single_mie_scattering = single_mie_scattering - transmittance * single_mie_scattering_p;
 
     if (atmosphere.bCombineScattering != 0)
     {
@@ -1133,11 +1066,11 @@ float3 GetSunAndSkyIrradiance(
     in const Texture2D<float4> irradiance_texture,
     float3 targetPoint, 
     float3 normal, 
-    float3 sun_direction,
+    float3 sunDirection,
     out float3 skyIrradiance) 
 {
     float r = length(targetPoint);
-    float mu_s = dot(targetPoint, sun_direction) / r;
+    float mu_s = dot(targetPoint, sunDirection) / r;
 
     const float3 skySpectralRadianceToLumiance = atmosphere.luminanceMode != LUMINANCE_MODE_NONE ? atmosphere.skySpectralRadianceToLumiance : 1.0;
 
@@ -1147,7 +1080,7 @@ float3 GetSunAndSkyIrradiance(
     skyIrradiance  = mul(sRGB_2_AP1, skyIrradiance); // SRGB -> ACEScg
 
     const float3 sunSpectralRadianceToLumiance = atmosphere.luminanceMode != LUMINANCE_MODE_NONE ? atmosphere.sunSpectralRadianceToLumiance : 1.0;
-    const float3 sunRadiance = atmosphere.solar_irradiance * GetTransmittanceToSun(atmosphere, transmittance_texture, r, mu_s) * max(dot(normal, sun_direction), 0.0);
+    const float3 sunRadiance = atmosphere.solar_irradiance * GetTransmittanceToSun(atmosphere, transmittance_texture, r, mu_s) * max(dot(normal, sunDirection), 0.0);
     
     // Direct irradiance.
     float3 sunLumianceSRGB = sunSpectralRadianceToLumiance * sunRadiance;

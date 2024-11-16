@@ -30,6 +30,7 @@ void WidgetSystem::onVisibleTick(const chord::ApplicationTickData& tickData)
 	auto activeScene = m_sceneManager->getActiveScene();
 	activeScene->getAtmosphereManager().drawUI(activeScene);
 	activeScene->getShadowManager().drawUI(activeScene);
+	activeScene->getDDGIManager().drawUI(activeScene);
 }
 
 void WidgetSystem::onRelease()

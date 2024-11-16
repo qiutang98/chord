@@ -6,6 +6,7 @@
 
 #include <astrophysics/atmosphere.h>
 #include <scene/system/shadow.h>
+#include <scene/system/ddgi.h>
 
 namespace chord
 {
@@ -174,6 +175,9 @@ namespace chord
 		const ShadowManager& getShadowManager() const { return *m_shadowManager; }
 		ShadowManager& getShadowManager() { return *m_shadowManager; }
 
+		const DDGIManager& getDDGIManager() const { return *m_ddgiManager; }
+		DDGIManager& getDDGIManager() { return *m_ddgiManager; }
+
 	private:
 		static AssetTypeMeta createTypeMeta();
 
@@ -193,6 +197,7 @@ namespace chord
 		// 
 		std::unique_ptr<AtmosphereManager> m_atmosphereManager = nullptr;
 		std::unique_ptr<ShadowManager> m_shadowManager = nullptr;
+		std::unique_ptr<DDGIManager> m_ddgiManager = nullptr;
 	};
 
 

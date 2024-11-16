@@ -75,6 +75,11 @@ struct GLTFPrimitiveBuffer
     uint meshletGroupOffset;
     uint meshletGroupIndicesOffset;
     uint meshletGroupCount;
+
+    uint lod0IndicesOffset;
+    uint lod0IndicesCount;
+    uint pad0;
+    uint pad1;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveBuffer);
 
@@ -95,6 +100,11 @@ struct GLTFPrimitiveDatasBuffer
     uint bvhNodeBuffer;
     uint meshletGroupBuffer;
     uint meshletGroupIndicesBuffer;
+
+    uint lod0IndicesBuffer;
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(GLTFPrimitiveDatasBuffer);
 

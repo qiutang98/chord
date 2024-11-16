@@ -53,13 +53,37 @@ namespace chord::graphics
 		VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties{ };
 	};
 
-	class BuiltinTextures
+	class BuiltinMesh
 	{
 	public:
+		struct BuiltinVertex
+		{
+			float3 position;
+			float3 normal;
+			float2 uv;
+		};
+
+		// Used for sort.
+		uint32 meshTypeUniqueId;
+		uint32 indicesCount;
+
+		PoolBufferHostVisible indices  = nullptr;
+		PoolBufferHostVisible vertices = nullptr; // position, normal, uv
+	};
+	using BuiltinMeshRef = std::shared_ptr<BuiltinMesh>;
+
+	class BuiltinResources
+	{
+	public:
+		// Textures
 		GPUTextureAssetRef white = nullptr;       // 1x1 RGBA(255,255,255,255)
 		GPUTextureAssetRef transparent = nullptr; // 1x1 RGBA(  0,   0,   0,   0)
 		GPUTextureAssetRef black = nullptr;       // 1x1 RGBA(  0,   0,   0, 255) 
 		GPUTextureAssetRef normal = nullptr;      // 1x1 RGBA(128, 128, 255, 255) 
+
+
+		// Meshes
+		BuiltinMeshRef lowSphere = nullptr;
 	};
 
 	class Context : NonCopyable
@@ -125,7 +149,7 @@ namespace chord::graphics
 		VmaAllocator getVMA() const { return m_vmaAllocator; }
 
 		// Engine built textures.
-		const BuiltinTextures& getBuiltinTextures() const { return m_builtinTextures; }
+		const BuiltinResources& getBuiltinResources() const { return m_builtinResources; }
 		uint32 getWhiteTextureSRV() const;
 
 		// Create a stage upload buffer, commonly only used for engine init.
@@ -246,8 +270,8 @@ namespace chord::graphics
 		Events<Context, const ApplicationTickData&> onTick;
 
 	private:
-		// Sync init builtin textures.
-		void initBuiltinTextures();
+		// Sync init builtin resources.
+		void initBuiltinResources();
 
 	private:
 		InitConfig m_initConfig = { };
@@ -291,7 +315,7 @@ namespace chord::graphics
 		std::unique_ptr<GPUSamplerManager> m_samplerManager = nullptr;
 
 		// Engine builtin textures.
-		BuiltinTextures m_builtinTextures;
+		BuiltinResources m_builtinResources;
 		GPUBufferRef m_dummySSBO;
 		GPUBufferRef m_dummyUniform;
 

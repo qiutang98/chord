@@ -8,6 +8,7 @@
 #include <renderer/visibility_tile.h>
 #include <renderer/render_textures.h>
 #include <renderer/mesh/gltf_rendering.h>
+#include <scene/system/ddgi.h>
 
 namespace chord
 {
@@ -32,6 +33,7 @@ namespace chord
 		GBufferTextures& gbuffers,
 		uint32 cameraViewId,
 		graphics::PoolBufferGPUOnlyRef drawMeshletCmdBuffer,
+		const AtmosphereLut& skyLuts,
 		const VisibilityTileMarkerContext& marker);
 
 	extern graphics::PoolTextureRef computeDisocclusionMask(
@@ -50,7 +52,24 @@ namespace chord
 
 	extern void visualizeAccelerateStructure(
 		graphics::GraphicsQueue& queue,
+		const AtmosphereLut& luts,
+		const CascadeShadowContext& cascadeCtx,
 		GBufferTextures& gbuffers,
 		uint32 cameraViewId,
 		graphics::helper::AccelKHRRef tlas);
+
+
+
+	extern graphics::PoolTextureRef ddgiUpdate(
+		graphics::CommandList& cmd,
+		graphics::GraphicsQueue& queue,
+		const AtmosphereLut& luts,
+		const DDGIConfigCPU& config,
+		const CascadeShadowContext& cascadeCtx,
+		GBufferTextures& gbuffers,
+		DDGIContext& ddgiCtx,
+		uint32 cameraViewId,
+		graphics::helper::AccelKHRRef tlas,
+		ICamera* camera,
+		graphics::PoolTextureRef hzb);
 }

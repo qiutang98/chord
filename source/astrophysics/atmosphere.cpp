@@ -457,8 +457,8 @@ void chord::AtmosphereManager::updateCacheParameter()
     double sun_k_r, sun_k_g, sun_k_b;
     ComputeSpectralRadianceToLuminanceFactors(rawData.wavelengths, rawData.solarIrradiance, 0 /* lambda_power */, &sun_k_r, &sun_k_g, &sun_k_b);
 
-    rawData.skySpectralRadianceToLumiance = float3(sky_k_r, sky_k_g, sky_k_b);
-    rawData.sunSpectralRadianceToLumiance = float3(sun_k_r, sun_k_g, sun_k_b);
+    rawData.skySpectralRadianceToLumiance = float3(sky_k_r, sky_k_g, sky_k_b); // 1e5f * (1.150, 0.7130, 0.653)
+    rawData.sunSpectralRadianceToLumiance = float3(sun_k_r, sun_k_g, sun_k_b); // 1e5f * (0.983, 0.6995, 0.665)
 }
 
 AtmosphereParameters AtmosphereManager::update(const ApplicationTickData& tickData)

@@ -2,6 +2,8 @@
 
 struct TinyGBufferContext
 {
+    float3 positionRS;
+
     // Lighting color. 
     float3 color;
 
@@ -53,6 +55,9 @@ void loadGLTFMetallicRoughnessPBRMaterial(
     
         gbufferCtx.motionVector = (meshPositionHS_LastFrame.xy / meshPositionHS_LastFrame.z - meshPositionHS.xy / meshPositionHS.z) * float2(0.5, -0.5);
     }
+
+    //
+    gbufferCtx.positionRS = triangleInfo.positionRS[0] * barycentric.x + triangleInfo.positionRS[1] * barycentric.y + triangleInfo.positionRS[2] * barycentric.z;
 
     float4 baseColor;
     {
@@ -110,7 +115,7 @@ void loadGLTFMetallicRoughnessPBRMaterial(
         float4 metallicRoughnessRaw = metallicRoughnessTexture.SampleGrad(metallicRoughnessSampler, meshUv, meshUv_ddx, meshUv_ddy);
 
         //
-        // NOTE: Some DDC store sqrt distribution roughness when export to keep higher precision when near zero. (called perceptual roughness). 
+        // NOTE: Some DCC store sqrt distribution roughness when export to keep higher precision when near zero. (called perceptual roughness). 
         //       BTW, we can't control the artist behavior (all media assets download from sketchfab), so, just set roughness is roughness. 
         gbufferCtx.roughness =  metallicRoughnessRaw.b;
 

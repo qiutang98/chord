@@ -110,5 +110,9 @@ namespace chord
 		std::unordered_map<uint64, uint32> m_meshPrimIdMap;
 	};
 	using GPUGLTFPrimitiveAssetWeak = std::weak_ptr<GPUGLTFPrimitiveAsset>;
-	using GPUGLTFPrimitiveAssetRef = std::shared_ptr<GPUGLTFPrimitiveAsset>;
+	using GPUGLTFPrimitiveAssetRef  = std::shared_ptr<GPUGLTFPrimitiveAsset>;
+
+
+	// 
+	extern graphics::BuiltinMeshRef loadBuiltinMeshFromPath(const std::string& loadPath);
 }

@@ -48,54 +48,11 @@ CHORD_PUSHCONST(ShadowProjectionPushConsts, pushConsts);
 #include "base.hlsli"
 #include "blue_noise.hlsli"
 #include "sample.hlsli"
-
-// Depth Aware Contact harden pcf. See GDC2021: "Shadows of Cold War" for tech detail.
-// Use cache occluder dist to fit one curve similar to tonemapper, to get some effect like pcss.
-// can reduce tiny acne natively.
-float contactHardenPCFKernal(const float occluders, const float occluderDistSum, const float compareDepth, const uint shadowSampleCount)
-{
-    // Normalize occluder dist.
-    float occluderAvgDist = occluderDistSum / occluders;
-    float w = 1.0f / float(shadowSampleCount); 
-    
-    // 0 -> contact harden.
-    // 1 -> soft, full pcf.
-    float pcfWeight =  clamp(occluderAvgDist / compareDepth, 0.0, 1.0);
-    
-    // Normalize occluders.
-    float percentageOccluded = clamp(occluders * w, 0.0, 1.0);
-
-    // S curve fit.
-    percentageOccluded = 2.0f * percentageOccluded - 1.0f;
-    float occludedSign = sign(percentageOccluded);
-    percentageOccluded = 1.0f - (occludedSign * percentageOccluded);
-    percentageOccluded = lerp(percentageOccluded * percentageOccluded * percentageOccluded, percentageOccluded, pcfWeight);
-    percentageOccluded = 1.0f - percentageOccluded;
-
-    percentageOccluded *= occludedSign;
-    percentageOccluded = 0.5f * percentageOccluded + 0.5f;
-
-    return 1.0f - percentageOccluded;
-}
+#include "cascade_shadow_projection.hlsli"
 
 float pcssWidth(float cascadeRadiusScale)
 {
-    return pushConsts.lightSize * cascadeRadiusScale * pushConsts.shadowMapTexelSize * 64.0f; // * 200.0f;
-}
-
-// Computes the receiver plane depth bias for the given shadow coord in screen space.
-// http://mynameismjp.wordpress.com/2013/09/10/shadow-maps/ 
-// http://amd-dev.wpengine.netdna-cdn.com/wordpress/media/2012/10/Isidoro-ShadowMapping.pdf
-float2 computeReceiverPlaneDepthBias(float3 texCoordDX, float3 texCoordDY)
-{
-    float2 biasUV;
-
-    biasUV.x = texCoordDY.y * texCoordDX.z - texCoordDX.y * texCoordDY.z;
-    biasUV.y = texCoordDX.x * texCoordDY.z - texCoordDY.x * texCoordDX.z;
-
-    // 
-    float r = texCoordDX.x * texCoordDY.y - texCoordDX.y * texCoordDY.x;
-    return biasUV / r;
+    return pushConsts.lightSize * cascadeRadiusScale * 64.0 * pushConsts.shadowMapTexelSize; // * 200.0f;
 }
 
 // Surface normal based bias, see https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps for more details.
@@ -259,23 +216,15 @@ void cascadeSelected(out CascadeContext ctx, const PerframeCameraView perView, c
     const uint2 offsetId = jitterSequence2(scene.frameCounter, renderDim, workPos);
     const float n_01 = samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 0u);
 
-    float3 shadowCoord_0 = 0.0;
-
     // Cascade selected.
     ctx.activeCascadeId = 0;
     for (uint cascadeId = 0; cascadeId < cascadeCount; cascadeId ++)
     {
         const InstanceCullingViewInfo shadowView = BATL(InstanceCullingViewInfo, pushConsts.shadowViewId, cascadeId);
-        const float3 positionRS_cacsade = (positionRS + positionNormalOffset) + float3(asDouble3(perView.cameraWorldPos) - asDouble3(shadowView.cameraWorldPos));
+        const float3 positionRS_cacsade = (positionRS + positionNormalOffset) + float3(perView.cameraWorldPos.getDouble3() - shadowView.cameraWorldPos.getDouble3());
 
         // 
         ctx.shadowCoord = mul(shadowView.translatedWorldToClip, float4(positionRS_cacsade, 1.0)).xyz;
-
-        // 
-        if (cascadeId == 0)
-        {
-            shadowCoord_0 = ctx.shadowCoord;
-        }
 
         // Remap to [0, 1]
         ctx.shadowCoord.xy = ctx.shadowCoord.xy * float2(0.5, -0.5) + 0.5;
@@ -339,7 +288,7 @@ const float sampleHistorySoftShadowMask(float2 uv, float3 positionRS, in const P
     bool bHistoryValid = false;
     #if 0
     {
-        const float3 positionRS_prev = positionRS + float3(asDouble3(perView.cameraWorldPos) - asDouble3(perView.cameraWorldPosLastFrame));
+        const float3 positionRS_prev = positionRS + float3(perView.cameraWorldPos.getDouble3() - perView.cameraWorldPosLastFrame.getDouble3());
         float3 UVz_prev = projectPosToUVz(positionRS_prev, perView.translatedWorldToClipLastFrame);
 
         // 
@@ -553,7 +502,7 @@ void percentageCloserSoftShadowCS(
     } 
 #endif
 
-    rwScreenColor[workPos] = 3.0 * litColor * shadowValue; 
+    rwScreenColor[workPos] = litColor * shadowValue; 
 
     // Soft shadow mask.
     {

@@ -31,20 +31,13 @@ namespace chord
 		const DebugLineCtx& ctx,
 		graphics::PoolTextureRef depthImage,
 		graphics::PoolTextureRef outImage);
+
 	extern HZBContext buildHZB(
 		graphics::GraphicsQueue& queue, 
 		graphics::PoolTextureRef depthImage,
 		bool bBuildMin,
 		bool bBuildMax,
 		bool bBuildValidRange);
-
-
-	extern void renderSky(
-		graphics::GraphicsQueue& queue,
-		graphics::PoolTextureRef sceneColor,
-		graphics::PoolTextureRef depthImage,
-		uint32 cameraViewId,
-		const AtmosphereLut& luts);
 
 	using CountAndCmdBuffer = std::pair<graphics::PoolBufferGPUOnlyRef, graphics::PoolBufferGPUOnlyRef>;
 
@@ -53,4 +46,40 @@ namespace chord
 		graphics::GraphicsQueue& queue,
 		uint groupSize, 
 		graphics::PoolBufferGPUOnlyRef countBuffer);
+
+	extern void debugDrawBuiltinMesh(
+		graphics::GraphicsQueue& queue,
+		std::vector<BuiltinMeshDrawInstance>& instances,
+		uint32 cameraViewId,
+		graphics::PoolTextureRef depthImage,
+		graphics::PoolTextureRef outImage);
+
+	struct DDGIVolumeResource
+	{
+		double3 scrollAnchor    = { 0.0, 0.0, 0.0 };
+		int3    scrollOffset    = {   0,   0,   0 };
+
+		float3 probeCenterRS;
+		float3 probeSpacing;
+
+		//
+		int3 probeDim;
+
+		//
+		graphics::PoolTextureRef iradianceTexture;
+		graphics::PoolTextureRef distanceTexture;
+
+		graphics::PoolBufferRef probeTraceMarkerBuffer;
+		graphics::PoolBufferRef probeTraceInfoBuffer;
+		graphics::PoolBufferRef probeTraceGbufferInfoBuffer;
+
+		graphics::PoolBufferRef probeTraceHistoryValidBuffer;
+		graphics::PoolBufferRef probeOffsetBuffer;
+		graphics::PoolBufferRef probeTracedFrameBuffer;
+	};
+
+	struct DDGIContext
+	{
+		std::vector<DDGIVolumeResource> volumes;
+	};
 }
