@@ -162,12 +162,12 @@ void mainCS(
             }
             else
             {
-                // metallic = materialInfo.metallicFactor;
+                metallic = getFallbackMetallic(materialInfo.metallicFactor);
             }
 
             // Load mini gbuffer info.
             miniGbuffer.normalRS  = normalRS;
-            miniGbuffer.baseColor = baseColor.xyz;
+            miniGbuffer.baseColor = baseColor.xyz; 
             miniGbuffer.metallic  = metallic;
         }
     }

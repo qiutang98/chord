@@ -967,7 +967,7 @@ namespace chord
 		auto importLdrTexture = [&]() -> bool
 		{
 			auto imageLdr = std::make_unique<ImageLdr2D>();
-			if (!imageLdr->fillFromFile(srcPath.string(), 4))
+			if (!imageLdr->fillFromFile(srcPath.string()))
 			{
 				return false;
 			}
@@ -1051,7 +1051,7 @@ namespace chord
 		auto importHalfTexture = [&]() -> bool
 		{
 			auto imageHalf = std::make_unique<ImageHalf2D>();
-			if (!imageHalf->fillFromFile(srcPath.string(), 4))
+			if (!imageHalf->fillFromFile(srcPath.string()))
 			{
 				return false;
 			}

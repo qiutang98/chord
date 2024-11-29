@@ -129,7 +129,7 @@ void loadGLTFMetallicRoughnessPBRMaterial(
     else
     {
         gbufferCtx.roughness = materialInfo.roughnessFactor;
-        gbufferCtx.metallic  = materialInfo.metallicFactor;
+        gbufferCtx.metallic  = getFallbackMetallic(materialInfo.metallicFactor);
 
         // Default no exist. 
         gbufferCtx.materialAO = 1.0f;

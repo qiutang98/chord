@@ -205,16 +205,14 @@ void cascadeSelected(out CascadeContext ctx, const PerframeCameraView perView, c
 
     // Load vertex relative world space normal. 
     Texture2D<float4> normalTexture = TBindless(Texture2D, float4, pushConsts.normalId);
-    const float3 normal = normalTexture[workPos].xyz * 2.0 - 1.0;
+    const float3 normal = normalize(normalTexture[workPos].xyz * 2.0 - 1.0);
 
     // 
     ctx.NoL = saturate(dot(normal, lightDir));
 
     // Position offset.
     const float3 positionNormalOffset = biasNormalOffset(ctx.NoL, normal);
-
-    const uint2 offsetId = jitterSequence2(scene.frameCounter, renderDim, workPos);
-    const float n_01 = samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 0u);
+    const float n_01 = STBN_float1(scene.blueNoiseCtx, workPos, scene.frameCounter);
 
     // Cascade selected.
     ctx.activeCascadeId = 0;
@@ -256,7 +254,6 @@ void cascadeSelected(out CascadeContext ctx, const PerframeCameraView perView, c
     ctx.bValid = (ctx.activeCascadeId < cascadeCount);
     if (ctx.bValid)
     {
-        float n_01 = samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 1u);
         float f1 = saturate(1.0 - ctx.NoL); float f2  = f1 * f1; float f4  = f2 * f2; float f8  = f4 * f4;
 
         //
@@ -405,8 +402,6 @@ void percentageCloserSoftShadowCS(
     [branch]
     if (ctx.bValid)
     {
-        const uint2 offsetId = jitterSequence(scene.frameCounter, renderDim, workPos);
-
         Texture2D<float> shadowDepthTexture = TBindless(Texture2D, float, shadowDepthIds.shadowDepth[ctx.activeCascadeId]);
         float4 depthShadow4 = shadowDepthTexture.Gather(pointClampSampler, ctx.shadowCoord.xy);
         {
@@ -446,7 +441,7 @@ void percentageCloserSoftShadowCS(
         [branch]
         if (softShadowMask > 0.0)
         {
-            float n_01 = samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 2u);
+            float n_01 = STBN_float1(scene.blueNoiseCtx, workPos, scene.frameCounter);
             float angle = n_01 * 2.0 * kPI;
 
             // 16 Tap, search don't care of bias to reduce self occlusion.
@@ -471,9 +466,6 @@ void percentageCloserSoftShadowCS(
             [branch]
             if (penumbraRatio >= 0.0)
             {
-                // penumbraRatio = WaveActiveMax(penumbraRatio);
-
-                n_01 = samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 3u);
                 angle = n_01 * 2.0 * kPI;
 
                 // 4 - 32 Tap. 

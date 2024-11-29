@@ -60,5 +60,21 @@ float3 sphericalFibonacci(float sampleIndex, float numSamples, float noise = 0.0
     return float3((cos(phi) * sinTheta), (sin(phi) * sinTheta), cosTheta);
 }
 
+// 
+float4 uniformSampleHemisphere(float2 E)
+{
+	float phi = 2 * kPI * E.x;
+	float cosTheta = E.y;
+	float sinTheta = sqrt(1 - cosTheta * cosTheta);
+
+	float3 H;
+	H.x = sinTheta * cos(phi);
+	H.y = sinTheta * sin(phi);
+	H.z = cosTheta;
+
+	float pdf = 1.0 / (2 * kPI);
+	return float4(H, pdf);
+}
+
 
 #endif 

@@ -6,6 +6,15 @@
 
 namespace chord
 {
+	// Only suport these case.
+	enum class EImageChannelRemapType
+	{
+		eR    = 1,
+		eRG   = 2,
+		eRGB  = 3,
+		eRGBA = 4,
+	};
+
 	template<class DataType>
 	class ImageGeneric
 	{
@@ -20,11 +29,10 @@ namespace chord
 		auto getHeight() const { return m_dimension.y; }
 		auto getDepth() const { return m_dimension.z; }
 		auto getComponent() const { return m_component; }
-		auto getRequiredComponent() const { return m_requiredComponent; }
 
 		uint32 getSize() const 
 		{ 
-			return m_dimension.x * m_dimension.y * m_dimension.z * m_requiredComponent * sizeof(DataType);
+			return m_dimension.x * m_dimension.y * m_dimension.z * m_component * sizeof(DataType);
 		}
 
 		const auto* getPixels() const 
@@ -47,23 +55,32 @@ namespace chord
 		{
 			m_dimension = { };
 			m_component = 0;
-			m_requiredComponent = 0;
+			m_pixels    = { };
 		}
 
 	protected:
-		math::ivec3 m_dimension;
-
 		//
 		int32 m_component = 0;
-		int32 m_requiredComponent = 0;
-
-		// 
+		math::ivec3 m_dimension;
 		std::vector<DataType> m_pixels = { };
 
 	public:
 		template<class Ar> void serialize(Ar& ar, uint32 ver)
 		{
-			ar(m_pixels, m_dimension, m_component, m_requiredComponent);
+			ar(m_pixels, m_dimension, m_component);
+		}
+	};
+
+	class ImageLdr3D : public ImageGeneric<uint8>
+	{
+	public:
+		bool fillFromFile(int32 depth, EImageChannelRemapType channelRemapType, std::function<std::string(uint32)>&& pathLambda);
+
+		virtual ~ImageLdr3D() { }
+	public:
+		template<class Ar> void serialize(Ar& ar, uint32 ver)
+		{
+			ar(cereal::base_class<ImageGeneric<uint8>>(this));
 		}
 	};
 
@@ -72,7 +89,7 @@ namespace chord
 	public:
 		void fillColor(RGBA c, int32 width = 1, int32 height = 1);
 		void fillChessboard(RGBA c0, RGBA c1, int32 width, int32 height, int32 blockDim);
-		bool fillFromFile(const std::string& path, int32 requiredComponent = 4);
+		bool fillFromFile(const std::string& path, EImageChannelRemapType remapType = EImageChannelRemapType::eRGBA);
 
 		virtual ~ImageLdr2D(){ }
 	public:
@@ -85,7 +102,7 @@ namespace chord
 	class ImageHalf2D : public ImageGeneric<uint16>
 	{
 	public:
-		bool fillFromFile(const std::string& path, int32 requiredComponent = 4);
+		bool fillFromFile(const std::string& path, EImageChannelRemapType remapType = EImageChannelRemapType::eRGBA);
 		virtual ~ImageHalf2D() { }
 	public:
 		template<class Ar> void serialize(Ar& ar, uint32 ver)

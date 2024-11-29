@@ -295,7 +295,7 @@ void Flower::BuiltinTextures::init()
 	auto flushUploadImage = [&](const char* path)
 	{
 		auto ldrImage = std::make_unique<ImageLdr2D>();
-		check(ldrImage->fillFromFile(path));
+		check(ldrImage->fillFromFile(path, EImageChannelRemapType::eRGBA));
 
 		auto imageCI = helper::buildBasicUploadImageCreateInfo(ldrImage->getWidth(), ldrImage->getHeight(), VK_FORMAT_R8G8B8A8_SRGB);
 		auto uploadVMACI = helper::buildVMAUploadImageAllocationCI();

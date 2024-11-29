@@ -32,5 +32,10 @@ namespace chord::graphics
 		explicit BlueNoiseContext();
 
 		GPUBlueNoiseContext getGPUBlueNoiseCtx() const;
+
+		// STBN texture.
+		GPUTextureAssetRef stbn_scalar = nullptr;
+		GPUTextureAssetRef stbn_vec2   = nullptr;
+		GPUTextureAssetRef stbn_vec3   = nullptr;
 	};
 }

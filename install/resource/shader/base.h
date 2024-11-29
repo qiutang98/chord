@@ -267,6 +267,11 @@ struct GPUBlueNoiseContext
     GPUBlueNoise spp_128;
     GPUBlueNoise spp_256;
 #endif
+
+    uint STBN_scalar;
+    uint STBN_vec2;
+    uint STBN_vec3;
+    uint pad0;
 };
 
 struct GPUBasicData

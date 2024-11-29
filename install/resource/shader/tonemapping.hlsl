@@ -161,13 +161,13 @@ void mainPS(
     // Dither RGB in 8bit, even we store data in 10bit back buffer.
     {
         // Offset retarget for new seeds each frame
-        uint2 offsetId = jitterSequence(scene.frameCounter, pushConsts.textureSize, workPos);
+        float3 noise3_01 = STBN_float3(scene.blueNoiseCtx, workPos, scene.frameCounter);
 
         // Display is 8bit, so jitter with blue noise with [-1, 1] / 255.0.
         // Current also looks good in hdr display even it under 11bit.
-        srgbColor.x += 1.0 / 255.0 * (-1.0 + 2.0 * samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 0u));
-        srgbColor.y += 1.0 / 255.0 * (-1.0 + 2.0 * samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 1u));
-        srgbColor.z += 1.0 / 255.0 * (-1.0 + 2.0 * samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d(scene.blueNoiseCtx.spp_1, offsetId.x, offsetId.y, 0, 2u));
+        srgbColor.x += 1.0 / 255.0 * (-1.0 + 2.0 * noise3_01.x);
+        srgbColor.y += 1.0 / 255.0 * (-1.0 + 2.0 * noise3_01.y);
+        srgbColor.z += 1.0 / 255.0 * (-1.0 + 2.0 * noise3_01.z);
         
         // Safe color.
         srgbColor = max(srgbColor, 0);

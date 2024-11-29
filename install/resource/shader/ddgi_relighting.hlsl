@@ -156,23 +156,23 @@ void mainCS(
  
                 float3 skyIrradiance;
                 float3 sunIrradiance = GetSunAndSkyIrradiance(
-                    scene.atmosphere,     // 
+                    scene.atmosphere,     //  
                     transmittanceTexture, //
                     irradianceTexture,    //
                     positionWS_km - scene.atmosphere.earthCenterKm, // Get atmosphere unit position.
-                    normalRS,                 //
-                    -scene.sunInfo.direction, // 
+                    normalRS,                 // 
+                    -scene.sunInfo.direction, //   
                     skyIrradiance);
-
+ 
                 // 
                 float3 sunRadiance = finalRadianceExposureModify(scene, skyIrradiance + sunIrradiance);
 
                 // Do lambert diffuse lighting here.
                 radiance += sunRadiance * visibility * NoL * Fd_LambertDiffuse(diffuseColor);
-            }
+            } 
         }
 
-        // Apply history ddgi indirect diffuse. 
+        // Apply history ddgi indirect diffuse.  
         if (ddgiConfig.bHistoryValid)
         {
             float weightSum = 0.0;

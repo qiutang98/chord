@@ -36,9 +36,7 @@ PRIVATE_GLOBAL_SHADER(DDGIProbeRelightingCS, "resource/shader/ddgi_relighting.hl
 PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateAppendRelightingCS, "resource/shader/ddgi_clipmap_update.hlsl", "appendRelightingProbeCountCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(DDGIConvolutionIndirectCmdParamCS, "resource/shader/ddgi_probe_convolution.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(DDGIDebugSampleCS, "resource/shader/ddgi_probe_debug_sample.hlsl", "mainCS", EShaderStage::Compute);
-
 PRIVATE_GLOBAL_SHADER(DDGIClipmapCopyValidCounterCS, "resource/shader/ddgi_clipmap_update.hlsl", "copyValidCounterCS", EShaderStage::Compute);
-
 PRIVATE_GLOBAL_SHADER(DDGIRelocationCS, "resource/shader/ddgi_relocation.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(DDGIRelocationIndirectCmdCS, "resource/shader/ddgi_relocation.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
 
@@ -81,23 +79,29 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 {
 	if (!sEnableDDGI || !getContext().isRaytraceSupport())
 	{
+		// Clear all resource of ddgi. 
+		ddgiCtx = {};
 		return nullptr;
 	}
 
-	std::array<DDGIVoulmeConfig, 4> configs { };
+	std::array<DDGIVoulmeConfig, kDDGICsacadeCount> configs { };
 
-	static constexpr float kProbeSpacings[4] = { 2.0f, 8.0f, 64.0f, 1024.0f };
-	static constexpr int3 kProbeDims[4] = 
+	static constexpr float kProbeSpacings[kDDGICsacadeCount] = { 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f  };
+	static constexpr int3 kProbeDims[kDDGICsacadeCount] =
 	{  
-		{ 32, 16, 32 },  //    64 x   64 x    64
-		{ 32, 16, 32 },  //   256 x  256 x   256
-		{ 32, 16, 32 },  //  1536 x  1536 x  1536
-		{ 32, 16, 32 }   // 16384 x 8192 x 16384
+		{ 32, 8, 32 },  
+		{ 32, 8, 32 },  
+		{ 32, 8, 32 }, 
+		{ 32, 8, 32 },  
+		{ 32, 8, 32 },  
+		{ 32, 8, 32 },  
+		{ 32, 8, 32 },   
+		{ 32, 8, 32 },   
 	};
-	static constexpr int kProbeUpdateMaxCounts[4] = { 2048, 1024, 512, 256 }; // 
-	static constexpr int kProbeUpdateRelightMaxCounts[4] = { 4096, 2048, 1024, 512 }; // 
+	static constexpr int kProbeUpdateMaxCounts[kDDGICsacadeCount] = { 1024, 512, 256, 128, 64, 32, 16, 8 }; // 
+	static constexpr int kProbeUpdateRelightMaxCounts[kDDGICsacadeCount] = { 2048, 1024, 512, 256, 128, 64, 32, 16 }; // 
 	// 
-	for (uint32 i = 0; i < 4; i++)
+	for (uint32 i = 0; i < kDDGICsacadeCount; i++)
 	{
 		const auto& cpuConfig = ddgiConfig.volumeConfigs[i];
 
@@ -107,12 +111,10 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 
 		//
 		configs[i].rayTraceStartDistance = 0.0f;
-		configs[i].rayTraceMaxDistance = 1e27f; // (i == 3) ? (2.0f * kProbeSpacings[i]) : (2.0f * kProbeSpacings[i + 1]);
+		configs[i].rayTraceMaxDistance = 1e27f;
 
 		// 
 		configs[i].linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
-
-		// 
 		configs[i].hysteresis = cpuConfig.hysteresis; 
 
 		//
@@ -128,7 +130,7 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 	}
 
 	bool bHistoryInvalid = false;
-	for (uint32 i = 0; i < 4; i++)
+	for (uint32 i = 0; i < kDDGICsacadeCount; i++)
 	{
 		if (ddgiCtx.volumes.size() <= i)
 		{
@@ -155,7 +157,7 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 			|| (resource.probeTracedFrameBuffer == nullptr);
 	}
 
-	for (uint32 i = 0; i < 4; i++)
+	for (uint32 i = 0; i < kDDGICsacadeCount; i++)
 	{
 		const auto& config = configs[i];
 		auto& resource = ddgiCtx.volumes[i];
@@ -229,10 +231,8 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 		configs[i].irradianceSRV       = asSRV(queue, resource.iradianceTexture);
 		configs[i].distanceTexelSize   = float2(1.0f / float(resource.probeDim.x * kDDGIProbeDistanceTexelNum), 1.0f / float(kDDGIProbeDistanceTexelNum * resource.probeDim.y * resource.probeDim.z));
 		configs[i].irradianceTexelSize = float2(1.0f / float(resource.probeDim.x * kDDGIProbeIrradianceTexelNum), 1.0f / float(kDDGIProbeIrradianceTexelNum * resource.probeDim.y * resource.probeDim.z));
-	
 		configs[i].probeHistoryValidSRV = asSRV(queue, resource.probeTraceHistoryValidBuffer);
 		configs[i].offsetSRV = asSRV(queue, resource.probeOffsetBuffer);
-
 		configs[i].probeCacheInfoSRV = asSRV(queue, resource.probeTraceInfoBuffer);
 
 		// Scrolling.
@@ -246,6 +246,7 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 		{
 			double3 translation = resource.scrollAnchor - camera->getPosition();
 
+			//
 			int3 scroll =
 			{
 				absFloor(translation.x / double(resource.probeSpacing.x)),
@@ -268,10 +269,11 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 		}
 	}
 
+	// 
 	const uint32 ddgiConfigBufferId = uploadBufferToGPU(cmd, "DDGIVolumeConfigs", configs.data(), configs.size()).second;
 
 	// 
-	for (uint32 ddgiVolumeId = 0; ddgiVolumeId < 4; ddgiVolumeId++)
+	for (uint32 ddgiVolumeId = 0; ddgiVolumeId < kDDGICsacadeCount; ddgiVolumeId++)
 	{
 		const auto& volume = configs.at(ddgiVolumeId);
 		const auto& resource = ddgiCtx.volumes[ddgiVolumeId];
@@ -437,8 +439,6 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 				});
 		}
 
-
-
 		// Distance update.
 		{
 			auto traceCmdBuffer = getContext().getBufferPool().createGPUOnly("traceCmdBuffer", sizeof(uint4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
@@ -531,7 +531,6 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 				{ dispatchCount, 1, 1 });
 		}
 
-
 		{
 			auto relightingCmdBuffer = getContext().getBufferPool().createGPUOnly("relightingCmdBuffer", sizeof(uint4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 			{
@@ -547,32 +546,35 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 					{ 1, 1, 1 });
 			}
 
+			// 
 			DDGIRelightingPushConsts pushConst{};
-			pushConst.cameraViewId = cameraViewId;
-			pushConst.ddgiConfigBufferId = ddgiConfigBufferId;
-			pushConst.ddgiConfigId = ddgiVolumeId;
-			pushConst.ddgiCount    = 4;
-
-			pushConst.cascadeCount = cascadeCtx.depths.size();
-			pushConst.shadowViewId = cascadeCtx.viewsSRV;
-			pushConst.shadowDepthIds = cascadeCtx.cascadeShadowDepthIds;
-			pushConst.transmittanceId = asSRV(queue, luts.transmittance);
+			pushConst.cameraViewId             = cameraViewId;
+			pushConst.ddgiConfigBufferId       = ddgiConfigBufferId;
+			pushConst.ddgiConfigId             = ddgiVolumeId;
+			pushConst.ddgiCount                = kDDGICsacadeCount;
+			pushConst.cascadeCount             = cascadeCtx.depths.size();
+			pushConst.shadowViewId             = cascadeCtx.viewsSRV;
+			pushConst.shadowDepthIds           = cascadeCtx.cascadeShadowDepthIds;
+			pushConst.transmittanceId          = asSRV(queue, luts.transmittance);
 			pushConst.probeTraceLinearIndexSRV = asSRV(queue, probeUpdateLinearIndexBuffer);
+			pushConst.scatteringId             = asSRV3DTexture(queue, luts.scatteringTexture);
 
-			pushConst.scatteringId = asSRV3DTexture(queue, luts.scatteringTexture);
+			// 
 			if (luts.optionalSingleMieScatteringTexture != nullptr)
 			{
 				pushConst.singleMieScatteringId = asSRV3DTexture(queue, luts.optionalSingleMieScatteringTexture);
 			}
-			pushConst.irradianceTextureId = asSRV(queue, luts.irradianceTexture);
-			pushConst.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+			pushConst.irradianceTextureId     = asSRV(queue, luts.irradianceTexture);
+			pushConst.linearSampler           = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
 
+			// 
 			pushConst.radianceUAV             = asUAV(queue, radianceBuffer);
 			pushConst.probeTracedMarkSRV      = asSRV(queue, resource.probeTraceMarkerBuffer);
 			pushConst.probeCacheInfoSRV       = asSRV(queue, resource.probeTraceInfoBuffer);
 			pushConst.probeCacheRayGbufferSRV = asSRV(queue, resource.probeTraceGbufferInfoBuffer);
 
 
+			// 
 			asSRV(queue, resource.probeTraceHistoryValidBuffer);
 
 			auto computeShader = getContext().getShaderLibrary().getShader<DDGIProbeRelightingCS>();
@@ -642,7 +644,7 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 
 		pushConst.cameraViewId = cameraViewId;
 		pushConst.ddgiConfigBufferId = ddgiConfigBufferId;
-		pushConst.ddgiCount = 4;
+		pushConst.ddgiCount = kDDGICsacadeCount;
 		pushConst.UAV = asUAV(queue, ddgiTexture);
 		pushConst.workDim = { gbuffers.dimension.x, gbuffers.dimension.y };
 		pushConst.normalRSId = asSRV(queue, gbuffers.pixelRSNormal);

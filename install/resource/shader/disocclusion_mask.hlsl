@@ -98,8 +98,10 @@ void mainCS(
                 positionRS_LastFrame += float3(perView.cameraWorldPosLastFrame.getDouble3() - perView.cameraWorldPos.getDouble3());
             }
 
+            // 
             const float linearZ = perView.zNear / deviceZ;
     
+            // 
             const float f = disocclusionMaskFactor(normalRS, linearZ, positionRS, normalRS_LastFrame, positionRS_LastFrame);
             disocclusionMask = float(f < kDisocclusionThreshold);
         }

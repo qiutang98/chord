@@ -525,13 +525,14 @@ namespace chord
 		float probeViewBias;
 	};
 
+	constexpr uint kDDGICsacadeCount = 8;
 	struct DDGIConfigCPU
 	{
 		CHORD_DEFAULT_COMPARE_ARCHIVE(DDGIConfigCPU);
 
 		DDGIConfigCPU();
 
-		std::array<DDGIVolumeConfigCPU, 4> volumeConfigs;
+		std::array<DDGIVolumeConfigCPU, kDDGICsacadeCount> volumeConfigs;
 	};
 
 	struct CascadeShadowContext

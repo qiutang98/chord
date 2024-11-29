@@ -706,7 +706,7 @@ float4x4 matrixInverse(float4x4 m)
 }
 
 // 3x3 Sample pattern
-// 
+// https://qiutang98.github.io/post/%E5%AE%9E%E6%97%B6%E6%B8%B2%E6%9F%93%E5%BC%80%E5%8F%91/wave_accelerate_3x3/
 static const int2 k3x3QuadSampleSigned[4] = 
 {
     int2(-1, -1),
@@ -720,15 +720,16 @@ static const int2 k3x3QuadSampleOffset[4] =
     int2(0, 0), // Central
     int2(1, 1),
     int2(0, 1),
-    int2(1, 0),
+    int2(1, 0), 
 };
 // Example usage:
 /*
+    uint quadIndex = WaveGetLaneIndex() % 4;
     float shadowMask[9];
     [unroll(4)]
     for (int i = 0; i < 4; i ++)
     {
-        int2 samplePos = workPos + k3x3QuadSampleOffset[i] * k3x3QuadSampleSigned[i];
+        int2 samplePos = workPos + k3x3QuadSampleOffset[i] * k3x3QuadSampleSigned[quadIndex];
         samplePos = clamp(samplePos, 0, pushConsts.dim - 1);
 
         shadowMask[i] = shadowMaskTexture[samplePos];
@@ -920,33 +921,82 @@ RayDesc getRayDesc(float3 o, float3 d, float tMin = kDefaultRayQueryTMin, float 
     return ray;
 }
 
+
 // Octahedron Normal Vectors
 // [Cigolle 2014, "A Survey of Efficient Representations for Independent Unit Vectors"]
 
 // result uv in [-1, +1]
-float2 octahedralEncode(float3 direction)
+float2 octahedralEncode(float3 N)
 {
-    float l1norm = abs(direction.x) + abs(direction.y) + abs(direction.z);
-    float2 uv = direction.xy * (1.f / l1norm);
-
-    if (direction.z < 0.f)
-    {
-        uv = (1.f - abs(uv.yx)) * signNotZero(uv.xy);
-    }
-
-    return uv;
+	N.xy /= dot(1, abs(N));
+	if (N.z <= 0)
+	{
+		N.xy = (1 - abs(N.yx)) * select(N.xy >= 0, float2(1, 1), float2(-1, -1));
+	}
+	return N.xy;
 }
 
 // 
-float3 octahedralDecode(float2 coords)
+float3 octahedralDecode(float2 Oct)
 {
-    float3 direction = float3(coords.x, coords.y, 1.f - abs(coords.x) - abs(coords.y));
-    if (direction.z < 0.f)
+	float3 N = float3( Oct, 1 - dot( 1, abs(Oct) ) );
+	float t = max( -N.z, 0 );
+	N.xy += select(N.xy >= 0, float2(-t, -t), float2(t, t));
+	return normalize(N);
+}
+
+// Z up hemisphere octahedral encode.
+float2 hemiOctahedralEncode(float3 direction)
+{
+	direction.xy /= dot(1, abs(direction));
+	return float2(direction.x + direction.y, direction.x - direction.y); // -1, +1
+}
+
+// Z up hemisphere octahedral decoded.
+float3 hemiOctahedralDecode(float2 coords)
+{
+	coords = float2(coords.x + coords.y, coords.x - coords.y);
+	float3 direction = float3(coords, 2.0 - dot(1, abs(coords)));
+	return normalize(direction);
+}
+
+// Tangent vector t: t is z up. 
+// convert = t.x * tbn[0] + t.y * tbn[1] + t.z * tbn[2]
+// invert  = float3(dot(w, tbn[0]), dot(w, tbn[1]), dot(w, tbn[2]))
+float3x3 createTBN(float3 n)
+{
+    float3 u;
+    if (abs(n.z) > 0.0)
     {
-        direction.xy = (1.f - abs(direction.yx)) * signNotZero(direction.xy);
+        float k = sqrt(dot(n.yz, n.yz));
+        u.x =  0.0;
+        u.y = -n.z / k;
+        u.z =  n.y / k; 
+    }
+    else
+    {
+        float k = sqrt(dot(n.xy, n.xy));
+        u.x =  n.y / k;
+        u.y = -n.x / k;
+        u.z =  0.0;
     }
 
-    return normalize(direction);
+    float3x3 tbn;
+    tbn[0] = u;
+    tbn[1] = cross(n, u);
+    tbn[2] = n;
+
+    return tbn;
+}
+
+float3 tbnTransform(float3x3 tbn, float3 dir)
+{
+    return dir.x * tbn[0] + dir.y * tbn[1] + dir.z * tbn[2];
+}
+
+float3 tbnInverseTransform(float3x3 tbn, float3 dir)
+{
+    return float3(dot(dir, tbn[0]), dot(dir, tbn[1]), dot(dir, tbn[2]));
 }
 
 #endif // !SHADER_BASE_HLSLI

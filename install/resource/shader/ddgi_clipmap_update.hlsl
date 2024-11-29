@@ -300,7 +300,7 @@ void appendRelightingProbeCountCS(uint dispatchId : SV_DispatchThreadID)
     if (bNeedAllocate)
     {
         uint id = allocatedStoreBaseId + allocatedOffset_wave;
-        if (id < pushConsts.maxProbeUpdatePerFrame)
+        if (id < pushConsts.maxProbeUpdatePerFrame) 
         {
             BATS(int, pushConsts.probeUpdateLinearIndexUAV, id, linearProbeIndex);
 

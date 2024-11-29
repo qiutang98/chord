@@ -46,7 +46,7 @@ void mainCS(
         const float3 positionRS = getPositionRS(uv, max(deviceZ, kFloatEpsilon), perView); 
 
         float3 normalRS = loadTexture2D_float4(pushConsts.normalRSId, workPos).xyz * 2.0 - 1.0;
-        normalRS = normalize(normalRS); 
+        normalRS = normalize(normalRS);  
  
         const float3 viewDirection = normalize(positionRS); 
         for (uint ddgiIndex = 0; ddgiIndex < pushConsts.ddgiCount; ddgiIndex ++) 
@@ -57,11 +57,11 @@ void mainCS(
             if (weightSum >= 1.0)
             { 
                 break;
-            }
+            }  
 
-            [branch] 
+            [branch]   
             if (weight <= 0.0)
-            {
+            { 
                 continue;
             }
             else 

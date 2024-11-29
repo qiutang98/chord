@@ -1,5 +1,9 @@
 #pragma once
 
+// NOTE:
+// DDGI is no a good choose for indoor gi, easy leaking even we have chebyshev test (our most detail level is 2mx2mx2m), even add clipmap update proxy.  :)
+// 
+
 #include "base.h"
 
 #ifndef __cplusplus
@@ -14,7 +18,7 @@
 // light probe system inspired by DDGI and snowdrop engine. 
 
 // One probe shoot ray count. 
-#define kDDGIPerProbeRayCount 32
+#define kDDGIPerProbeRayCount 128
 
 // One wave size for performance load balance.
 #define kDDGITraceThreadCount 32

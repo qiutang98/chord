@@ -58,7 +58,15 @@ namespace chord
 		uint32 cameraViewId,
 		graphics::helper::AccelKHRRef tlas);
 
-
+	extern graphics::PoolTextureRef giUpdate(
+		graphics::CommandList& cmd,
+		graphics::GraphicsQueue& queue,
+		const AtmosphereLut& luts,
+		const CascadeShadowContext& cascadeCtx,
+		GBufferTextures& gbuffers,
+		uint32 cameraViewId,
+		graphics::helper::AccelKHRRef tlas,
+		ICamera* camera);
 
 	extern graphics::PoolTextureRef ddgiUpdate(
 		graphics::CommandList& cmd,

@@ -50,6 +50,13 @@ struct GPUGLTFMeshlet
     uint lod;
 };
 
+inline float getFallbackMetallic(float metallicFactor)
+{
+    // I don't know why GLTF default set material metallicFactor as 1.0.
+    // Most material fallback should set to zero if no set.
+    return metallicFactor >= 1.0 ? 0.0f : metallicFactor;
+}
+
 inline uint packVertexCountTriangleCount(uint vertexCount, uint triangleCount) { return (vertexCount & 0xff) | ((triangleCount & 0xff) << 8); }
 inline uint unpackVertexCount(uint pack) { return pack & 0xff; }
 inline uint unpackTriangleCount(uint pack) { return (pack >> 8) & 0xff; }

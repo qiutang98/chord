@@ -96,7 +96,7 @@ void mainCS(
         float3 rayDirection = ddgiConfig.getSampleRayDir(rayIndex);
         rayDirection = mul(probeCacheTraceInfo.rayRotation, float4(rayDirection, 0.0)).xyz;
 
-        // 
+        //  
         sRayDirection[rayIndex] = rayDirection;
 
     #if DDGI_BLEND_DIM_IRRADIANCE

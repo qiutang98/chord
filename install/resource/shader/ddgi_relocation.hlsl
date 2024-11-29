@@ -153,7 +153,7 @@ void mainCS(uint dispatchId : SV_DispatchThreadID)
         {  
             // Ensures the probe never moves through the farthest frontface
             farthestFrontfaceDirection *= min(farthestFrontfaceDistance, 1.f);
-            fullOffset = offset + farthestFrontfaceDirection;
+            fullOffset = offset + farthestFrontfaceDirection; 
         }
     }
     else if (closestFrontfaceDistance > ddgiConfig.probeMinFrontfaceDistance)

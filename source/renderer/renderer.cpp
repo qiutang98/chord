@@ -328,7 +328,8 @@ void DeferredRenderer::render(
 		graphics::PoolTextureRef giResult = nullptr;
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
-			giResult = ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
+			// giResult = ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
+			giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, gbuffers, viewGPUId, m_tlas.getTLAS(), camera);
 			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("Nanite visualize", graphics);
 
