@@ -960,6 +960,25 @@ float3 hemiOctahedralDecode(float2 coords)
 	return normalize(direction);
 }
 
+uint pack_dir_2_uint(float3 dir)
+{
+    float2 uv = octahedralEncode(dir) * 0.5 + 0.5; // [0, 1]
+
+    uint2 p = f32tof16(uv);
+    return p.x | (p.y << 16u);
+}
+
+float3 unpack_dir_f_uint(uint p)
+{
+    uint2 p2;
+
+    p2.x = (p >> 0u) & 0xffffu;
+    p2.y = (p >> 16u) & 0xffffu;
+
+    float2 uv = f16tof32(p2);
+    return octahedralDecode(uv * 2.0 - 1.0);
+}
+
 // Tangent vector t: t is z up. 
 // convert = t.x * tbn[0] + t.y * tbn[1] + t.z * tbn[2]
 // invert  = float3(dot(w, tbn[0]), dot(w, tbn[1]), dot(w, tbn[2]))
@@ -999,4 +1018,27 @@ float3 tbnInverseTransform(float3x3 tbn, float3 dir)
     return float3(dot(dir, tbn[0]), dot(dir, tbn[1]), dot(dir, tbn[2]));
 }
 
+uint2 pack_float4_t_uint2(float4 v)
+{
+    uint4 v_h = f32tof16(v);
+
+    uint2 r;
+
+    r.x = v_h.x | (v_h.y << 16u);
+    r.y = v_h.z | (v_h.w << 16u);
+    
+    return r;
+}
+
+float4 unpack_float4_f_uint2(uint2 r)
+{
+    uint4 v_h;
+
+    v_h.x = (r.x >>  0u) & 0xffffu;
+    v_h.y = (r.x >> 16u) & 0xffffu;
+    v_h.z = (r.y >>  0u) & 0xffffu;
+    v_h.w = (r.y >> 16u) & 0xffffu;
+
+    return f16tof32(v_h);
+}
 #endif // !SHADER_BASE_HLSLI

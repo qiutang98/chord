@@ -82,4 +82,24 @@ namespace chord
 	{
 		std::vector<DDGIVolumeResource> volumes;
 	};
+
+	struct GIWorldProbeVolumeResource
+	{
+		double3 scrollAnchor = { 0.0, 0.0, 0.0 };
+		int3    scrollOffset = { 0,   0,   0 };
+
+		float3 probeCenterRS;
+		float3 probeSpacing;
+
+		//
+		int3 probeDim;
+
+		graphics::PoolBufferRef probeIrradianceBuffer;
+		graphics::PoolBufferRef probeDirectionBuffer;
+	};
+	struct GIWorldProbeContext
+	{
+		graphics::PoolTextureRef historyRT = nullptr;
+		std::vector<GIWorldProbeVolumeResource> volumes;
+	};
 }

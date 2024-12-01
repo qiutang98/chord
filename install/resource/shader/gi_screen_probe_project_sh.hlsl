@@ -16,12 +16,45 @@ CHORD_PUSHCONST(GIScreenProbeProjectSHPushConsts, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
 
-groupshared half3 sProbeSH[9 * 64];
+groupshared uint sProbeSH[14 * 64];
 
-uint shLdsIndexCompute(uint2 id, uint shIndex)
+void storeLDS(uint localThreadIndex, in SH3_gi giSH)
 {
-    uint flattenIndex = id.x + id.y * 8;
-    return flattenIndex * 9 + shIndex;
+    SH3_gi_pack pack = giSH.pack();
+    for (uint i = 0; i < 14; i ++)
+    {
+        sProbeSH[localThreadIndex * 14 + i] = pack.v[i];
+    }
+}
+
+void loadLDS(uint localThreadIndex, inout SH3_gi giSH)
+{
+    SH3_gi_pack pack;
+    for (uint i = 0; i < 14; i ++)
+    {
+        pack.v[i] = sProbeSH[localThreadIndex * 14 + i];
+    }
+    giSH.unpack(pack);
+}
+
+void reduceSH(bool bStoreLDS, uint localThreadIndex, uint rCount, inout SH3_gi giSH)
+{
+    if (localThreadIndex < rCount)
+    {
+        SH3_gi shResult_next;
+        loadLDS(localThreadIndex + rCount, shResult_next);
+
+        // 
+        for (uint i = 0; i < 9; i ++)
+        {
+            giSH.c[i] += shResult_next.c[i];
+        }
+
+        if (bStoreLDS)
+        {
+            storeLDS(localThreadIndex, giSH);
+        }
+    }
 }
 
 [numthreads(64, 1, 1)]
@@ -53,8 +86,7 @@ void mainCS(
     float3 probeNormalRS = spawnInfo.normalRS;
     if (WaveIsFirstLane())
     {
-        float2 probeUv = (spawnInfo.pixelPosition + 0.5) / pushConsts.gbufferDim;
-        probePositionRS = getPositionRS(probeUv, spawnInfo.depth, perView); 
+        probePositionRS = spawnInfo.getProbePositionRS(pushConsts.gbufferDim, perView); 
     }  
     probePositionRS = WaveReadLaneFirst(probePositionRS);
     float3 rayDirection = getScreenProbeCellRayDirection(scene, probeCoord, gid, probeNormalRS);
@@ -63,44 +95,31 @@ void mainCS(
     float3 radiance = loadTexture2D_float3(pushConsts.radianceSRV, tid);
 
     // 
-    float directionSH[9]; 
-    sh3_coefficients(rayDirection, directionSH);
+    SH3_gi shResult;
+    shResult.init();
+
+    // 
+    SH_AddLightDirectional(shResult.c, radiance, rayDirection);
  
-    //  
-    float NoL = dot(rayDirection, probeNormalRS);
-    for (uint i = 0; i < 9; i ++)
-    {
-        sProbeSH[shLdsIndexCompute(gid, i)] = half3(NoL * radiance * directionSH[i]);
-    }
+    // Store LDS
+    storeLDS(localThreadIndex, shResult);
     
     GroupMemoryBarrierWithGroupSync();
-
-    // Sum reduce.
-    for (uint shIndex = 0; shIndex < 9; shIndex ++)
-    {
-        for (uint i = 0; i < 3; i ++)
-        {
-            uint stride = 1u << (i + 1u);
-            if (all(gid < 8 / stride))
-            {
-                half3 a00 = sProbeSH[shLdsIndexCompute(gid * stride + uint2(         0,          0), shIndex)];
-                half3 a10 = sProbeSH[shLdsIndexCompute(gid * stride + uint2(stride / 2,          0), shIndex)];
-                half3 a01 = sProbeSH[shLdsIndexCompute(gid * stride + uint2(         0, stride / 2), shIndex)];
-                half3 a11 = sProbeSH[shLdsIndexCompute(gid * stride + uint2(stride / 2, stride / 2), shIndex)];
-
-                sProbeSH[shLdsIndexCompute(gid * stride, shIndex)] = a00 + a01 + a10 + a11;
-            }
-        }
-    }
+    reduceSH(true, localThreadIndex, 32, shResult);
 
     GroupMemoryBarrierWithGroupSync();
-   
-    if (localThreadIndex < 9)
-    {
-        half3 sh = sProbeSH[shLdsIndexCompute(uint2(0, 0), localThreadIndex)];
 
-        uint storePos = probeLinearIndex * 9 + localThreadIndex;
-        BATS(float3, pushConsts.screenProbeSHUAV, storePos, float3(sh)); // TODO: PACK SH.
+    reduceSH(true, localThreadIndex, 16, shResult);
+    reduceSH(true, localThreadIndex,  8, shResult);
+    reduceSH(true, localThreadIndex,  4, shResult);
+    reduceSH(true, localThreadIndex,  2, shResult);
+
+    // 
+    reduceSH(false, localThreadIndex, 1, shResult);
+    if (localThreadIndex < 1)
+    {
+        shResult.numSample = 1.0;
+        BATS(SH3_gi_pack, pushConsts.screenProbeSHUAV, probeLinearIndex, shResult.pack());
     }
 }
 

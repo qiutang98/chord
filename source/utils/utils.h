@@ -519,6 +519,11 @@ namespace chord
 	{
 		return (a & b) == b;
 	}
+
+	static inline int absFloor(const double value)
+	{
+		return value >= 0.f ? int(floor(value)) : int(ceil(value));
+	}
 	
 	static inline uint32 getNextPOT(uint32 v)
 	{

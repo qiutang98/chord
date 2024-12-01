@@ -136,12 +136,6 @@ struct DDGIVoulmeConfig
         return getLinearProbeIndex(getPhysicalVolumeId(virtualIndex));
     }
 
-    int2 getProbeTexelIndex(int3 physicsIndex, int probeNumTexels)
-    {
-        const int2 probe2dGrid = int2(physicsIndex.x, physicsIndex.z * probeDim.y + physicsIndex.y);
-        return probe2dGrid * probeNumTexels;
-    }
-
     float3 getPositionRS(int3 virtualProbeIndex)
     {
         float3 probeGridWorldPosition = virtualProbeIndex * probeSpacing;
@@ -158,6 +152,12 @@ struct DDGIVoulmeConfig
         int3 virtualProbeIndex = int3(probeGridWorldPosition / probeSpacing);
 
         return clamp(virtualProbeIndex, 0, probeDim - 1);
+    }
+
+    int2 getProbeTexelIndex(int3 physicsIndex, int probeNumTexels)
+    {
+        const int2 probe2dGrid = int2(physicsIndex.x, physicsIndex.z * probeDim.y + physicsIndex.y);
+        return probe2dGrid * probeNumTexels;
     }
 
     float3 getSampleRayDir(int rayIndex)

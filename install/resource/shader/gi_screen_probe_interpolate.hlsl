@@ -12,6 +12,9 @@ struct GIScreenProbeInterpolatePushConsts
 
     uint diffuseGIUAV;
     uint screenProbeSHSRV;
+
+    uint clipmapConfigBufferId;
+    uint clipmapCount; // 2 4 8
 };
 CHORD_PUSHCONST(GIScreenProbeInterpolatePushConsts, pushConsts);
 
@@ -20,7 +23,7 @@ CHORD_PUSHCONST(GIScreenProbeInterpolatePushConsts, pushConsts);
 uint findClosetProbe(int2 probeCoord, int2 offset)
 {
     // Actually probe coord. 
-    int2 pos = probeCoord + offset; 
+    int2 pos = probeCoord + offset;  
 
     // Skip out of bound probe. 
     if (any(pos < 0) || any(pos >= pushConsts.probeDim))
@@ -134,21 +137,17 @@ void mainCS(
             }
 
             // 
-            const float1 seed_deviceZ = sampleSpawnProbeInfo.depth;
-            const float2 seed_uv = (sampleSpawnProbeInfo.pixelPosition + 0.5) / pushConsts.gbufferDim;
+            float3 seed_positionRS = sampleSpawnProbeInfo.getProbePositionRS(pushConsts.gbufferDim, perView); 
 
             // 
-            float3 seed_positionRS = getPositionRS(seed_uv, seed_deviceZ, perView); 
-
-            // 
-            float viewProjectDistanceThreshold = pixelToEye * 0.25; // TODO: Try some non-linear mapping.
+            float viewProjectDistanceThreshold = pixelToEye * 0.25 * 0.5; // TODO: Try some non-linear mapping.
             if (abs(dot(seed_positionRS - pixel_positionRS, pixel_normalRS)) > viewProjectDistanceThreshold) 
             {
                 probeWeightx4[i] = 0.0;
             }
             else
             {
-                float distanceScale = pixelToEye * 0.25; // TODO: Try some non-linear mapping.
+                float distanceScale = pixelToEye * 0.25 * 0.5; // TODO: Try some non-linear mapping.
 
                 // Probe dist to current pixel. 
                 float dist = length(seed_positionRS - pixel_positionRS);
@@ -162,12 +161,13 @@ void mainCS(
         }
     }
 
-    float cosineSH[9];
-    sh3_coefficientsClampedCosine(pixel_normalRS, cosineSH);
-
     // Accumulate 2x2 screen probe irradiance.
     float3 irradiance = 0.0;
     float weightSum = 0.0;
+
+    SH3_gi composite_sh_gi;
+    composite_sh_gi.init();
+
     for (uint i = 0; i < 4; i ++)
     {
         if (probeWeightx4[i] > 0.0 && probeCoordx4[i] != kUnvalidIdUint32)
@@ -175,23 +175,68 @@ void mainCS(
             uint2 pos = uint2(probeCoordx4[i] & 0xffffu, (probeCoordx4[i] >> 16u) & 0xffffu);
             uint sampleProbeLinearId = pos.x + pos.y * pushConsts.probeDim.x;
 
-            float3 sampleIrradiance = 0.0;
-            for (uint j = 0; j < 9; j ++)
+            SH3_gi gi_sh;
             {
-                // Load SH. 
-                float3 sh = BATL(float3, pushConsts.screenProbeSHSRV, sampleProbeLinearId * 9 + j);
-
-                // Accumulate with cosine weight. 
-                sampleIrradiance += cosineSH[j] * sh;
+                SH3_gi_pack sh_pack = BATL(SH3_gi_pack, pushConsts.screenProbeSHSRV, sampleProbeLinearId);
+                gi_sh.unpack(sh_pack);
             }
 
-            irradiance += probeWeightx4[i] * sampleIrradiance;
+            irradiance += probeWeightx4[i] * SH_Evalulate(pixel_normalRS, gi_sh.c);
             weightSum  += probeWeightx4[i];
         }
     }
 
+    // Sample world probe as fallback. 
+    // float3 screenInterpolate = irradiance / (max(weightSum, kFloatEpsilon) * 2.0 * kPI);
+    if (false)
+    {
+        float world_weight = 0.0;
+        float3 world_irradiance = 0.0;
+        
+        float linearWeightSum = 0.0;
+        for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++) 
+        {
+            if (linearWeightSum >= 1.0)
+            {
+                break;
+            }
+
+            const GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
+            float weight = config.getBlendWeight(pixel_positionRS);
+
+            [branch]   
+            if (weight <= 0.0)
+            { 
+                continue;
+            }
+            else 
+            {
+                SH3_gi s_gi_sh;
+                bool bSampleValid = config.sampleSH(perView, pixel_positionRS, 1.0, s_gi_sh);
+
+                weight = bSampleValid ? weight : 0.0;
+
+                float linearWeight = (linearWeightSum > 0.0) ? (1.0 - linearWeightSum) : weight;
+                float stepWeight = linearWeight * s_gi_sh.numSample;
+
+                world_weight += stepWeight;
+                world_irradiance += stepWeight * SH_Evalulate(pixel_normalRS, s_gi_sh.c);
+
+                linearWeightSum += linearWeight;
+            }
+        }  
+
+        irradiance = 0;
+        weightSum = 0;
+
+        irradiance += world_irradiance;
+        weightSum  += world_weight;
+    }
+
     // Normalize. 
     irradiance /= max(weightSum, kFloatEpsilon) * 2.0 * kPI;
+
+
 
     if (weightSum < 1e-3f)
     {
@@ -209,6 +254,11 @@ void mainCS(
             irradiance = 0.0;
         }
     }
+
+    // irradiance += STBN_float3(scene.blueNoiseCtx, tid, scene.frameCounter) / 65535.0;
+
+
+
 
     storeRWTexture2D_float3(pushConsts.diffuseGIUAV, tid, irradiance);
 }

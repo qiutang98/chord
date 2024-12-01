@@ -267,6 +267,27 @@ namespace chord::graphics
 		vkCmdUpdateBuffer(cmd->commandBuffer, buffer->get(), offset, size, data);
 	}
 
+	void GraphicsOrComputeQueue::copyUAV(PoolBufferRef src, PoolBufferRef dest, uint srcOffset, uint destOffset, uint size)
+	{
+		auto cmd = m_activeCmdCtx.command;
+		cmd->pendingResources.insert(src);
+		cmd->pendingResources.insert(dest);
+
+		transition(src, VK_ACCESS_TRANSFER_READ_BIT);
+		transition(dest, VK_ACCESS_TRANSFER_WRITE_BIT);
+
+
+		VkBufferCopy copy{};
+
+		check(srcOffset + size < src->get().getSize());
+		check(destOffset + size < dest->get().getSize());
+
+		copy.size = size;
+		copy.dstOffset = destOffset;
+		copy.srcOffset = srcOffset;
+		vkCmdCopyBuffer(cmd->commandBuffer, src->get(), dest->get(), 1, &copy);
+	}
+
 	void GraphicsQueue::clearDepthStencil(PoolTextureRef image, const VkClearDepthStencilValue* clear, VkImageAspectFlags flags)
 	{
 		auto cmd = m_activeCmdCtx.command;

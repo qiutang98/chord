@@ -3,6 +3,8 @@
 struct GIScreenProbeSpawnPushConsts
 {
     uint2 probeDim;
+    uint2 gbufferDim;
+
     uint cameraViewId;
     uint probeSpawnInfoUAV;
 
@@ -13,7 +15,10 @@ CHORD_PUSHCONST(GIScreenProbeSpawnPushConsts, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
 
+// Debug macros.
 #define DEBUG_NORMAL_PACK 0
+
+[[vk::binding(0, 1)]] RaytracingAccelerationStructure topLevelAS;
 
 [numthreads(64, 1, 1)]
 void mainCS(
@@ -40,6 +45,11 @@ void mainCS(
         float2 seedJitter = hammersley2d(hashSeed & 63, 64);
 
         uint2 jitterPixel = probeScreenOffset + seedJitter * 8;
+        if (any(jitterPixel >= pushConsts.gbufferDim))
+        {
+            continue;
+        }
+
         float jitterPixelDepth = loadTexture2D_float1(pushConsts.depthSRV, jitterPixel);
 
         if (jitterPixelDepth <= 0.0)
@@ -65,8 +75,27 @@ void mainCS(
         normalRS = normalize(normalRS);
 
         spawnResult.normalRS = normalRS;
-        spawnResult.depth = depth;
-        spawnResult.pixelPosition = seedPixel;  
+        spawnResult.pixelPosition = seedPixel;   
+        spawnResult.depth = depth; 
+
+    #if 1
+        // Sometime nanite mesh will produce large bias mesh surface. 
+        // Ray trace get accurate hit t. 
+
+        // Current direction exist mesh, shot one ray to query hit t to get perfect depth value. 
+        float3 worldDirectionRS = spawnResult.getShootRayDir(pushConsts.gbufferDim, perView);
+
+        GIRayQuery query;
+        RayDesc ray = getRayDesc(0, worldDirectionRS, 0.0, kDefaultRayQueryTMax);
+        const uint traceFlag = RAY_FLAG_CULL_NON_OPAQUE;
+        query.TraceRayInline(topLevelAS, traceFlag, 0xFF, ray);
+        query.Proceed();
+
+        if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+        {
+            spawnResult.depth = -query.CommittedRayT();
+        }
+    #endif
     }
  
     uint4 storeResult = spawnResult.pack();

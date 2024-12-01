@@ -76,6 +76,8 @@ bool DeferredRenderer::updateDimension(
 void DeferredRenderer::clearHistory(bool bClearOutput)
 {
 	m_rendererHistory = {};
+	m_ddgiCtx = {};
+	m_giWorldProbeCtx = {};
 
 	if (bClearOutput)
 	{
@@ -329,7 +331,7 @@ void DeferredRenderer::render(
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
 			// giResult = ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
-			giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, gbuffers, viewGPUId, m_tlas.getTLAS(), camera);
+			giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giWorldProbeCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), camera);
 			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("Nanite visualize", graphics);
 

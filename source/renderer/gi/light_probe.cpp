@@ -59,11 +59,6 @@ static inline float getRandomFloat()
 	return distribution(gen);
 }
 
-static inline int absFloor(const double value)
-{
-	return value >= 0.f ? int(floor(value)) : int(ceil(value));
-}
-
 graphics::PoolTextureRef chord::ddgiUpdate(
 	graphics::CommandList& cmd,
 	graphics::GraphicsQueue& queue,

@@ -63,6 +63,7 @@ namespace chord
 		graphics::GraphicsQueue& queue,
 		const AtmosphereLut& luts,
 		const CascadeShadowContext& cascadeCtx,
+		GIWorldProbeContext& giWorldProbeCtx,
 		GBufferTextures& gbuffers,
 		uint32 cameraViewId,
 		graphics::helper::AccelKHRRef tlas,

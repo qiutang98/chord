@@ -22,6 +22,10 @@ struct GIScreenProbeTracePushConsts
 
     uint radianceUAV;
     float rayHitLODOffset;
+
+    bool bHistoryValid;
+    uint clipmapConfigBufferId;
+    uint clipmapCount; // 2 4 8
 };
 CHORD_PUSHCONST(GIScreenProbeTracePushConsts, pushConsts);
 
@@ -59,7 +63,6 @@ void mainCS(
 
     GIScreenProbeSpawnInfo spawnInfo;
     { 
-        // TODO: Wave optimization.
         const uint4 packProbeSpawnInfo = BATL(uint4, pushConsts.probeSpawnInfoSRV, probeLinearIndex);
         spawnInfo.unpack(packProbeSpawnInfo);
     }
@@ -75,8 +78,7 @@ void mainCS(
     float3 probeNormalRS = spawnInfo.normalRS; 
     if (WaveIsFirstLane()) 
     {
-        float2 probeUv = (spawnInfo.pixelPosition + 0.5) / pushConsts.gbufferDim;
-        probePositionRS = getPositionRS(probeUv, spawnInfo.depth, perView); 
+        probePositionRS = spawnInfo.getProbePositionRS(pushConsts.gbufferDim, perView); 
     }
     probePositionRS = WaveReadLaneFirst(probePositionRS); 
 
@@ -85,7 +87,10 @@ void mainCS(
 
     GIRayQuery query;
     const uint traceFlag = RAY_FLAG_CULL_NON_OPAQUE;
-    RayDesc ray = getRayDesc(probePositionRS, rayDirection, pushConsts.minRayTraceDistance, pushConsts.maxRayTraceDistance);
+
+    // 
+    float rayStart = spawnInfo.depth > 0.0 ? pushConsts.minRayTraceDistance : 1e-3f;
+    RayDesc ray = getRayDesc(probePositionRS, rayDirection, rayStart, pushConsts.maxRayTraceDistance);
     query.TraceRayInline(topLevelAS, traceFlag, 0xFF, ray);
     query.Proceed(); 
 
@@ -106,7 +111,7 @@ void mainCS(
         const bool bHitFrontFace = query.CommittedTriangleFrontFace();
         const bool bTwoSideMaterial = materialInfo.bTwoSided;
         // Only lighting when ray hit front face of the triangle, when hit back face, we assume it under darkness. 
-        [branch]
+        [branch] 
         if (bHitFrontFace || bTwoSideMaterial)
         {
             const uint hitPrimitiveIndex = query.CommittedPrimitiveIndex();
@@ -228,9 +233,24 @@ void mainCS(
                 } 
             }
 
-            // TODO: Infinite indirect lighting. 
+            // Infinite indirect lighting. 
+            if (pushConsts.bHistoryValid)
             {
-
+                float3 irradiance = 0.0; 
+                for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++) 
+                {
+                    const GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
+                    if (config.getBlendWeight(positionRS) > 0.99)
+                    {
+                        SH3_gi s_gi_sh;
+                        if (config.sampleSH(perView, positionRS, 1.0 / 100.0, s_gi_sh)) // At least brocast once. 
+                        {
+                            irradiance = SH_Evalulate(normalRS, s_gi_sh.c) / (2.0 * kPI);
+                            break;
+                        }
+                    } 
+                }  
+                radiance += irradiance * kInvertPI * diffuseColor; 
             }
         }
  
