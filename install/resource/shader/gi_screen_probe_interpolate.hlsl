@@ -187,7 +187,7 @@ void mainCS(
     }
 
     // Sample world probe as fallback. 
-    // float3 screenInterpolate = irradiance / (max(weightSum, kFloatEpsilon) * 2.0 * kPI);
+    float3 screenInterpolate = irradiance / (max(weightSum, kFloatEpsilon) * 2.0 * kPI);
     if (false)
     {
         float world_weight = 0.0;

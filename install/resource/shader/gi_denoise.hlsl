@@ -29,7 +29,7 @@ void mainCS(
 
     float3 r = lerp(src, dest, pushConsts.firstFrame ? 0.0 : 0.99);
 
-    storeRWTexture2D_float3(pushConsts.uav, tid);
+    storeRWTexture2D_float3(pushConsts.uav, tid, r);
 }
 
 #endif 
