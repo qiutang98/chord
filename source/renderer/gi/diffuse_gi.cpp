@@ -6,7 +6,7 @@
 #include <shader/gi_screen_probe_project_sh.hlsl>
 #include <shader/gi_screen_probe_interpolate.hlsl>
 #include <shader/gi_world_probe_sh_inject.hlsl>
-#include <shader/gi_world_probe_sh_propagate.hlsl>
+#include <shader/gi_world_probe_sh_update.hlsl>
 #include <shader/gi_denoise.hlsl>
 #include <random>
 
@@ -27,14 +27,24 @@ static AutoCVarRef cVarEnableGIDebugOutput(
 	"Enable gi debug output or not."
 );
 
+static float sGISkylightLeaking = 0.05f;
+static AutoCVarRef cVarGISkylightLeaking(
+	"r.gi.skylightleaking",
+	sGISkylightLeaking,
+	"Sky light leaking ratio when trace."
+);
+
 PRIVATE_GLOBAL_SHADER(GIScreenProbeSpawnCS, "resource/shader/gi_screen_probe_spawn.hlsl", "mainCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(GIScreenProbeInterpolateCS, "resource/shader/gi_screen_probe_interpolate.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIScreenProbeTraceCS, "resource/shader/gi_screen_probe_trace.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIScreenProbeProjectSHCS, "resource/shader/gi_screen_probe_project_sh.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIScreenProbeInterpolateCS, "resource/shader/gi_screen_probe_interpolate.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIWorldProbeSHInjectCS, "resource/shader/gi_world_probe_sh_inject.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIWorldProbeSHPropagateCS, "resource/shader/gi_world_probe_sh_propagate.hlsl", "mainCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(GIScreenProbeSHInjectCS, "resource/shader/gi_world_probe_sh_inject.hlsl", "mainCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(GIWorldProbeSHUpdateCS, "resource/shader/gi_world_probe_sh_update.hlsl", "mainCS", EShaderStage::Compute);
 
+//
 PRIVATE_GLOBAL_SHADER(GIDenoiseCS, "resource/shader/gi_denoise.hlsl", "mainCS", EShaderStage::Compute);
+
+
 
 graphics::PoolTextureRef chord::giUpdate(
 	graphics::CommandList& cmd, 
@@ -81,8 +91,7 @@ graphics::PoolTextureRef chord::giUpdate(
 				bHistoryInvalid
 					|= (resource.probeDim.x            != kProbeDim)
 					|| (resource.probeSpacing.x        != voxelSize)
-					|| (resource.probeIrradianceBuffer == nullptr)
-					|| (resource.probeDirectionBuffer  == nullptr);
+					|| (resource.probeIrradianceBuffer == nullptr);
 
 				voxelSize *= 2.0f;
 			}
@@ -110,13 +119,7 @@ graphics::PoolTextureRef chord::giUpdate(
 					resource.probeIrradianceBuffer = bufferPool.createGPUOnly("GI-WorldProbe-SH-Irradiance", 
 						sizeof(SH3_gi_pack) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z, 
 						VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-
-					resource.probeDirectionBuffer = bufferPool.createGPUOnly("GI-WorldProbe-SH-Direction",
-						sizeof(uint) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z,
-						VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-
 					queue.clearUAV(resource.probeIrradianceBuffer, 0U);
-					queue.clearUAV(resource.probeDirectionBuffer, 0U);
 				}
 
 				// 
@@ -138,8 +141,6 @@ graphics::PoolTextureRef chord::giUpdate(
 				worldProbeConfigs[i].sh_SRV = asSRV(queue, resource.probeIrradianceBuffer);
 
 				worldProbeConfigs[i].bRestAll = bHistoryInvalid;
-				worldProbeConfigs[i].sh_direction_UAV = asUAV(queue, resource.probeDirectionBuffer);
-				worldProbeConfigs[i].sh_direction_SRV = asSRV(queue, resource.probeDirectionBuffer);
 
 				// Scrolling.
 				if (bHistoryInvalid)
@@ -179,42 +180,29 @@ graphics::PoolTextureRef chord::giUpdate(
 		worldProbeConfigBufferId = uploadBufferToGPU(cmd, "GIWorldProbeVolumeConfigs", worldProbeConfigs.data(), worldProbeConfigs.size()).second;
 		worldProbeCascadeCount = kCascadeCount;
 
-		// SH propagate. 
+		// SH Update. 
+		for (int i = kCascadeCount - 1; i >=0 ; i--)
 		{
-			// 
-			uint bufferSize = sizeof(SH3_gi_pack) * kProbeDim * kProbeDim * kProbeDim;
-			auto probeIrradianceTempBuffer = bufferPool.createGPUOnly("GI-WorldProbe-SH-Irradiance-Temp",
-				bufferSize,
-				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+			auto& resource = giWorldProbeCtx.volumes[i];
 
-	
+			GIWorldProbeSHUpdatePushConsts pushConst{};
+			pushConst.cameraViewId          = cameraViewId;
+			pushConst.clipmapConfigBufferId = worldProbeConfigBufferId;
+			pushConst.clipmapLevel          = i;
+			pushConst.sh_uav                = asUAV(queue, resource.probeIrradianceBuffer);
+			pushConst.bLastCascade          = i == kCascadeCount - 1;
+			pushConst.energyLose            = 0.98f;
 
-			for (int i = kCascadeCount - 1; i >=0 ; i--)
-			{
-				auto& resource = giWorldProbeCtx.volumes[i];
+			const uint dispatchDim = divideRoundingUp(kProbeDim * kProbeDim * kProbeDim, 64);
 
-				queue.copyBuffer(resource.probeIrradianceBuffer, probeIrradianceTempBuffer, bufferSize, 0, 0);
+			auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHUpdateCS>();
+			addComputePass2(queue,
+				"GI: WorldProbeSHUpdate",
+				getContext().computePipe(computeShader, "GI: WorldProbeSHUpdate"),
+				pushConst,
+				{ dispatchDim, 1, 1 });
 
-				GIWorldProbeSHPropagatePushConsts pushConst{};
-				pushConst.cameraViewId = cameraViewId;
-				pushConst.clipmapConfigBufferId = worldProbeConfigBufferId;
-				pushConst.clipmapLevel = i;
-
-				pushConst.sh_srv = asSRV(queue, probeIrradianceTempBuffer);
-				pushConst.sh_uav = asUAV(queue, resource.probeIrradianceBuffer);
-				pushConst.bLastCascade = i == kCascadeCount - 1;
-
-				const uint dispatchDim = divideRoundingUp(kProbeDim * kProbeDim * kProbeDim, 64);
-
-				auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHPropagateCS>();
-				addComputePass2(queue,
-					"GI: WorldProbeSHPropagate",
-					getContext().computePipe(computeShader, "GI: WorldProbeSHPropagate"),
-					pushConst,
-					{ dispatchDim, 1, 1 });
-
-				asSRV(queue, resource.probeIrradianceBuffer);
-			}
+			asSRV(queue, resource.probeIrradianceBuffer);
 		}
 	}
 
@@ -224,7 +212,6 @@ graphics::PoolTextureRef chord::giUpdate(
 
 	// 
 	auto newScreenProbeSpawnInfoBuffer = bufferPool.createGPUOnly("GI-ScreenProbe-SpawnInfo", sizeof(uint4) * screenProbeDim.x * screenProbeDim.y, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-
 	// Pass #0: Spawn screen space probe. 
 	{
 		GIScreenProbeSpawnPushConsts pushConsts{};
@@ -256,124 +243,112 @@ graphics::PoolTextureRef chord::giUpdate(
 	}
 
 	// Pass #1: Screen probe trace. 
-	auto screenProbeTraceRadianceRT = rtPool.create("GI-ScreenProbe-TraceRadiance", halfDim.x, halfDim.y, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-	{
-		// Clear trace radiance RT. 
-		{
-			static const auto clearValue = VkClearColorValue{ .uint32 = { 0, 0, 0, 0} };
-			static const auto range = helper::buildBasicImageSubresource();
-			queue.clearImage(screenProbeTraceRadianceRT, &clearValue, 1, &range);
-		}
-
-		GIScreenProbeTracePushConsts pushConsts{};
-
-		pushConsts.probeDim = screenProbeDim;
-		pushConsts.gbufferDim = halfDim;
-
-		pushConsts.cascadeCount = cascadeCtx.depths.size();
-		pushConsts.shadowViewId = cascadeCtx.viewsSRV;
-		pushConsts.shadowDepthIds = cascadeCtx.cascadeShadowDepthIds;
-		pushConsts.transmittanceId = asSRV(queue, luts.transmittance);
-
-		pushConsts.scatteringId = asSRV3DTexture(queue, luts.scatteringTexture);
-		if (luts.optionalSingleMieScatteringTexture != nullptr)
-		{
-			pushConsts.singleMieScatteringId = asSRV3DTexture(queue, luts.optionalSingleMieScatteringTexture);
-		}
-		pushConsts.irradianceTextureId = asSRV(queue, luts.irradianceTexture);
-		pushConsts.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
-
-		pushConsts.minRayTraceDistance = 0.01f;
-		pushConsts.maxRayTraceDistance = 800.0f;
-		pushConsts.cameraViewId        = cameraViewId;
-		pushConsts.probeSpawnInfoSRV   = asSRV(queue, newScreenProbeSpawnInfoBuffer);
-		pushConsts.rayHitLODOffset     = 2.0f;
-		pushConsts.radianceUAV      = asUAV(queue, screenProbeTraceRadianceRT);
-
-		for (int i = 0; i < worldProbeCascadeCount; i++)
-		{
-			asSRV(queue, giWorldProbeCtx.volumes[i].probeDirectionBuffer);
-			asSRV(queue, giWorldProbeCtx.volumes[i].probeIrradianceBuffer);
-		}
-
-		pushConsts.clipmapConfigBufferId = worldProbeConfigBufferId;
-		pushConsts.clipmapCount = worldProbeCascadeCount;
-		pushConsts.bHistoryValid = !bHistoryInvalid;
-
-		auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeTraceCS>();
-		addComputePass(queue,
-			"GI: ScreenProbeTrace",
-			getContext().computePipe(computeShader, "GI: ScreenProbeTrace", {
-				getContext().descriptorFactoryBegin()
-				.accelerateStructure(0) // TLAS
-				.buildNoInfoPush() }),
-			{ screenProbeDim.x, screenProbeDim.y, 1 },
-			[&](GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)
-			{
-				pipe->pushConst(cmd, pushConsts);
-
-				PushSetBuilder(queue, cmd)
-					.addAccelerateStructure(tlas)
-					.push(pipe, 1); // Push set 1.
-			});
-
-		asSRV(queue, screenProbeTraceRadianceRT);
-	}
-
+	auto probeTraceRadianceRT = rtPool.create("GI-ScreenProbe-TraceRadiance", halfDim.x, halfDim.y, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 	auto newScreenProbeSHBuffer = bufferPool.createGPUOnly("GI-ScreenProbe-SH", sizeof(SH3_gi_pack) * screenProbeDim.x * screenProbeDim.y, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-	queue.clearUAV(newScreenProbeSHBuffer);
 	{
-		GIScreenProbeProjectSHPushConsts pushConst{};
-		pushConst.probeDim          = screenProbeDim;
-		pushConst.cameraViewId      = cameraViewId;
-		pushConst.probeSpawnInfoSRV = asSRV(queue, newScreenProbeSpawnInfoBuffer);
-		pushConst.radianceSRV       = asSRV(queue, screenProbeTraceRadianceRT);
-		pushConst.screenProbeSHUAV  = asUAV(queue, newScreenProbeSHBuffer);
-		pushConst.gbufferDim        = halfDim;
-
-		auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeProjectSHCS>();
-		addComputePass2(queue,
-			"GI: ScreenProbeSH",
-			getContext().computePipe(computeShader, "GI: ScreenProbeSH"),
-			pushConst,
-			{ screenProbeDim.x, screenProbeDim.y, 1 });
-	}
-
-	// World probe inject. 
-	{
-		GIWorldProbeSHInjectPushConsts pushConsts{};
-		pushConsts.probeDim = screenProbeDim;
-		pushConsts.gbufferDim = halfDim;
-		pushConsts.cameraViewId = cameraViewId;
-		pushConsts.probeSpawnInfoSRV = asSRV(queue, newScreenProbeSpawnInfoBuffer);
-		pushConsts.screenProbeSHSRV = asSRV(queue, newScreenProbeSHBuffer);
-
-		pushConsts.clipmapConfigBufferId = worldProbeConfigBufferId;
-		pushConsts.clipmapCount = worldProbeCascadeCount;
-
-		for (int i = 0; i < worldProbeCascadeCount; i++)
 		{
-			asUAV(queue, giWorldProbeCtx.volumes[i].probeDirectionBuffer);
-			asUAV(queue, giWorldProbeCtx.volumes[i].probeIrradianceBuffer);
+			GIProbeTracePushConsts tracePushConsts{};
+
+			tracePushConsts.probeDim = screenProbeDim;
+			tracePushConsts.gbufferDim = halfDim;
+			tracePushConsts.cascadeCount = cascadeCtx.depths.size();
+			tracePushConsts.shadowViewId = cascadeCtx.viewsSRV;
+			tracePushConsts.shadowDepthIds = cascadeCtx.cascadeShadowDepthIds;
+			tracePushConsts.transmittanceId = asSRV(queue, luts.transmittance);
+			tracePushConsts.scatteringId = asSRV3DTexture(queue, luts.scatteringTexture);
+			if (luts.optionalSingleMieScatteringTexture != nullptr)
+			{
+				tracePushConsts.singleMieScatteringId = asSRV3DTexture(queue, luts.optionalSingleMieScatteringTexture);
+			}
+			tracePushConsts.irradianceTextureId = asSRV(queue, luts.irradianceTexture);
+			tracePushConsts.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+			tracePushConsts.minRayTraceDistance = 1.0f;
+			tracePushConsts.maxRayTraceDistance = 800.0f;
+			tracePushConsts.cameraViewId        = cameraViewId;
+			tracePushConsts.rayHitLODOffset     = 2.0f;
+
+			for (int i = 0; i < worldProbeCascadeCount; i++)
+			{
+				asSRV(queue, giWorldProbeCtx.volumes[i].probeIrradianceBuffer);
+			}
+			tracePushConsts.clipmapConfigBufferId = worldProbeConfigBufferId;
+			tracePushConsts.clipmapCount = worldProbeCascadeCount;
+			tracePushConsts.bHistoryValid = !bHistoryInvalid;
+			tracePushConsts.probeSpawnInfoSRV = asSRV(queue, newScreenProbeSpawnInfoBuffer);
+			tracePushConsts.radianceUAV = asUAV(queue, probeTraceRadianceRT);
+			tracePushConsts.skyLightLeaking = sGISkylightLeaking;
+
+			auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeTraceCS>();
+			addComputePass(queue,
+				"GI: ScreenProbeTrace",
+				getContext().computePipe(computeShader, "GI: ScreenProbeTrace", {
+					getContext().descriptorFactoryBegin()
+					.accelerateStructure(0) // TLAS
+					.buildNoInfoPush() }),
+				{ screenProbeDim.x, screenProbeDim.y, 1 },
+				[&](GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)
+				{
+					pipe->pushConst(cmd, tracePushConsts);
+
+					PushSetBuilder(queue, cmd)
+						.addAccelerateStructure(tlas)
+						.push(pipe, 1); // Push set 1.
+				});
 		}
-
-		check(worldProbeCascadeCount == 2 || worldProbeCascadeCount == 4 || worldProbeCascadeCount == 8);
-
-		// One workgroup can handle probe count (included all cascade).
-		uint worldGroupHandleProbe = 64 / worldProbeCascadeCount;
-		const uint dispatchDim = divideRoundingUp(screenProbeDim.x * screenProbeDim.y, worldGroupHandleProbe);
-
-		auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHInjectCS>();
-		addComputePass2(queue,
-			"GI: WorldProbeInject",
-			getContext().computePipe(computeShader, "GI: WorldProbeInject"),
-			pushConsts,
-			{ dispatchDim, 1, 1 });
-
-		for (int i = 0; i < worldProbeCascadeCount; i++)
+		// Screen trace. 
 		{
-			asSRV(queue, giWorldProbeCtx.volumes[i].probeDirectionBuffer);
-			asSRV(queue, giWorldProbeCtx.volumes[i].probeIrradianceBuffer);
+			// Screen SH projection. 
+			{
+				GIScreenProbeProjectSHPushConsts pushConst{};
+				pushConst.probeDim     = screenProbeDim;
+				pushConst.cameraViewId = cameraViewId;
+				pushConst.probeSpawnInfoSRV = asSRV(queue, newScreenProbeSpawnInfoBuffer);
+				pushConst.radianceSRV = asSRV(queue, probeTraceRadianceRT);
+				pushConst.shUAV       = asUAV(queue, newScreenProbeSHBuffer);
+				pushConst.gbufferDim  = halfDim;
+
+				auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeProjectSHCS>();
+				addComputePass2(queue,
+					"GI: ScreenProbeSH",
+					getContext().computePipe(computeShader, "GI: ScreenProbeSH"),
+					pushConst,
+					{ screenProbeDim.x, screenProbeDim.y, 1 });
+			}
+
+			// World probe inject. 
+			{
+				GIWorldProbeSHInjectPushConsts pushConsts{};
+				pushConsts.probeDim = screenProbeDim;
+				pushConsts.gbufferDim = halfDim;
+				pushConsts.cameraViewId = cameraViewId;
+				pushConsts.probeSpawnInfoSRV = asSRV(queue, newScreenProbeSpawnInfoBuffer);
+				pushConsts.screenProbeSHSRV  = asSRV(queue, newScreenProbeSHBuffer);
+				pushConsts.clipmapConfigBufferId = worldProbeConfigBufferId;
+				pushConsts.clipmapCount = worldProbeCascadeCount;
+
+				for (int i = 0; i < worldProbeCascadeCount; i++)
+				{
+					asUAV(queue, giWorldProbeCtx.volumes[i].probeIrradianceBuffer);
+				}
+
+				check(worldProbeCascadeCount == 2 || worldProbeCascadeCount == 4 || worldProbeCascadeCount == 8);
+
+				// One workgroup can handle probe count (included all cascade).
+				uint worldGroupHandleProbe = 64 / worldProbeCascadeCount;
+				const uint dispatchDim = divideRoundingUp(screenProbeDim.x * screenProbeDim.y, worldGroupHandleProbe);
+
+				auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeSHInjectCS>();
+				addComputePass2(queue,
+					"GI: WorldProbeInject",
+					getContext().computePipe(computeShader, "GI: WorldProbeInject"),
+					pushConsts,
+					{ dispatchDim, 1, 1 });
+
+				for (int i = 0; i < worldProbeCascadeCount; i++)
+				{
+					asSRV(queue, giWorldProbeCtx.volumes[i].probeIrradianceBuffer);
+				}
+			}
 		}
 	}
 
@@ -401,12 +376,9 @@ graphics::PoolTextureRef chord::giUpdate(
 			getContext().computePipe(computeShader, "GI: Interpolate"),
 			pushConsts,
 			{ dispatchDim.x, dispatchDim.y, 1 });
-
-		
 	}
 
 	{
-
 		GIDenoisePushConsts pushConst{};
 
 		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
@@ -416,8 +388,6 @@ graphics::PoolTextureRef chord::giUpdate(
 		{
 			pushConst.firstFrame = true;
 			giWorldProbeCtx.historyRT = rtPool.create("GI-ScreenProbe-Interpolate", halfDim.x, halfDim.y, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-		
-			
 		}
 
 		pushConst.srv = asSRV(queue, giInterpolateRT);
@@ -437,7 +407,7 @@ graphics::PoolTextureRef chord::giUpdate(
 	}
 	else if (sEnableGIDebugOutput == 2)
 	{
-		return screenProbeTraceRadianceRT;
+		return probeTraceRadianceRT;
 	}
 	else if (sEnableGIDebugOutput == 3)
 	{

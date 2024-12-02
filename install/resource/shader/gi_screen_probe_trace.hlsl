@@ -1,6 +1,6 @@
 #include "gi.h"
 
-struct GIScreenProbeTracePushConsts
+struct GIProbeTracePushConsts
 {
     uint2 probeDim;
     uint2 gbufferDim;
@@ -26,8 +26,9 @@ struct GIScreenProbeTracePushConsts
     bool bHistoryValid;
     uint clipmapConfigBufferId;
     uint clipmapCount; // 2 4 8
+    float skyLightLeaking;
 };
-CHORD_PUSHCONST(GIScreenProbeTracePushConsts, pushConsts);
+CHORD_PUSHCONST(GIProbeTracePushConsts, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
 
@@ -89,16 +90,29 @@ void mainCS(
     const uint traceFlag = RAY_FLAG_CULL_NON_OPAQUE;
 
     // 
-    float rayStart = spawnInfo.depth > 0.0 ? pushConsts.minRayTraceDistance : 1e-3f;
-    RayDesc ray = getRayDesc(probePositionRS, rayDirection, rayStart, pushConsts.maxRayTraceDistance);
+    float rayStart = 1e-3f;
+    if (spawnInfo.depth > 0.0)
+    {
+        // https://www.desmos.com/calculator/fbvocp9yvd
+        const float linearZ = perView.zNear / spawnInfo.depth;
+        const float x = linearZ * 0.01;
+        rayStart = lerp(1e-3f, 1e-1f, x / (x + 1.0));
+    }
+
+    RayDesc ray = getRayDesc(probePositionRS, rayDirection, rayStart);
     query.TraceRayInline(topLevelAS, traceFlag, 0xFF, ray);
     query.Proceed(); 
+
+    float3 normalRS;
+    float3 positionRS;
 
     uint singleMieScatteringId = (scene.atmosphere.bCombineScattering == 0) ? pushConsts.singleMieScatteringId : pushConsts.scatteringId;
     Texture2D<float4> transmittanceTexture       = TBindless(Texture2D, float4, pushConsts.transmittanceId);
     Texture2D<float4> irradianceTexture          = TBindless(Texture2D, float4, pushConsts.irradianceTextureId);
     Texture3D<float4> scatteringTexture          = TBindless(Texture3D, float4, pushConsts.scatteringId);
     Texture3D<float4> singleMieScatteringTexture = TBindless(Texture3D, float4, singleMieScatteringId);
+
+
 
     float3 radiance = 0.0;
     if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
@@ -110,6 +124,9 @@ void mainCS(
 
         const bool bHitFrontFace = query.CommittedTriangleFrontFace();
         const bool bTwoSideMaterial = materialInfo.bTwoSided;
+
+        positionRS = probePositionRS + query.CommittedRayT() * rayDirection;
+
         // Only lighting when ray hit front face of the triangle, when hit back face, we assume it under darkness. 
         [branch] 
         if (bHitFrontFace || bTwoSideMaterial)
@@ -146,7 +163,7 @@ void mainCS(
 
             // Get uv and normal.
             float2 uv = uv_tri[0] * bary.x + uv_tri[1] * bary.y + uv_tri[2] * bary.z;
-            float3 normalRS = normalRS_tri[0] * bary.x + normalRS_tri[1] * bary.y + normalRS_tri[2] * bary.z;
+            normalRS = normalize(normalRS_tri[0] * bary.x + normalRS_tri[1] * bary.y + normalRS_tri[2] * bary.z);
 
             // Two side normal sign modify. 
             if (bTwoSideMaterial)
@@ -164,7 +181,6 @@ void mainCS(
             baseColor.xyz = mul(sRGB_2_AP1, baseColor.xyz);
 
             //
-            float3 positionRS = probePositionRS + query.CommittedRayT() * rayDirection;
 
             float metallic = 0.0;
             const bool bExistAORoughnessMetallicTexture = (materialInfo.metallicRoughnessTexture != kUnvalidIdUint32);
@@ -184,9 +200,26 @@ void mainCS(
             // Lighting. 
 
             float3 diffuseColor = getDiffuseColor(baseColor.xyz, metallic);
-
+            float3 skyRadiance;
+            
             // Apply sun light direct diffuse lighting. 
             {
+                float3 positionWS_km = float3(double3(positionRS / 1000.0f) + perView.cameraPositionWS_km.getDouble3());
+
+                float3 skyIrradiance;
+                float3 sunIrradiance = GetSunAndSkyIrradiance(
+                    scene.atmosphere,     //  
+                    transmittanceTexture, //
+                    irradianceTexture,    //
+                    positionWS_km - scene.atmosphere.earthCenterKm, // Get atmosphere unit position.
+                    normalRS,                 // 
+                    -scene.sunInfo.direction, //   
+                    skyIrradiance); 
+
+                // 
+                float3 sunRadiance = finalRadianceExposureModify(scene, sunIrradiance + skyIrradiance);
+                skyRadiance = finalRadianceExposureModify(scene, skyIrradiance);
+
                 float NoL = max(0.0, dot(normalRS, -scene.sunInfo.direction));
                 if (NoL > 0.0)
                 {
@@ -213,21 +246,6 @@ void mainCS(
                         }
                     }
 
-                    float3 positionWS_km = float3(double3(positionRS / 1000.0f) + perView.cameraPositionWS_km.getDouble3());
-    
-                    float3 skyIrradiance;
-                    float3 sunIrradiance = GetSunAndSkyIrradiance(
-                        scene.atmosphere,     //  
-                        transmittanceTexture, //
-                        irradianceTexture,    //
-                        positionWS_km - scene.atmosphere.earthCenterKm, // Get atmosphere unit position.
-                        normalRS,                 // 
-                        -scene.sunInfo.direction, //   
-                        skyIrradiance);
-    
-                    // 
-                    float3 sunRadiance = finalRadianceExposureModify(scene, skyIrradiance + sunIrradiance);
-
                     // Do lambert diffuse lighting here.
                     radiance += sunRadiance * visibility * NoL * Fd_LambertDiffuse(diffuseColor);
                 } 
@@ -238,38 +256,34 @@ void mainCS(
             {
                 float3 irradiance = 0.0; 
                 for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++) 
-                {
+                { 
                     const GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
                     if (config.getBlendWeight(positionRS) > 0.99)
                     {
-                        SH3_gi s_gi_sh;
-                        if (config.sampleSH(perView, positionRS, 1.0 / 100.0, s_gi_sh)) // At least brocast once. 
+                        if (config.evaluateSH(perView, positionRS, 1.0 / 100.0, normalRS, irradiance))
                         {
-                            irradiance = SH_Evalulate(normalRS, s_gi_sh.c) / (2.0 * kPI);
                             break;
                         }
+                        else
+                        {
+                            irradiance = 0.0;   
+                        } 
                     } 
                 }  
-                radiance += irradiance * kInvertPI * diffuseColor; 
+                radiance += irradiance * Fd_LambertDiffuse(diffuseColor);
+            }
+
+            // Sky light leaking.
+            {
+                radiance += pushConsts.skyLightLeaking * skyRadiance * Fd_LambertDiffuse(diffuseColor);
             }
         }
- 
-    #if DEBUG_HIT_FACE
-        if(bHitFrontFace)
-        {
-            radiance = float3(1.0, 0.0, 0.0);
-        }
-        else
-        {
-            radiance = float3(0.0, 1.0, 0.0);
-        }
-    #endif 
     }
     else 
     {
         // Sky sample.
         float3 transmittance;
-        radiance = GetSkyRadiance(
+        float3 skyRadiance = GetSkyRadiance(
             scene.atmosphere,  
             transmittanceTexture, 
             scatteringTexture, 
@@ -278,12 +292,7 @@ void mainCS(
             rayDirection, 
             -scene.sunInfo.direction,  
             transmittance); 
-
-        radiance = finalRadianceExposureModify(scene, radiance);
-        
-    #if DEBUG_HIT_FACE
-        radiance = float3(0.0, 0.0, 1.0);
-    #endif
+        radiance = finalRadianceExposureModify(scene, skyRadiance);
     }
 
     // Store radiance result.

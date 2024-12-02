@@ -43,12 +43,12 @@ uint findClosetProbe(int2 probeCoord, int2 offset)
     if (!spawnInfo.isValid())
     {
         return kUnvalidIdUint32;
-    }
-
+    } 
+ 
     // Pack coord.
-    return uint(pos.x) | (uint(pos.y) << 16u);
-}
-
+    return uint(pos.x) | (uint(pos.y) << 16u); 
+}   
+  
 [numthreads(64, 1, 1)]
 void mainCS(
     uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupIndex)
@@ -57,8 +57,8 @@ void mainCS(
     const uint2 tid = workGroupId * 8 + gid;
     if (any(tid >= pushConsts.gbufferDim))
     {
-        // Out of bound pre-return. 
-        return;
+        // Out of bound pre-return.  
+        return; 
     }
 
     const float pixel_deviceZ = loadTexture2D_float1(pushConsts.depthSRV, tid);
@@ -186,58 +186,8 @@ void mainCS(
         }
     }
 
-    // Sample world probe as fallback. 
-    float3 screenInterpolate = irradiance / (max(weightSum, kFloatEpsilon) * 2.0 * kPI);
-    if (false)
-    {
-        float world_weight = 0.0;
-        float3 world_irradiance = 0.0;
-        
-        float linearWeightSum = 0.0;
-        for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++) 
-        {
-            if (linearWeightSum >= 1.0)
-            {
-                break;
-            }
-
-            const GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
-            float weight = config.getBlendWeight(pixel_positionRS);
-
-            [branch]   
-            if (weight <= 0.0)
-            { 
-                continue;
-            }
-            else 
-            {
-                SH3_gi s_gi_sh;
-                bool bSampleValid = config.sampleSH(perView, pixel_positionRS, 1.0, s_gi_sh);
-
-                weight = bSampleValid ? weight : 0.0;
-
-                float linearWeight = (linearWeightSum > 0.0) ? (1.0 - linearWeightSum) : weight;
-                float stepWeight = linearWeight * s_gi_sh.numSample;
-
-                world_weight += stepWeight;
-                world_irradiance += stepWeight * SH_Evalulate(pixel_normalRS, s_gi_sh.c);
-
-                linearWeightSum += linearWeight;
-            }
-        }  
-
-        irradiance = 0;
-        weightSum = 0;
-
-        irradiance += world_irradiance;
-        weightSum  += world_weight;
-    }
-
     // Normalize. 
     irradiance /= max(weightSum, kFloatEpsilon) * 2.0 * kPI;
-
-
-
     if (weightSum < 1e-3f)
     {
         // Small weight, just return zero. 
@@ -255,10 +205,52 @@ void mainCS(
         }
     }
 
-    // irradiance += STBN_float3(scene.blueNoiseCtx, tid, scene.frameCounter) / 65535.0;
 
+    // Sample world probe as fallback. 
+    if (false)
+    {
+        float world_weight = 0.0;
+        float3 world_irradiance = 0.0;
+    
+        for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++) 
+        {
+            if (world_weight >= 1.0)
+            {
+                break;
+            }
 
+            const GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
+            float weight = config.getBlendWeight(pixel_positionRS);
 
+            [branch]   
+            if (weight <= 0.0)
+            { 
+                continue;
+            }
+            else 
+            {
+                float3 radiance = 0.0;
+                bool bSampleValid = config.evaluateSH(perView, pixel_positionRS, 1.0, pixel_normalRS, radiance);
+
+                weight = bSampleValid ? weight : 0.0;
+                float linearWeight = (world_weight > 0.0) ? (1.0 - world_weight) : weight;
+       
+                world_weight += linearWeight;
+                world_irradiance += linearWeight * radiance;
+            }  
+        }   
+
+        if (world_weight > 0.0)
+        {
+            world_irradiance /= world_weight;
+        }
+        else
+        {
+            world_irradiance = 0.0;
+        }
+
+        irradiance = world_irradiance;
+    }
 
     storeRWTexture2D_float3(pushConsts.diffuseGIUAV, tid, irradiance);
 }

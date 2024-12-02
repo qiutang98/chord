@@ -10,7 +10,7 @@ struct GIScreenProbeProjectSHPushConsts
     uint cameraViewId;
     uint probeSpawnInfoSRV;
     uint radianceSRV;
-    uint screenProbeSHUAV;
+    uint shUAV;
 };
 CHORD_PUSHCONST(GIScreenProbeProjectSHPushConsts, pushConsts);
 
@@ -84,6 +84,8 @@ void mainCS(
 
     float3 probePositionRS;
     float3 probeNormalRS = spawnInfo.normalRS;
+
+
     if (WaveIsFirstLane())
     {
         probePositionRS = spawnInfo.getProbePositionRS(pushConsts.gbufferDim, perView); 
@@ -104,22 +106,23 @@ void mainCS(
     // Store LDS
     storeLDS(localThreadIndex, shResult);
     
+    // 
     GroupMemoryBarrierWithGroupSync();
     reduceSH(true, localThreadIndex, 32, shResult);
-
     GroupMemoryBarrierWithGroupSync();
 
+    // Generic wave reduce. 
     reduceSH(true, localThreadIndex, 16, shResult);
     reduceSH(true, localThreadIndex,  8, shResult);
     reduceSH(true, localThreadIndex,  4, shResult);
     reduceSH(true, localThreadIndex,  2, shResult);
 
-    // 
+    // Final store to device memory.
     reduceSH(false, localThreadIndex, 1, shResult);
     if (localThreadIndex < 1)
     {
         shResult.numSample = 1.0;
-        BATS(SH3_gi_pack, pushConsts.screenProbeSHUAV, probeLinearIndex, shResult.pack());
+        BATS(SH3_gi_pack, pushConsts.shUAV, probeLinearIndex, shResult.pack());
     }
 }
 

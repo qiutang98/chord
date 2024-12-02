@@ -95,7 +95,6 @@ namespace chord
 		int3 probeDim;
 
 		graphics::PoolBufferRef probeIrradianceBuffer;
-		graphics::PoolBufferRef probeDirectionBuffer;
 	};
 	struct GIWorldProbeContext
 	{

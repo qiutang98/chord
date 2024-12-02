@@ -133,10 +133,10 @@ struct GIWorldProbeVolumeConfig
     uint sh_SRV; //
 
     float3 probeCenterRS;
-    uint sh_direction_UAV; //
+    uint pad0; //
 
     int3 scrollOffset; 
-    int sh_direction_SRV; //
+    int pad1; //
 
     int3 currentScrollOffset; 
     bool bRestAll; //
@@ -231,6 +231,51 @@ struct GIWorldProbeVolumeConfig
         volumeBlendWeight *= (1.f - saturate(delta.z / probeSpacing.z));
 
         return volumeBlendWeight;
+    }
+
+    bool evaluateSH(in const PerframeCameraView perView, float3 positionRS, float sampleClamp, float3 normalRS, out float3 irradiance)
+    {
+        irradiance = 0.0;
+
+        // 
+        float weightSum = 0.0;
+
+        const int3 baseProbeCoords = getVirtualVolumeIdFromPosition(positionRS);
+        const float3 baseProbePositionRS = getPositionRS(baseProbeCoords);
+        const float3 gridSpaceDistance = positionRS - baseProbePositionRS;
+        const float3 alpha = saturate(gridSpaceDistance / probeSpacing);
+
+        float weightAccumulation = 0.0;
+        for (int i = 0; i < 8; i ++)
+        {
+            int3 adjacentProbeOffset = int3(i, i >> 1, i >> 2) & 1;
+            int3 adjacentProbeCoords = clamp(baseProbeCoords + adjacentProbeOffset, 0, probeDim - 1);
+
+            float3 trilinear = max(0.001f, lerp(1.f - alpha, alpha, adjacentProbeOffset));
+            float1 trilinearWeight = 0.001f + (trilinear.x * trilinear.y * trilinear.z);
+
+            const int adjacentPhysicsProbeLinearIndex = getPhysicalLinearVolumeId(adjacentProbeCoords);
+
+            SH3_gi sample_world_gi_sh;
+            {
+                SH3_gi_pack sh_pack = BATL(SH3_gi_pack, sh_SRV, adjacentPhysicsProbeLinearIndex);
+                sample_world_gi_sh.unpack(sh_pack);
+            }
+
+            if (sample_world_gi_sh.numSample < sampleClamp)
+            {
+                continue;
+            }
+
+            irradiance += trilinearWeight * SH_Evalulate(normalRS, sample_world_gi_sh.c);
+            weightSum  += trilinearWeight;
+        }
+
+        //
+        irradiance /= max(1e-6f, weightSum) * 2.0 * kPI;
+
+        // 
+        return weightSum > 0.0;
     }
 
     bool sampleSH(in const PerframeCameraView perView, float3 positionRS, float sampleClamp, inout SH3_gi world_gi_sh)

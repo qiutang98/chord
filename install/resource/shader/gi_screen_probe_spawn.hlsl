@@ -78,7 +78,7 @@ void mainCS(
         spawnResult.pixelPosition = seedPixel;   
         spawnResult.depth = depth; 
 
-    #if 1
+    #if 0
         // Sometime nanite mesh will produce large bias mesh surface. 
         // Ray trace get accurate hit t. 
 
