@@ -38,7 +38,7 @@ namespace chord
         result.pixelRSNormal  = pool.create("Gbuffer.pixelRSNormal", width, height, GBufferTextures::pixelRSNormalFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
         result.motionVector   = pool.create("Gbuffer.motionVector", width, height, GBufferTextures::motionVectorFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
         result.aoRoughnessMetallic = pool.create("Gbuffer.aoRoughnessMetallic", width, height, GBufferTextures::aoRoughnessMetallicFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
-
+        result.baseColor      = pool.create("Gbuffer.baseColor", width, height, GBufferTextures::baseColorFormat(), kGBufferVkImageUsage | VK_IMAGE_USAGE_STORAGE_BIT);
         // 
         return result;
     }
@@ -89,6 +89,7 @@ namespace chord
             queue.clearImage(textures.pixelRSNormal,       &clearValue, 1, &range);
             queue.clearImage(textures.motionVector,        &clearValue, 1, &range);
             queue.clearImage(textures.aoRoughnessMetallic, &clearValue, 1, &range);
+            queue.clearImage(textures.baseColor,           &clearValue, 1, &range);
         }
 
         {

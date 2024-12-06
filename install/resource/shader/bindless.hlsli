@@ -212,6 +212,7 @@ loadTexture2D_Declare(float4)
 loadTexture2D_Declare(float3)
 loadTexture2D_Declare(float2)
 loadTexture2D_Declare(float1)
+loadTexture2D_Declare(uint1)
 
 #undef loadTexture2D_Declare
 

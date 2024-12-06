@@ -9,10 +9,13 @@
     #include "debug.hlsli"
     #include "blue_noise.hlsli"
     #include "sh.hlsli"
+    #include "aces.hlsli"
 #endif  
 
 // Max cascade count for world probe clipmap. 
 #define kGIWorldProbeMaxCascadeCount 8
+#define kMinProbeSpacing             0.5f
+#define kGIMaxSampleCount            64
 
 struct SH3_gi_pack
 {
@@ -25,6 +28,17 @@ struct SH3_gi
     float numSample;
 
 #ifndef __cplusplus
+    bool isNaN()
+    {
+        bool bNaN = isnan(numSample);
+        for (uint i = 0; i < 9; i ++)
+        {
+            bNaN |= any(isnan(c[i]));
+        }
+
+        return bNaN;
+    }
+
     void init()
     {
         numSample = 0.0;
@@ -57,8 +71,6 @@ struct SH3_gi
         float f = 1 / w;
         mul(f);
     }
-
-
 
     SH3_gi_pack pack()
     {
@@ -233,7 +245,7 @@ struct GIWorldProbeVolumeConfig
         return volumeBlendWeight;
     }
 
-    bool evaluateSH(in const PerframeCameraView perView, float3 positionRS, float sampleClamp, float3 normalRS, out float3 irradiance)
+    bool evaluateSH(in const PerframeCameraView perView, float3 positionRS, float3 normalRS, out float3 irradiance, bool bCut = false)
     {
         irradiance = 0.0;
 
@@ -262,13 +274,20 @@ struct GIWorldProbeVolumeConfig
                 sample_world_gi_sh.unpack(sh_pack);
             }
 
-            if (sample_world_gi_sh.numSample < sampleClamp)
+            float sampleWeight = 1.0;
+            if (sample_world_gi_sh.numSample < 1.0)
             {
-                continue;
+                if (bCut)
+                {
+                    continue;
+                }
+                sampleWeight = sample_world_gi_sh.numSample;
             }
 
-            irradiance += trilinearWeight * SH_Evalulate(normalRS, sample_world_gi_sh.c);
-            weightSum  += trilinearWeight;
+            float w = trilinearWeight;
+
+            irradiance += sampleWeight * w * SH_Evalulate(normalRS, sample_world_gi_sh.c);
+            weightSum  += w;
         }
 
         //
@@ -278,7 +297,7 @@ struct GIWorldProbeVolumeConfig
         return weightSum > 0.0;
     }
 
-    bool sampleSH(in const PerframeCameraView perView, float3 positionRS, float sampleClamp, inout SH3_gi world_gi_sh)
+    bool sampleSH(in const PerframeCameraView perView, float3 positionRS, inout SH3_gi world_gi_sh)
     {
         world_gi_sh.init();
 
@@ -304,12 +323,13 @@ struct GIWorldProbeVolumeConfig
                 sample_world_gi_sh.unpack(sh_pack);
             }
 
-            if (sample_world_gi_sh.numSample < sampleClamp)
+            float sampleWeight = 1.0;
+            if (sample_world_gi_sh.numSample < 1.0)
             {
-                continue;
+                sampleWeight = sample_world_gi_sh.numSample;
             }
 
-            world_gi_sh.add(sample_world_gi_sh, trilinearWeight);
+            world_gi_sh.add(sample_world_gi_sh, trilinearWeight * sampleWeight);
             weightAccumulation += trilinearWeight;
         }
 
@@ -367,24 +387,48 @@ struct GIScreenProbeSpawnInfo
         }
     }
 
-    uint4 pack()
+    float3 getShootRayDir_LastFrame(uint2 gbufferDim, in const PerframeCameraView perView)
     {
-        uint4 result;
+        float2 uv = (pixelPosition + 0.5) / gbufferDim;
+        const float4 viewPointCS = float4(screenUvToNdcUv(uv), kFarPlaneZ, 1.0);
+
+        float4 viewPointRS = mul(perView.clipToTranslatedWorld_LastFrame, viewPointCS);
+        return normalize(viewPointRS.xyz / viewPointRS.w);
+    }
+
+    float3 getProbePositionRS_LastFrame(uint2 gbufferDim, in const PerframeCameraView perView)
+    {
+        float2 uv = (pixelPosition + 0.5) / gbufferDim;
+        float3 camOffset = float3(perView.cameraWorldPosLastFrame.getDouble3() - perView.cameraWorldPos.getDouble3());
+
+        if (depth < 0.0)
+        {
+            float t = -depth;
+            float3 dir = getShootRayDir_LastFrame(gbufferDim, perView);
+
+            return t * dir + camOffset;
+        }
+        else
+        {
+            return getPositionRS_LastFrame(uv, depth, perView) + camOffset; 
+        }
+    }
+
+    uint3 pack()
+    {
+        uint3 result;
 
         // 
         result.x = pixelPosition.x | (pixelPosition.y << 16u);
         
         //
         result.y = asuint(depth);
-
-        float2 packUv = octahedralEncode(normalRS);
-        result.z = asuint(packUv.x * 0.5 + 0.5);
-        result.w = asuint(packUv.y * 0.5 + 0.5);
+        result.z = pack_dir_2_uint(normalRS);
 
         return result;
     }
 
-    void unpack(uint4 data)
+    void unpack(uint3 data)
     {
         pixelPosition.x = (data.x >>  0u) & 0xffffu;
         pixelPosition.y = (data.x >> 16u) & 0xffffu;
@@ -392,13 +436,8 @@ struct GIScreenProbeSpawnInfo
         //
         depth = asfloat(data.y);
 
-        //
-        float2 packUv;
-        packUv.x = asfloat(data.z) * 2.0 - 1.0;
-        packUv.y = asfloat(data.w) * 2.0 - 1.0;
-
         // 
-        normalRS = octahedralDecode(packUv);
+        normalRS = unpack_dir_f_uint(data.z);
     }
 #endif
 };
@@ -407,10 +446,10 @@ struct GIScreenProbeSpawnInfo
 
 // cell [0, 8] : group thread index.
 // probe coord. 
-float3 getScreenProbeCellRayDirection(const GPUBasicData scene, uint2 probeCoord, uint2 cell, float3 normal)
+float3 getScreenProbeCellRayDirection(const GPUBasicData scene, uint2 probeCoord, uint2 cell, float3 normal, bool bJitter = true)
 {
     // Noise 
-    float2 blueNoise2 = STBN_float2(scene.blueNoiseCtx, probeCoord * 8 + cell, scene.frameCounter);
+    float2 blueNoise2 = bJitter ? STBN_float2(scene.blueNoiseCtx, probeCoord * 8 + cell, scene.frameCounter) : 0.5;
     float2 octUv = (cell + blueNoise2) / 8.0;
 
     // Hemisphere octahedral direction.
@@ -419,4 +458,31 @@ float3 getScreenProbeCellRayDirection(const GPUBasicData scene, uint2 probeCoord
     return tbnTransform(tbn, texelDirection);
 }
 
+// https://github.com/playdeadgames/temporal
+// AMD brixelizer GI modify version.
+float3 giClipAABB(float3 aabbMin, float3 aabbMax, float3 testSample)
+{
+    float3 aabbCenter = 0.5 * (aabbMax + aabbMin);
+    float3 extentClip = 0.5 * (aabbMax - aabbMin) + 0.001;
+
+
+    float3 colorVector = testSample - aabbCenter;
+    float3 colorVectorClip = colorVector / extentClip;
+
+    colorVectorClip  = abs(colorVectorClip);
+    float maxAbsUnit = max(max(colorVectorClip.x, colorVectorClip.y), colorVectorClip.z);
+
+    if (maxAbsUnit > 1.0) 
+    {
+        return aabbCenter + colorVector / maxAbsUnit; 
+    } 
+
+    // point is inside aabb
+    return testSample; 
+}
+
+float3 giClipAABB(float3 test, float3 center, float size)
+{
+    return giClipAABB(center - size, center + size, test);
+}
 #endif

@@ -11,7 +11,8 @@ namespace chord::graphics
 		uint32 width,
 		uint32 height,
 		VkFormat format,
-		VkImageUsageFlags usage)
+		VkImageUsageFlags usage,
+		bool bSameFrameReuse)
 	{
 		PoolTextureCreateInfo ci { };
 		ci.format      = format;
@@ -20,7 +21,7 @@ namespace chord::graphics
 		ci.imageType   = VK_IMAGE_TYPE_2D;
 		ci.arrayLayers = 6;
 		ci.flags       = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-		return GPUTexturePool::create(name, ci);
+		return GPUTexturePool::create(name, ci, bSameFrameReuse);
 	}
 
 	PoolTextureRef GPUTexturePool::create(
@@ -28,7 +29,8 @@ namespace chord::graphics
 		uint32 width,
 		uint32 height,
 		VkFormat format,
-		VkImageUsageFlags usage)
+		VkImageUsageFlags usage,
+		bool bSameFrameReuse)
 	{
 		PoolTextureCreateInfo ci { };
 		ci.format    = format;
@@ -36,7 +38,7 @@ namespace chord::graphics
 		ci.usage     = usage;
 		ci.imageType = VK_IMAGE_TYPE_2D;
 
-		return GPUTexturePool::create(name, ci);
+		return GPUTexturePool::create(name, ci, bSameFrameReuse);
 	}
 
 	GPUTexturePool::~GPUTexturePool()
@@ -81,7 +83,7 @@ namespace chord::graphics
 		}
 	}
 
-	PoolTextureRef GPUTexturePool::create(const std::string& name, const PoolTextureCreateInfo& createInfo)
+	PoolTextureRef GPUTexturePool::create(const std::string& name, const PoolTextureCreateInfo& createInfo, bool bSameFrameReuse)
 	{
 		const uint64 hashId = cityhash::cityhash64((const char*)&createInfo, sizeof(createInfo));
 		auto& freeTextures = m_rendertargets[hashId];
@@ -118,6 +120,13 @@ namespace chord::graphics
 			std::swap(freeTextures.front(), freeTextures.back()); // Use the oldest gay.
 
 			texture = freeTextures.back().texture;
+
+		#if 0
+			if (freeTextures.back().freeFrame == m_frameCounter)
+			{
+				LOG_TRACE("Reuse texture '{}' in same frame success.", texture->getName());
+			}
+		#endif	
 			texture->rename(name, false);
 			freeTextures.pop_back();
 
@@ -127,12 +136,12 @@ namespace chord::graphics
 			{
 				for (auto& texture : freeTextures)
 				{
-					texture.freeFrame = math::max(texture.freeFrame, getFrameCounter() - m_freeFrameCount + 1);
+					texture.freeFrame = math::max(texture.freeFrame, m_frameCounter - m_freeFrameCount + 1);
 				}
 			}
 		}
 
-		return std::make_shared<GPUTexturePool::PoolTexture>(texture, hashId, *this);
+		return std::make_shared<GPUTexturePool::PoolTexture>(texture, hashId, *this, bSameFrameReuse);
 	}
 
 	GPUTexturePool::PoolTexture::~PoolTexture()

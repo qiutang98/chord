@@ -51,12 +51,12 @@ namespace chord::graphics
 		{
 			for (auto& buffer : buffers)
 			{
-				buffer.freeFrame = math::max(buffer.freeFrame, getFrameCounter() - m_freeFrameCount + 1);
+				buffer.freeFrame = math::max(buffer.freeFrame, m_frameCounter - m_freeFrameCount + 1);
 			}
 		}
 	}
 
-	PoolBufferRef GPUBufferPool::create(const std::string& name, const PoolBufferCreateInfo& inputInfo)
+	PoolBufferRef GPUBufferPool::create(const std::string& name, const PoolBufferCreateInfo& inputInfo, bool bSameFrameReuse)
 	{
 		auto info = inputInfo;
 		info.size = divideRoundingUp(info.size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
@@ -91,14 +91,15 @@ namespace chord::graphics
 			recentUsedUpdate(freeBuffers);
 		}
 
-		return std::make_shared<GPUBufferPool::PoolBuffer>(buffer, hashId, *this);
+		return std::make_shared<GPUBufferPool::PoolBuffer>(buffer, hashId, *this, bSameFrameReuse);
 	}
 
 	PoolBufferGPUOnlyRef GPUBufferPool::createGPUOnly(
 		const std::string& name,
 		VkDeviceSize size,
 		VkBufferUsageFlags usage,
-		VkBufferCreateFlags flags)
+		VkBufferCreateFlags flags,
+		bool bSameFrameReuse)
 	{
 		PoolBufferCreateInfo poolInfo{};
 		poolInfo.flags = flags;
@@ -132,7 +133,7 @@ namespace chord::graphics
 			recentUsedUpdate(freeBuffers);
 		}
 
-		return std::make_shared<GPUBufferPool::GPUOnlyPoolBuffer>(buffer, hashId, *this);
+		return std::make_shared<GPUBufferPool::GPUOnlyPoolBuffer>(buffer, hashId, *this, bSameFrameReuse);
 	}
 
 

@@ -77,7 +77,7 @@ void DeferredRenderer::clearHistory(bool bClearOutput)
 {
 	m_rendererHistory = {};
 	m_ddgiCtx = {};
-	m_giWorldProbeCtx = {};
+	m_giCtx = {};
 
 	if (bClearOutput)
 	{
@@ -321,7 +321,6 @@ void DeferredRenderer::render(
 				insertTimer("DisocclusionMask", graphics);
 			}
 
-
 			auto cascadeResult = cascadeShadowEvaluate(graphics, gbuffers, viewGPUId, cascadeContext, m_rendererHistory.cascadeCtx.softShadowMask, disocclusionMask);
 			cascadeShadowCurrentFrame.softShadowMask = cascadeResult.softShadowMask;
 			insertTimer("PCSS", graphics);
@@ -330,8 +329,9 @@ void DeferredRenderer::render(
 		graphics::PoolTextureRef giResult = nullptr;
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
-			// giResult = ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
-			giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giWorldProbeCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), camera);
+			if (giResult == nullptr) giResult = ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
+			if (giResult == nullptr) giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionMask, camera);
+			
 			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("Nanite visualize", graphics);
 

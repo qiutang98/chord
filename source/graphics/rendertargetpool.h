@@ -25,10 +25,11 @@ namespace chord::graphics
 		{
 			friend GPUTexturePool;
 		public:
-			explicit PoolTexture(GPUTextureRef inTexture, uint64 hashId, GPUTexturePool& pool)
+			explicit PoolTexture(GPUTextureRef inTexture, uint64 hashId, GPUTexturePool& pool, bool bSameFrameReuse)
 				: m_texture(inTexture)
 				, m_hashId(hashId)
 				, m_pool(pool)
+				, m_bSameFrameReuse(bSameFrameReuse)
 			{
 			}
 
@@ -37,7 +38,18 @@ namespace chord::graphics
 
 			virtual ~PoolTexture();
 
+			bool shouldSameFrameReuse() const
+			{
+				return m_bSameFrameReuse;
+			}
+
+			GPUTextureRef getGPUResource() const
+			{
+				return m_texture;
+			}
+
 		protected:
+			const bool m_bSameFrameReuse;
 			const uint64 m_hashId;
 			GPUTexturePool& m_pool;
 			GPUTextureRef m_texture = nullptr;
@@ -56,7 +68,8 @@ namespace chord::graphics
 		// Create pool texture by create info.
 		std::shared_ptr<PoolTexture> create(
 			const std::string& name, 
-			const PoolTextureCreateInfo& createInfo);
+			const PoolTextureCreateInfo& createInfo,
+			bool bSameFrameReuse = true);
 
 		// Common 2d pool texture create.
 		std::shared_ptr<PoolTexture> create(
@@ -64,7 +77,8 @@ namespace chord::graphics
 			uint32 width,
 			uint32 height,
 			VkFormat format,
-			VkImageUsageFlags usage);
+			VkImageUsageFlags usage,
+			bool bSameFrameReuse = true);
 
 		// Pool cube texture create.
 		std::shared_ptr<PoolTexture> createCube(
@@ -72,7 +86,8 @@ namespace chord::graphics
 			uint32 width,
 			uint32 height,
 			VkFormat format,
-			VkImageUsageFlags usage);
+			VkImageUsageFlags usage,
+			bool bSameFrameReuse = true);
 
 	private:
 		friend PoolTexture;

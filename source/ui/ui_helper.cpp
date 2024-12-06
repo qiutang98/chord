@@ -229,7 +229,10 @@ namespace chord::ui
 		}
 
 		graphics::Swapchain& swapchain = vrd->swapchain();
-		swapchain.insertPendingResource(image);
+
+		// When draw image, we need to keep pool content unchange until frame end.
+		// So should not reuse it.
+		swapchain.insertPendingResource<graphics::GPUTexturePool::PoolTexture, false>(image);
 
 		// Require image view.
 		ImGui::Image(image->get().requireView(subRange, VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get(), size, uv0, uv1, tint_col, border_col);

@@ -63,16 +63,21 @@ void mainCS(
             SH3_gi_pack sh_pack = BATL(SH3_gi_pack, nextConfig.sh_SRV, next_world_probePhysicsId);
             world_gi_sh.unpack(sh_pack);
         #else 
-            nextConfig.sampleSH(perView, positionRS, 1.0 / 100.0, world_gi_sh);
+            nextConfig.sampleSH(perView, positionRS, world_gi_sh); 
         #endif
         }
     } 
 
+    if (world_gi_sh.isNaN())
+    {
+        world_gi_sh.init();
+    }
+
     // Update energy loss. 
-    world_gi_sh.numSample *= pushConsts.energyLose; //
+    world_gi_sh.numSample *= 0.9; // pushConsts.energyLose; //
 
     // 
     BATS(SH3_gi_pack, pushConsts.sh_uav, world_probePhysicsId, world_gi_sh.pack());
 }
 
-#endif // 
+#endif //  

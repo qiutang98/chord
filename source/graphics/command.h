@@ -8,18 +8,57 @@
 namespace chord::graphics
 {
 	class Swapchain;
-	struct CommandBuffer : NonCopyable
+	class CommandBuffer : NonCopyable
 	{
+	public:
 		explicit CommandBuffer() = default;
 		virtual ~CommandBuffer();
-
-		// All pending resources.
-		std::set<ResourceRef> pendingResources;
 
 		VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 		VkCommandPool   commandPool   = VK_NULL_HANDLE;
 
 		uint64 signalValue = 0;
+
+		template<typename T>
+		void insertPendingResource(std::shared_ptr<T> resource)
+		{
+			static_assert(std::is_base_of_v<IResource, T>);
+			if constexpr (std::is_base_of_v<GPUTexturePool::PoolTexture, T>)
+			{
+				auto ptr = std::dynamic_pointer_cast<GPUTexturePool::PoolTexture>(resource);
+				if (ptr->shouldSameFrameReuse())
+				{
+					m_pendingResources.insert(ptr->getGPUResource());
+					return;
+				}
+			}
+
+			if constexpr (std::is_base_of_v<GPUBufferPool::PoolBuffer, T>)
+			{
+				auto ptr = std::dynamic_pointer_cast<GPUBufferPool::PoolBuffer>(resource);
+				if (ptr->shouldSameFrameReuse())
+				{
+					m_pendingResources.insert(ptr->getGPUResource());
+					return;
+				}
+			}
+
+			m_pendingResources.insert(resource);
+		}
+
+		void clearPendingResource()
+		{
+			m_pendingResources.clear();
+		}
+
+		bool isPendingResourceEmpty() const
+		{
+			return m_pendingResources.empty();
+		}
+
+	private:
+		// All pending resources.
+		std::set<ResourceRef> m_pendingResources;
 	};
 	using CommandBufferRef = std::shared_ptr<CommandBuffer>;
 

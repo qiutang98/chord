@@ -28,6 +28,7 @@ CHORD_PUSHCONST(DDGITracePushConsts, pushConsts);
 #include "colorspace.h" 
 #include "debug.hlsli"
 #include "debug_line.hlsli"
+#include "raytrace_shared.hlsli"
 
 [[vk::binding(0, 1)]] RaytracingAccelerationStructure topLevelAS;
 

@@ -91,14 +91,14 @@ void mainCS(
         query.TraceRayInline(topLevelAS, traceFlag, 0xFF, ray);
         query.Proceed();
 
-        if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+        if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT) 
         {
             spawnResult.depth = -query.CommittedRayT();
-        }
+        } 
     #endif
     }
  
-    uint4 storeResult = spawnResult.pack();
+    uint3 storeResult = spawnResult.pack();
 
 #if DEBUG_NORMAL_PACK
     float3 oldNormal = spawnResult.normalRS;
@@ -111,7 +111,7 @@ void mainCS(
     }
 #endif
 
-    BATS(uint4, pushConsts.probeSpawnInfoUAV, probeLinearIndex, storeResult);
+    BATS(uint3, pushConsts.probeSpawnInfoUAV, probeLinearIndex, storeResult);
 }
 
 #endif 

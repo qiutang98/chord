@@ -11,6 +11,8 @@ struct GIScreenProbeProjectSHPushConsts
     uint probeSpawnInfoSRV;
     uint radianceSRV;
     uint shUAV;
+
+    uint statSRV;
 };
 CHORD_PUSHCONST(GIScreenProbeProjectSHPushConsts, pushConsts);
 
@@ -72,7 +74,7 @@ void mainCS(
 
     GIScreenProbeSpawnInfo spawnInfo;
     { 
-        const uint4 packProbeSpawnInfo = BATL(uint4, pushConsts.probeSpawnInfoSRV, probeLinearIndex);
+        const uint3 packProbeSpawnInfo = BATL(uint3, pushConsts.probeSpawnInfoSRV, probeLinearIndex);
         spawnInfo.unpack(packProbeSpawnInfo);
     }
 
@@ -81,7 +83,7 @@ void mainCS(
     {
         return; 
     }
-
+ 
     float3 probePositionRS;
     float3 probeNormalRS = spawnInfo.normalRS;
 
@@ -94,7 +96,24 @@ void mainCS(
     float3 rayDirection = getScreenProbeCellRayDirection(scene, probeCoord, gid, probeNormalRS);
 
     // Load radiance. 
-    float3 radiance = loadTexture2D_float3(pushConsts.radianceSRV, tid);
+    float4 radianceHitT = loadTexture2D_float4(pushConsts.radianceSRV, tid);
+
+    // 
+    float3 radiance  = radianceHitT.xyz;
+
+    // Dark area fallback.
+    {
+        float3 statRadiance;
+        if (WaveIsFirstLane()) 
+        {
+            statRadiance = loadTexture2D_float3(pushConsts.statSRV, probeCoord);
+        }
+        statRadiance = WaveReadLaneFirst(statRadiance); 
+        if (all(radiance < kFloatEpsilon))
+        {
+            radiance = statRadiance;
+        }
+    }
 
     // 
     SH3_gi shResult;

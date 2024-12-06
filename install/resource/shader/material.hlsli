@@ -1,4 +1,5 @@
 #pragma once 
+#include "nanite_shared.hlsli"
 
 struct TinyGBufferContext
 {
@@ -66,6 +67,15 @@ void loadGLTFMetallicRoughnessPBRMaterial(
         baseColor = baseColorTexture.SampleGrad(baseColorSampler, meshUv, meshUv_ddx, meshUv_ddy) * materialInfo.baseColorFactor;
     }
     baseColor.xyz = mul(sRGB_2_AP1, baseColor.xyz);
+
+    float3 emissiveColor = 0.0;
+    {
+        Texture2D<float4> emissiveTexture = TBindless(Texture2D, float4, materialInfo.emissiveTexture);
+        SamplerState emissiveSampler = Bindless(SamplerState, materialInfo.emissiveSampler);
+        emissiveColor = emissiveTexture.SampleGrad(emissiveSampler, meshUv, meshUv_ddx, meshUv_ddy).xyz * materialInfo.emissiveFactor;
+    }
+    emissiveColor = mul(sRGB_2_AP1, emissiveColor);
+    gbufferCtx.color = emissiveColor;
 
     // 
     gbufferCtx.baseColor = baseColor;

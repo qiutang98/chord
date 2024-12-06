@@ -23,17 +23,29 @@ namespace chord::graphics
 		public:
 			virtual ~PoolBuffer();
 
-			explicit PoolBuffer(GPUBufferRef inBuffer, uint64 hashId, GPUBufferPool& pool)
+			explicit PoolBuffer(GPUBufferRef inBuffer, uint64 hashId, GPUBufferPool& pool, bool bSameFrameReuse = true)
 				: m_buffer(inBuffer)
 				, m_hashId(hashId)
 				, m_pool(pool)
+				, m_bSameFrameReuse(bSameFrameReuse)
 			{
 			}
 
 			const GPUBuffer& get() const { return *m_buffer; }
 			GPUBuffer& get() { return *m_buffer; }
 
+			bool shouldSameFrameReuse() const
+			{
+				return m_bSameFrameReuse;
+			}
+
+			GPUBufferRef getGPUResource() const
+			{
+				return m_buffer;
+			}
+
 		protected:
+			const bool m_bSameFrameReuse;
 			const uint64 m_hashId;
 			GPUBufferPool& m_pool;
 			GPUBufferRef m_buffer = nullptr;
@@ -52,14 +64,15 @@ namespace chord::graphics
 		// Generic buffer.
 		std::shared_ptr<PoolBuffer> create(
 			const std::string& name,
-			const PoolBufferCreateInfo& info);
+			const PoolBufferCreateInfo& info,
+			bool bSameFrameReuse = true);
 
 		class GPUOnlyPoolBuffer : public PoolBuffer
 		{
 			friend GPUBufferPool;
 		public:
-			explicit GPUOnlyPoolBuffer(GPUOnlyBufferRef inBuffer, uint64 hashId, GPUBufferPool& pool)
-				: PoolBuffer(inBuffer, hashId, pool)
+			explicit GPUOnlyPoolBuffer(GPUOnlyBufferRef inBuffer, uint64 hashId, GPUBufferPool& pool, bool bSameFrameReuse = true)
+				: PoolBuffer(inBuffer, hashId, pool, bSameFrameReuse)
 			{
 			}
 
@@ -70,14 +83,15 @@ namespace chord::graphics
 			const std::string& name,
 			VkDeviceSize size,
 			VkBufferUsageFlags usage,
-			VkBufferCreateFlags flags = 0);
+			VkBufferCreateFlags flags = 0,
+			bool bSameFrameReuse = true);
 
 		class HostVisiblePoolBuffer : public PoolBuffer
 		{
 			friend GPUBufferPool;
 		public:
 			explicit HostVisiblePoolBuffer(HostVisibleGPUBufferRef inBuffer, uint64 hashId, GPUBufferPool& pool)
-				: PoolBuffer(inBuffer, hashId, pool)
+				: PoolBuffer(inBuffer, hashId, pool, false)
 			{
 			}
 

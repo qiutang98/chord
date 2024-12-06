@@ -78,7 +78,7 @@ namespace chord::graphics::helper
 				VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 				SizedBuffer(sizeof(instances[0]) * instances.size(), (void*)instances.data()));
 
-			activeCmd->pendingResources.insert(instanceGPU);
+			activeCmd->insertPendingResource(instanceGPU);
 			instBufferAddr = instanceGPU->get().getDeviceAddress();
 		}
 
@@ -178,8 +178,8 @@ namespace chord::graphics::helper
 		// Update cached sized info.
 		m_buildSizeInfo = sizeInfo;
 
-		activeCmd->pendingResources.insert(m_tlas);
-		activeCmd->pendingResources.insert(m_scratchBuffer);
+		activeCmd->insertPendingResource(m_tlas);
+		activeCmd->insertPendingResource(m_scratchBuffer);
 
 		VkDeviceAddress scratchAddress = m_scratchBuffer->get().getDeviceAddress();
 
@@ -384,7 +384,7 @@ namespace chord::graphics::helper
 			buildInfos.dstAccelerationStructure = m_blas[i]->accel;
 
 			//
-			activeCmd->pendingResources.insert(m_blas[i]);
+			activeCmd->insertPendingResource(m_blas[i]);
 
 			// Find size to build on the device
 			std::vector<uint32> maxPrimCount(blas.asBuildOffsetInfo.size());
@@ -420,7 +420,7 @@ namespace chord::graphics::helper
 			m_updateScratchBuffer = getContext().getBufferPool().create(getRuntimeUniqueGPUASName("blas_update_scratch_vma"), ci);
 		}
 
-		activeCmd->pendingResources.insert(m_updateScratchBuffer);
+		activeCmd->insertPendingResource(m_updateScratchBuffer);
 
 		for (size_t i = 0; i < input.size(); i++)
 		{

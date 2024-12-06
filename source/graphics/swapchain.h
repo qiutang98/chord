@@ -89,8 +89,18 @@ namespace chord::graphics
 		// Call this event when window swapchain recreated.
 		Events<Swapchain> onAfterSwapchainRecreate;
 
-		void insertPendingResource(ResourceRef resource)
+		
+		template<typename T, bool bCheckPoolType = true>
+		void insertPendingResource(std::shared_ptr<T> resource)
 		{
+			static_assert( std::is_base_of_v<IResource, T>);
+			if constexpr (bCheckPoolType)
+			{
+				// Warning: insert pending resource will keep resource alive until current frame end all command execution.
+				static_assert(!std::is_base_of_v<GPUTexturePool::PoolTexture, T>);
+				static_assert(!std::is_base_of_v<GPUBufferPool::PoolBuffer, T>);
+			}
+
 			m_pendingResources.at(m_currentFrame).insert(resource);
 		}
 

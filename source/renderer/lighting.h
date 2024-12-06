@@ -63,10 +63,11 @@ namespace chord
 		graphics::GraphicsQueue& queue,
 		const AtmosphereLut& luts,
 		const CascadeShadowContext& cascadeCtx,
-		GIWorldProbeContext& giWorldProbeCtx,
+		GIContext& giWorldProbeCtx,
 		GBufferTextures& gbuffers,
 		uint32 cameraViewId,
 		graphics::helper::AccelKHRRef tlas,
+		graphics::PoolTextureRef disocclusionMask,
 		ICamera* camera);
 
 	extern graphics::PoolTextureRef ddgiUpdate(

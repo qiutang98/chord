@@ -44,7 +44,7 @@ void mainCS(
     // Load spawn info.
     GIScreenProbeSpawnInfo spawnInfo;
     { 
-        const uint4 packProbeSpawnInfo = BATL(uint4, pushConsts.probeSpawnInfoSRV, screen_probeLinearIndex);
+        const uint3 packProbeSpawnInfo = BATL(uint3, pushConsts.probeSpawnInfoSRV, screen_probeLinearIndex);
         spawnInfo.unpack(packProbeSpawnInfo);
     }
 
@@ -59,25 +59,10 @@ void mainCS(
     GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
 
     float3 jitterOffset;
-    #if 0
     {
         float3 xi = STBN_float3(scene.blueNoiseCtx, spawnInfo.pixelPosition, scene.frameCounter) * 2.0 - 1.0;
         jitterOffset = xi * config.probeSpacing;
     }
-    #else
-    {
-        //
-        float3 screen_probeViewDir = normalize(screen_probePositionRS);
-        float3 screen_probeHalfDir = normalize(spawnInfo.normalRS - screen_probeViewDir); // Half vector. 
-
-        float xi = (pcgHash(screen_probeLinearIndex + pcgHash(scene.frameCounter)) & 0xffffu) / 65535.0;
-        float DoV = max(0.0, dot(spawnInfo.normalRS, -screen_probeHalfDir));
-        float jk = lerp(1.0, 1.0 / 8.0, DoV);
-        xi = lerp(-jk, jk, xi);
-
-        jitterOffset = -screen_probeHalfDir * xi * config.probeSpacing;
-    }
-    #endif
 
     // Load screen probe SH.
     SH3_gi screen_gi_sh;

@@ -1,6 +1,8 @@
 #pragma once 
 
 #include "base.hlsli"
+#include "material.hlsli"
+#include "raytrace_shared.hlsli"
 
 // Physical based lighting collections.
 // http://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf
@@ -31,6 +33,18 @@ struct ShadingResult
     }
 };
 
+// [ Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II" ]
+// Adaptation to fit our G term.
+float2 envBRDFApproxLazarov(float roughness, float NoV)
+{
+	const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
+	const float4 c1 = { 1, 0.0425, 1.04, -0.04 };
+	float4 r = roughness * c0 + c1;
+	float a004 = min(r.x * r.x, exp2(-9.28 * NoV)) * r.x + r.y;
+	float2 AB = float2(-1.04, 1.04) * a004 + r.zw;
+	return AB;
+}
+
 // PBR material info to evaluate shade.
 struct PBRMaterial
 {   
@@ -47,6 +61,24 @@ struct PBRMaterial
     void initGltfMetallicRoughnessPBR(in const TinyGBufferContext g)
     {
         lightingType  = kLightingType_GLTF_MetallicRoughnessPBR;
+
+        //
+        diffuseColor  = getDiffuseColor(g.baseColor.xyz, g.metallic);
+        specularColor = getSpecularColor(g.baseColor.xyz, g.metallic);
+
+        // 
+        float reflectance = max(max(specularColor.r, specularColor.g), specularColor.b);
+        reflectance0 = specularColor;
+
+        // Anything less than 2% is physically impossible and is instead considered to be shadowing. Compare to "Real-Time-Rendering" 4th editon on page 325.
+        reflectance90 = clamp(reflectance * 50.0, 0.0, 1.0);
+
+        roughness = g.roughness;
+    }
+
+    void initFromRayHitMaterialInfo(in const RayHitMaterialInfo g)
+    {
+       lightingType  = kLightingType_GLTF_MetallicRoughnessPBR;
 
         //
         diffuseColor  = getDiffuseColor(g.baseColor.xyz, g.metallic);

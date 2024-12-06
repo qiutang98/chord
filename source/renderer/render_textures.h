@@ -44,6 +44,8 @@ namespace chord
 		graphics::PoolTextureRef aoRoughnessMetallic = nullptr;
 		static auto aoRoughnessMetallicFormat() { return VK_FORMAT_R8G8B8A8_UNORM; }
 
+		graphics::PoolTextureRef baseColor = nullptr;
+		static auto baseColorFormat() { return VK_FORMAT_B10G11R11_UFLOAT_PACK32; }
 
 		graphics::PoolTextureRef depth_Half = nullptr;
 		static auto depthHalfFormat() { return VK_FORMAT_R32_SFLOAT; }

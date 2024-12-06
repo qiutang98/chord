@@ -1,9 +1,6 @@
 // 2x downsample pass for GBuffer.
 #include "base.h"
 
-#define HALF_DOWNSAMPLE_PASS_TYPE_GBUFFER 0
-#define HALF_DOWNSAMPLE_PASS_TYPE_DIFFUSE 1
-
 struct HalfDownsamplePushConsts
 {
     CHORD_DEFAULT_COMPARE_ARCHIVE(HalfDownsamplePushConsts);

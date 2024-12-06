@@ -24,6 +24,7 @@ struct LightingPushConsts
 
     uint irradianceTextureId;
     uint linearSampler;
+    uint baseColorId;
 };
 CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 
@@ -47,6 +48,7 @@ void exportGbuffer(in const TinyGBufferContext g, uint2 id)
     storeRWTexture2D_float3(pushConsts.sceneColorId,          id, g.color);
 
 #if LIGHTING_TYPE != kLightingType_None
+    storeRWTexture2D_float3(pushConsts.baseColorId,           id, float3(g.baseColor.xyz));
     storeRWTexture2D_float4(pushConsts.vertexNormalRSId,      id, float4(g.vertexNormalRS * 0.5 + 0.5, 1.0f));
     storeRWTexture2D_float4(pushConsts.pixelNormalRSId,       id, float4(g.pixelNormalRS  * 0.5 + 0.5, 1.0f));
     storeRWTexture2D_float2(pushConsts.motionVectorId,        id, g.motionVector);
@@ -211,7 +213,7 @@ void gltfMetallicRoughnessPBR_Lighting(
     } 
 
     // 
-    g.color = shadingResult.color();
+    g.color += shadingResult.color();
 }
 
 [numthreads(64, 1, 1)]
@@ -240,10 +242,10 @@ void mainCS(
 
 #if DEBUG_CHECK_2x2_TILE
     // One lane handle 2x2 tile continually.
-    uint2 halfStorePos = 0;
+    uint2 halfStorePos = 0; 
 #endif
 
-    [unroll(4)]
+    [unroll(4)] 
     for (uint i = 0; i < 4; i ++)
     {
         const uint2 dispatchPos = tileOffset + remap8x8((localThreadIndex % 16) * 4 + i);

@@ -76,5 +76,60 @@ float4 uniformSampleHemisphere(float2 E)
 	return float4(H, pdf);
 }
 
+// https://www.mathematik.uni-marburg.de/~thormae/lectures/graphics1/code/ImportanceSampling/importance_sampling_notes.pdf
+// Based on http://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_slides.pdf
+// https://bruop.github.io/ibl/
+float3 importanceSampleGGX(float2 Xi, float roughness) 
+{
+	// Maps a 2D point to a hemisphere with spread based on roughness.
+	float alpha = roughness * roughness;
+
+    // Sample in spherical coordinates.
+    float phi = 2.0 * kPI * Xi.x;
+	float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (alpha * alpha - 1.0) * Xi.y));
+	float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+    // Construct tangent space sample vector.
+	return float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+}
+
+// http://jcgt.org/published/0007/04/01/paper.pdf by Eric Heitz
+// Input Ve: view direction
+// Input alpha_x, alpha_y: roughness parameters
+// Input U1, U2: uniform random numbers
+// Output Ne: normal sampled with PDF D_Ve(Ne) = G1(Ve) * max(0, dot(Ve, Ne)) * D(Ne) / Ve.z
+float3 importanceSampleGGXVNDF(float3 Ve, float alpha_x, float alpha_y, float U1, float U2) 
+{
+    // Section 3.2: transforming the view direction to the hemisphere configuration
+    float3 Vh = normalize(float3(alpha_x * Ve.x, alpha_y * Ve.y, Ve.z));
+
+    // Section 4.1: orthonormal basis (with special case if cross product is zero)
+    float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+    float3 T1 = lensq > 0 ? float3(-Vh.y, Vh.x, 0) * rsqrt(lensq) : float3(1, 0, 0);
+    float3 T2 = cross(Vh, T1);
+
+    // Section 4.2: parameterization of the projected area
+    float r = sqrt(U1);
+
+    float phi = 2.0 * kPI * U2;
+
+	// 
+    float t1 = r * cos(phi);
+    float t2 = r * sin(phi);
+
+	// 
+    float s = 0.5 * (1.0 + Vh.z);
+    t2 = (1.0 - s) * sqrt(1.0 - t1 * t1) + s * t2;
+
+    // Section 4.3: reprojection onto hemisphere
+    float3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - t1 * t1 - t2 * t2)) * Vh;
+
+    // Section 3.4: transforming the normal back to the ellipsoid configuration
+    float3 Ne = normalize(float3(alpha_x * Nh.x, alpha_y * Nh.y, max(0.0, Nh.z)));
+
+	// 
+    return Ne;
+}
+
 
 #endif 

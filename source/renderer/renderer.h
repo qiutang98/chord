@@ -116,6 +116,6 @@ namespace chord
 		graphics::helper::TLASBuilder m_tlas;
 
 		DDGIContext m_ddgiCtx;
-		GIWorldProbeContext m_giWorldProbeCtx;
+		GIContext m_giCtx;
 	};
 }

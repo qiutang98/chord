@@ -150,7 +150,7 @@ namespace chord
 		uint pixelNormalUAV         = asUAV(queue, gbuffers.pixelRSNormal);
 		uint motionVectorUAV        = asUAV(queue, gbuffers.motionVector);
 		uint aoRoughnessMetallicUAV = asUAV(queue, gbuffers.aoRoughnessMetallic);
-
+		uint baseColorUAV           = asUAV(queue, gbuffers.baseColor);
 		for (uint i = 0; i < uint(EShadingType::MAX); i++)
 		{
 			auto lightingTileCtx = prepareShadingTileParam(queue, EShadingType(i), marker);
@@ -166,7 +166,7 @@ namespace chord
 			pushConst.pixelNormalRSId = pixelNormalUAV;
 			pushConst.motionVectorId = motionVectorUAV;
 			pushConst.aoRoughnessMetallicId = aoRoughnessMetallicUAV;
-
+			pushConst.baseColorId = baseColorUAV;
 			pushConst.drawedMeshletCmdId = asSRV(queue, drawMeshletCmdBuffer);
 			pushConst.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
 
