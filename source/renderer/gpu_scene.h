@@ -196,14 +196,19 @@ namespace chord
 			data.GLTFPrimitiveDataBuffer = getGLTFPrimitiveDataPool().getBindlessSRVId();
 			data.GLTFPrimitiveDetailBuffer = getGLTFPrimitiveDetailPool().getBindlessSRVId();
 			data.GLTFMaterialBuffer = getGLTFMaterialPool().getBindlessSRVId();
+			data.brdfLut = getBRDFLutSRV();
 		}
 
+		uint32 getBRDFLutSRV() const;
+		graphics::PoolTextureRef getBRDFLut() const { return m_brdf; }
 	private:
 		friend void enqueueGPUSceneUpdate();
 		void update(uint64 frameCounter, graphics::GraphicsOrComputeQueue& computeQueue);
 
 	private:
 		uint64 m_frameCounter = -1;
+
+		graphics::PoolTextureRef m_brdf = nullptr;
 
 		GPUSceneGLTFPrimitiveAssetPool m_gltfPrimitiveDataPool;
 		GPUSceneGLTFPrimitiveDetailPool m_gltfPrimitiveDetailPool;

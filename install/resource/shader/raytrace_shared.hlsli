@@ -120,8 +120,8 @@ struct RayHitMaterialInfo
             SamplerState metallicRoughnessSampler      = Bindless(SamplerState, materialInfo.metallicRoughnessSampler);
 
             float4 metallicRoughnessRaw = metallicRoughnessTexture.SampleLevel(metallicRoughnessSampler, uv, sampleTextureLod);
-            metallic  = metallicRoughnessRaw.g;
-            roughness = metallicRoughnessRaw.b;
+            metallic  = metallicRoughnessRaw.b;
+            roughness = metallicRoughnessRaw.g;
         }
         else
         {

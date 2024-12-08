@@ -95,6 +95,7 @@ namespace chord
 		int3 probeDim;
 
 		graphics::PoolBufferRef probeIrradianceBuffer;
+		graphics::PoolBufferRef probeDirectionBuffer;
 	};
 	struct GIContext
 	{
@@ -102,6 +103,9 @@ namespace chord
 		graphics::PoolTextureRef screenProbeTraceRadiance = nullptr;
 		graphics::PoolTextureRef screenProbeSampleRT = nullptr;
 		graphics::PoolTextureRef historyDiffuseRT = nullptr;
+
+
+		graphics::PoolTextureRef historySpecularRT = nullptr;
 
 		std::vector<GIWorldProbeVolumeResource> volumes;
 	};

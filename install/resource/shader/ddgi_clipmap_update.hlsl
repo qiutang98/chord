@@ -7,7 +7,7 @@ struct DDGIClipmapUpdatePushConsts
     int3 currentScrollOffset;
     uint cameraViewId;
 
-    bool bClearAll;
+    uint bClearAll;
     uint ddgiConfigBufferId;
     uint ddgiConfigId;
     uint probeTracedMarkUAV; 

@@ -16,6 +16,7 @@
 #define kGIWorldProbeMaxCascadeCount 8
 #define kMinProbeSpacing             0.5f
 #define kGIMaxSampleCount            64
+#define kGIMaxGlossyRoughness        0.4
 
 struct SH3_gi_pack
 {
@@ -145,13 +146,13 @@ struct GIWorldProbeVolumeConfig
     uint sh_SRV; //
 
     float3 probeCenterRS;
-    uint pad0; //
+    uint dir_UAV; //
 
     int3 scrollOffset; 
     int pad1; //
 
     int3 currentScrollOffset; 
-    bool bRestAll; //
+    bool bResetAll; //
 
 #ifndef __cplusplus
     int getProbeCount()
@@ -189,7 +190,7 @@ struct GIWorldProbeVolumeConfig
 
     bool isHistoryValid(int3 virtualId)
     {
-        if (bRestAll)
+        if (bResetAll)
         {
             return false;
         }
@@ -245,9 +246,22 @@ struct GIWorldProbeVolumeConfig
         return volumeBlendWeight;
     }
 
-    bool evaluateSH(in const PerframeCameraView perView, float3 positionRS, float3 normalRS, out float3 irradiance, bool bCut = false)
+    // sampleWeightMode: 0 is saturate weight. 
+    //                   1 is cut mode. 
+    //                   other don't care.
+
+    bool evaluateSH(
+        in const PerframeCameraView perView, 
+        float3 positionRS, 
+        float3 normalRS, 
+        out float3 irradiance,
+        out float minSampleCount,
+        int sampleWeightMode)
     {
         irradiance = 0.0;
+
+        // Init min sample count. 
+        minSampleCount = kGIMaxSampleCount; 
 
         // 
         float weightSum = 0.0;
@@ -275,15 +289,22 @@ struct GIWorldProbeVolumeConfig
             }
 
             float sampleWeight = 1.0;
-            if (sample_world_gi_sh.numSample < 1.0)
+            if (sampleWeightMode == 0)
             {
-                if (bCut)
+                sampleWeight = saturate(sample_world_gi_sh.numSample);
+            }
+            else if(sampleWeightMode == 1)
+            {
+                if (sample_world_gi_sh.numSample < 1.0)
                 {
                     continue;
                 }
-                sampleWeight = sample_world_gi_sh.numSample;
             }
 
+            // 
+            minSampleCount = min(minSampleCount, sample_world_gi_sh.numSample);
+
+            // 
             float w = trilinearWeight;
 
             irradiance += sampleWeight * w * SH_Evalulate(normalRS, sample_world_gi_sh.c);
@@ -297,7 +318,11 @@ struct GIWorldProbeVolumeConfig
         return weightSum > 0.0;
     }
 
-    bool sampleSH(in const PerframeCameraView perView, float3 positionRS, inout SH3_gi world_gi_sh)
+    bool sampleSH(
+        in const PerframeCameraView perView, 
+        float3 positionRS, 
+        inout SH3_gi world_gi_sh, 
+        int sampleWeightMode)
     {
         world_gi_sh.init();
 
@@ -324,9 +349,16 @@ struct GIWorldProbeVolumeConfig
             }
 
             float sampleWeight = 1.0;
-            if (sample_world_gi_sh.numSample < 1.0)
+            if (sampleWeightMode == 0)
             {
-                sampleWeight = sample_world_gi_sh.numSample;
+                sampleWeight = saturate(sample_world_gi_sh.numSample);
+            }
+            else if(sampleWeightMode == 1)
+            {
+                if (sample_world_gi_sh.numSample < 1.0)
+                {
+                    continue;
+                }
             }
 
             world_gi_sh.add(sample_world_gi_sh, trilinearWeight * sampleWeight);
@@ -460,7 +492,7 @@ float3 getScreenProbeCellRayDirection(const GPUBasicData scene, uint2 probeCoord
 
 // https://github.com/playdeadgames/temporal
 // AMD brixelizer GI modify version.
-float3 giClipAABB(float3 aabbMin, float3 aabbMax, float3 testSample)
+float3 giClipAABB_compute(float3 aabbMin, float3 aabbMax, float3 testSample)
 {
     float3 aabbCenter = 0.5 * (aabbMax + aabbMin);
     float3 extentClip = 0.5 * (aabbMax - aabbMin) + 0.001;
@@ -483,6 +515,6 @@ float3 giClipAABB(float3 aabbMin, float3 aabbMax, float3 testSample)
 
 float3 giClipAABB(float3 test, float3 center, float size)
 {
-    return giClipAABB(center - size, center + size, test);
+    return giClipAABB_compute(center - size, center + size, test);
 }
 #endif

@@ -7,14 +7,14 @@
 #include <shader/gi_screen_probe_interpolate.hlsl>
 #include <shader/gi_world_probe_sh_inject.hlsl>
 #include <shader/gi_world_probe_sh_update.hlsl>
+#include <shader/gi_world_probe_sh_propagate.hlsl>
 #include <shader/gi_screen_probe_sh_reproject.hlsl>
 #include <shader/gi_history_reprojection.hlsl>
-#include <shader/gi_spatial_filter.hlsl>
+#include <shader/gi_spatial_filter_diffuse.hlsl>
 #include <shader/gi_upsample.hlsl>
 #include <shader/gi_specular_trace.hlsl>
-
-#include <shader/gi_denoise.hlsl>
-
+#include <shader/gi_spatial_filter_specular.hlsl>
+#include <shader/gi_spatial_specular_remove_fireflare.hlsl>
 #include <random>
 
 using namespace chord;
@@ -43,9 +43,16 @@ static AutoCVarRef cVarGISkylightLeaking(
 
 static uint32 sGIEnableSpatialFilter = 1;
 static AutoCVarRef cVarGIEnableSpatialFilter(
-	"r.gi.spatial",
+	"r.gi.diffuse.spatial",
 	sGIEnableSpatialFilter,
-	"GI spatial filter pass enable or not."
+	"GI diffuse spatial filter pass enable or not."
+);
+
+static uint32 sGIEnableSpecularSpatialFilter = 1;
+static AutoCVarRef cVarGISpecularEnableSpatialFilter(
+	"r.gi.specular.spatial",
+	sGIEnableSpecularSpatialFilter,
+	"GI specular spatial filter pass enable or not."
 );
 
 PRIVATE_GLOBAL_SHADER(GIScreenProbeSpawnCS, "resource/shader/gi_screen_probe_spawn.hlsl", "mainCS", EShaderStage::Compute);
@@ -54,15 +61,14 @@ PRIVATE_GLOBAL_SHADER(GIScreenProbeTraceCS, "resource/shader/gi_screen_probe_tra
 PRIVATE_GLOBAL_SHADER(GIScreenProbeProjectSHCS, "resource/shader/gi_screen_probe_project_sh.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIScreenProbeSHInjectCS, "resource/shader/gi_world_probe_sh_inject.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIWorldProbeSHUpdateCS, "resource/shader/gi_world_probe_sh_update.hlsl", "mainCS", EShaderStage::Compute); 
+PRIVATE_GLOBAL_SHADER(GIWorldProbeSHPropagateCS, "resource/shader/gi_world_probe_sh_propagate.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIScreenProbeSHReprojectCS, "resource/shader/gi_screen_probe_sh_reproject.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIHistoryReprojectCS, "resource/shader/gi_history_reprojection.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GISpatialFilterCS, "resource/shader/gi_spatial_filter.hlsl", "mainCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(GIDiffuseSpatialFilterCS, "resource/shader/gi_spatial_filter_diffuse.hlsl", "mainCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(GISpecularSpatialFilterCS, "resource/shader/gi_spatial_filter_specular.hlsl", "mainCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(GISpecularRemoveFireFlareFilterCS, "resource/shader/gi_spatial_specular_remove_fireflare.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GISpatialUpsampleCS, "resource/shader/gi_upsample.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GISpecularTraceCS, "resource/shader/gi_specular_trace.hlsl", "mainCS", EShaderStage::Compute);
-
-//
-PRIVATE_GLOBAL_SHADER(GIDenoiseCS, "resource/shader/gi_denoise.hlsl", "mainCS", EShaderStage::Compute);
-
 
 
 graphics::PoolTextureRef chord::giUpdate(
@@ -75,11 +81,16 @@ graphics::PoolTextureRef chord::giUpdate(
 	uint32 cameraViewId, 
 	graphics::helper::AccelKHRRef tlas, 
 	graphics::PoolTextureRef disocclusionMask,
-	ICamera* camera)
+	ICamera* camera,
+	graphics::PoolTextureRef depth_Half_LastFrame,
+	graphics::PoolTextureRef pixelNormalRS_Half_LastFrame,
+	bool bCameraCut)
 {
 	if (!sEnableGI || !getContext().isRaytraceSupport())
 	{
-		giCtx = {};
+		giCtx = { };
+		bCameraCut = true;
+
 		return nullptr;
 	}
 
@@ -140,6 +151,11 @@ graphics::PoolTextureRef chord::giUpdate(
 						sizeof(SH3_gi_pack) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z, 
 						VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 					queue.clearUAV(resource.probeIrradianceBuffer, 0U);
+
+					resource.probeDirectionBuffer = bufferPool.createGPUOnly("GI-WorldProbe-Direction",
+						sizeof(uint) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z,
+						VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+					queue.clearUAV(resource.probeDirectionBuffer, 0U);
 				}
 
 				// 
@@ -160,7 +176,9 @@ graphics::PoolTextureRef chord::giUpdate(
 				worldProbeConfigs[i].probeSpacing = resource.probeSpacing;
 				worldProbeConfigs[i].sh_SRV = asSRV(queue, resource.probeIrradianceBuffer);
 
-				worldProbeConfigs[i].bRestAll = bHistoryInvalid;
+				worldProbeConfigs[i].dir_UAV = asUAV(queue, resource.probeDirectionBuffer);
+
+				worldProbeConfigs[i].bResetAll = bHistoryInvalid;
 
 				// Scrolling.
 				if (bHistoryInvalid)
@@ -205,24 +223,53 @@ graphics::PoolTextureRef chord::giUpdate(
 		{
 			auto& resource = giCtx.volumes[i];
 
-			GIWorldProbeSHUpdatePushConsts pushConst{};
-			pushConst.cameraViewId          = cameraViewId;
-			pushConst.clipmapConfigBufferId = worldProbeConfigBufferId;
-			pushConst.clipmapLevel          = i;
-			pushConst.sh_uav                = asUAV(queue, resource.probeIrradianceBuffer);
-			pushConst.bLastCascade          = i == kCascadeCount - 1;
-			pushConst.energyLose            = 0.90f;
+			auto tempProbeIrradianceBuffer = bufferPool.createGPUOnly("GI-WorldProbe-SH-Irradiance-Temp",
+				sizeof(SH3_gi_pack) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z,
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 			const uint dispatchDim = divideRoundingUp(kProbeDim * kProbeDim * kProbeDim, 64);
 
-			auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHUpdateCS>();
-			addComputePass2(queue,
-				"GI: WorldProbeSHUpdate",
-				getContext().computePipe(computeShader, "GI: WorldProbeSHUpdate"),
-				pushConst,
-				{ dispatchDim, 1, 1 });
+			{
+				asSRV(queue, resource.probeIrradianceBuffer);
 
-			asSRV(queue, resource.probeIrradianceBuffer);
+				GIWorldProbeSHUpdatePushConsts pushConst{};
+				pushConst.cameraViewId = cameraViewId;
+				pushConst.clipmapConfigBufferId = worldProbeConfigBufferId;
+				pushConst.clipmapLevel = i;
+				pushConst.sh_uav = asUAV(queue, tempProbeIrradianceBuffer);
+				pushConst.bLastCascade = i == kCascadeCount - 1;
+			
+
+
+
+				auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHUpdateCS>();
+				addComputePass2(queue,
+					"GI: WorldProbeSHUpdate",
+					getContext().computePipe(computeShader, "GI: WorldProbeSHUpdate"),
+					pushConst,
+					{ dispatchDim, 1, 1 });
+			}
+
+			{
+				GIWorldProbeSHPropagatePushConsts pushConst{};
+				pushConst.cameraViewId = cameraViewId;
+				pushConst.clipmapConfigBufferId = worldProbeConfigBufferId;
+				pushConst.clipmapLevel = i;
+				pushConst.sh_uav  = asUAV(queue, resource.probeIrradianceBuffer);
+				pushConst.sh_srv  = asSRV(queue, tempProbeIrradianceBuffer);
+				pushConst.dir_srv = asSRV(queue, resource.probeDirectionBuffer);
+				pushConst.energyLose = 0.90f;
+
+				auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHPropagateCS>();
+				addComputePass2(queue,
+					"GI: WorldProbeSHPropagate",
+					getContext().computePipe(computeShader, "GI: WorldProbeSHPropagate"),
+					pushConst,
+					{ dispatchDim, 1, 1 });
+
+				asSRV(queue, resource.probeIrradianceBuffer);
+			}
+
 		}
 	}
 
@@ -302,7 +349,7 @@ graphics::PoolTextureRef chord::giUpdate(
 		pushConst.reprojectionRadianceUAV = asUAV(queue, probeReprojectTraceRadianceRT);
 
 		pushConst.screenProbeSampleUAV = asUAV(queue, giCtx.screenProbeSampleRT);
-
+		pushConst.bResetAll = bHistoryInvalid;
 		auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeSHReprojectCS>();
 		addComputePass2(queue,
 			"GI: ScreenProbeSHReproject",
@@ -316,9 +363,6 @@ graphics::PoolTextureRef chord::giUpdate(
 	// Pass #1: Screen probe trace. 
 	auto probeTraceRadianceRT = rtPool.create("GI-ScreenProbe-TraceRadiance", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 	auto newScreenProbeSHBuffer = bufferPool.createGPUOnly("GI-ScreenProbe-SH", sizeof(SH3_gi_pack) * screenProbeDim.x * screenProbeDim.y, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-	
-
-
 	{
 		{
 			GIProbeTracePushConsts tracePushConsts{};
@@ -353,7 +397,7 @@ graphics::PoolTextureRef chord::giUpdate(
 			tracePushConsts.skyLightLeaking = sGISkylightLeaking;
 			tracePushConsts.historyTraceSRV = asSRV(queue, probeReprojectTraceRadianceRT);
 			tracePushConsts.screenProbeSampleSRV = asSRV(queue, giCtx.screenProbeSampleRT);
-			tracePushConsts.statSRV = asSRV(queue, probeReprojectStatRadianceRT);
+			tracePushConsts.statSRV = bHistoryInvalid ? kUnvalidIdUint32 : asSRV(queue, probeReprojectStatRadianceRT);
 			auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeTraceCS>();
 			addComputePass(queue,
 				"GI: ScreenProbeTrace",
@@ -382,7 +426,7 @@ graphics::PoolTextureRef chord::giUpdate(
 				pushConst.radianceSRV = asSRV(queue, probeTraceRadianceRT);
 				pushConst.shUAV       = asUAV(queue, newScreenProbeSHBuffer);
 				pushConst.gbufferDim  = halfDim;
-				pushConst.statSRV = asSRV(queue, probeReprojectStatRadianceRT);
+				pushConst.statSRV = bHistoryInvalid ? kUnvalidIdUint32 : asSRV(queue, probeReprojectStatRadianceRT);
 				auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeProjectSHCS>();
 				addComputePass2(queue,
 					"GI: ScreenProbeSH",
@@ -428,15 +472,85 @@ graphics::PoolTextureRef chord::giUpdate(
 		}
 	}
 
+	static constexpr float kSpecularRayMissDistance = 1e5f; // Large enough for ray miss sky mark. 
+	graphics::PoolTextureRef specularTraceRadianceRT = nullptr;
+	{
+		specularTraceRadianceRT = rtPool.create("GI-Specular-TraceRadiance", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+		GISpecularTracePushConsts tracePushConsts{};
+
+		tracePushConsts.gbufferDim = halfDim;
+		tracePushConsts.cascadeCount = cascadeCtx.depths.size();
+		tracePushConsts.shadowViewId = cascadeCtx.viewsSRV;
+		tracePushConsts.shadowDepthIds = cascadeCtx.cascadeShadowDepthIds;
+		tracePushConsts.transmittanceId = asSRV(queue, luts.transmittance);
+		tracePushConsts.scatteringId = asSRV3DTexture(queue, luts.scatteringTexture);
+		if (luts.optionalSingleMieScatteringTexture != nullptr)
+		{
+			tracePushConsts.singleMieScatteringId = asSRV3DTexture(queue, luts.optionalSingleMieScatteringTexture);
+		}
+		tracePushConsts.irradianceTextureId = asSRV(queue, luts.irradianceTexture);
+		tracePushConsts.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+		tracePushConsts.rayMissDistance = kSpecularRayMissDistance;
+		tracePushConsts.maxRayTraceDistance = 800.0f;
+		tracePushConsts.cameraViewId = cameraViewId;
+		tracePushConsts.rayHitLODOffset = 2.0f;
+
+		for (int i = 0; i < worldProbeCascadeCount; i++)
+		{
+			asSRV(queue, giCtx.volumes[i].probeIrradianceBuffer);
+		}
+		tracePushConsts.clipmapConfigBufferId = worldProbeConfigBufferId;
+		tracePushConsts.clipmapCount = worldProbeCascadeCount;
+		tracePushConsts.bHistoryValid = !bHistoryInvalid;
+		tracePushConsts.skyLightLeaking = sGISkylightLeaking;
+
+		tracePushConsts.depthId = asSRV(queue, gbuffers.depth_Half);
+		tracePushConsts.normalRSId = asSRV(queue, gbuffers.pixelRSNormal_Half);
+		tracePushConsts.roughnessId = asSRV(queue, gbuffers.roughness_Half);
+		tracePushConsts.UAV = asUAV(queue, specularTraceRadianceRT);
+		tracePushConsts.disocclusionMask = disocclusionMask != nullptr ? asSRV(queue, disocclusionMask) : kUnvalidIdUint32; //
+
+		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
+		auto computeShader = getContext().getShaderLibrary().getShader<GISpecularTraceCS>();
+		addComputePass(queue,
+			"GI: SpecularTraceCS",
+			getContext().computePipe(computeShader, "GI: SpecularTrace", {
+				getContext().descriptorFactoryBegin()
+				.accelerateStructure(0) // TLAS
+				.buildNoInfoPush() }),
+			{ dispatchDim.x, dispatchDim.y, 1 },
+			[&](GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)
+			{
+				pipe->pushConst(cmd, tracePushConsts);
+
+				PushSetBuilder(queue, cmd)
+					.addAccelerateStructure(tlas)
+					.push(pipe, 1); // Push set 1.
+			});
+	}
+
+	graphics::PoolTextureRef probeReprojectStatSpecularRT = nullptr;
 	graphics::PoolTextureRef reprojectGIRT = nullptr;
-	if (giCtx.historyDiffuseRT != nullptr && disocclusionMask != nullptr)
+	graphics::PoolTextureRef reprojectSpecularRT = nullptr;
+
+	if (giCtx.historyDiffuseRT != nullptr && disocclusionMask != nullptr && 
+		depth_Half_LastFrame != nullptr && pixelNormalRS_Half_LastFrame != nullptr)
 	{
 		reprojectGIRT = rtPool.create("GI-Reproject", halfDim.x, halfDim.y, 
 			VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-
-		GIHistoryReprojectPushConsts pushConst{}; 
+		reprojectSpecularRT = rtPool.create("GI-Reproject-Specular", halfDim.x, halfDim.y,
+			VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
 		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
+
+
+		probeReprojectStatSpecularRT = rtPool.create(
+			"GI-Specular-ReprojectStat",
+			screenProbeDim.x,
+			screenProbeDim.y, VK_FORMAT_R16G16B16A16_SFLOAT,
+			VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+
+		GIHistoryReprojectPushConsts pushConst{}; 
 
 		pushConst.gbufferDim = halfDim;
 		pushConst.cameraViewId = cameraViewId;
@@ -445,6 +559,13 @@ graphics::PoolTextureRef chord::giUpdate(
 		pushConst.depthSRV = asSRV(queue, gbuffers.depth_Half);
 		pushConst.disoccludedMaskSRV = asSRV(queue, disocclusionMask);
 		pushConst.historyGISRV = asSRV(queue, giCtx.historyDiffuseRT);
+		pushConst.historySpecularSRV = asSRV(queue, giCtx.historySpecularRT);
+		pushConst.reprojectSpecularUAV = asUAV(queue, reprojectSpecularRT);
+		pushConst.specularStatUAV = asUAV(queue, probeReprojectStatSpecularRT);
+		pushConst.specularIntersectSRV = asSRV(queue, specularTraceRadianceRT);
+		pushConst.normalRSId_LastFrame = asSRV(queue, pixelNormalRS_Half_LastFrame);
+		pushConst.normalRSId = asSRV(queue, gbuffers.vertexRSNormal_Half);
+		pushConst.depthTextureId_LastFrame = asSRV(queue, depth_Half_LastFrame);
 
 		auto computeShader = getContext().getShaderLibrary().getShader<GIHistoryReprojectCS>();
 		addComputePass2(queue,
@@ -454,8 +575,35 @@ graphics::PoolTextureRef chord::giUpdate(
 			{ dispatchDim.x, dispatchDim.y, 1 });
 	}
 
+
+	// Specular post trace filter.
+	graphics::PoolTextureRef specularTraceRadiancePostFilterRT = rtPool.create("GI-Specular-TraceRadiance-PostFilter", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+	{
+		GISpecularRemoveFireFlareFilterPushConsts pushConst{};
+
+		pushConst.gbufferDim = halfDim;
+		pushConst.cameraViewId = cameraViewId;
+		pushConst.depthSRV = asSRV(queue, gbuffers.depth_Half);
+		pushConst.normalRS = asSRV(queue, gbuffers.pixelRSNormal_Half);
+		pushConst.roughnessSRV = asSRV(queue, gbuffers.roughness_Half);
+		pushConst.statSRV = probeReprojectStatSpecularRT != nullptr ? asSRV(queue, probeReprojectStatSpecularRT) : kUnvalidIdUint32; // 
+
+		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
+
+		pushConst.SRV = asSRV(queue, specularTraceRadianceRT);
+		pushConst.UAV = asUAV(queue, specularTraceRadiancePostFilterRT);
+
+		auto computeShader = getContext().getShaderLibrary().getShader<GISpecularRemoveFireFlareFilterCS>();
+		addComputePass2(queue,
+			"GI: SpecularFilter-Post",
+			getContext().computePipe(computeShader, "GI: SpecularFilter-Post"),
+			pushConst,
+			{ dispatchDim.x, dispatchDim.y, 1 });
+	}
+
 	auto giInterpolateRT = rtPool.create("GI-ScreenProbe-Interpolate", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-	auto filteredRadiusRT = rtPool.create("GI-Spatial-FilterRadius", halfDim.x, halfDim.y, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+	auto specularInterpolateRT = rtPool.create("GI-Specular-Interpolate", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+	auto filteredRadiusRT = rtPool.create("GI-Spatial-FilterRadius", halfDim.x, halfDim.y, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 	{
 		GIScreenProbeInterpolatePushConsts pushConsts{};
 		pushConsts.probeDim = screenProbeDim;
@@ -471,9 +619,14 @@ graphics::PoolTextureRef chord::giUpdate(
 		pushConsts.clipmapConfigBufferId = worldProbeConfigBufferId;
 		pushConsts.clipmapCount = worldProbeCascadeCount;
 		pushConsts.screenProbeSampleSRV = asSRV(queue, giCtx.screenProbeSampleRT);
-		pushConsts.reprojectSRV = reprojectGIRT == nullptr ? kUnvalidIdUint32 : asSRV(queue, reprojectGIRT);
+		pushConsts.reprojectSRV = reprojectGIRT == nullptr ? kUnvalidIdUint32 : asSRV(queue, reprojectGIRT); // 
 		pushConsts.radiusUAV = asUAV(queue, filteredRadiusRT);
 
+		pushConsts.reprojectSpecularSRV = reprojectSpecularRT == nullptr ? kUnvalidIdUint32 : asSRV(queue, reprojectSpecularRT); // 
+		pushConsts.specularUAV = asUAV(queue, specularInterpolateRT);
+		pushConsts.rouhnessSRV = asSRV(queue, gbuffers.roughness_Half);
+		pushConsts.specularTraceSRV = asSRV(queue, specularTraceRadiancePostFilterRT);
+		pushConsts.specularStatUAV = probeReprojectStatSpecularRT != nullptr ? asUAV(queue, probeReprojectStatSpecularRT) : kUnvalidIdUint32; // 
 		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
 
 		auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeInterpolateCS>();
@@ -494,7 +647,7 @@ graphics::PoolTextureRef chord::giUpdate(
 		pushConsts.normalRS  = asSRV(queue, gbuffers.pixelRSNormal_Half);
 
 		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
-		auto computeShader = getContext().getShaderLibrary().getShader<GISpatialFilterCS>();
+		auto computeShader = getContext().getShaderLibrary().getShader<GIDiffuseSpatialFilterCS>();
 
 		auto filteredGIRT_Temp = rtPool.create("GI-ScreenProbe-Interpolate", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
@@ -519,6 +672,42 @@ graphics::PoolTextureRef chord::giUpdate(
 			{ dispatchDim.x, dispatchDim.y, 1 });
 	}
 
+	if (sGIEnableSpecularSpatialFilter != 0)
+	{
+		GISpecularSpatialFilterPushConsts pushConst{};
+
+		pushConst.gbufferDim = halfDim;
+		pushConst.cameraViewId = cameraViewId;
+		pushConst.originSRV = asSRV(queue, filteredRadiusRT);
+		pushConst.depthSRV = asSRV(queue, gbuffers.depth_Half);
+		pushConst.normalRS = asSRV(queue, gbuffers.pixelRSNormal_Half);
+		pushConst.roughnessSRV = asSRV(queue, gbuffers.roughness_Half);
+		pushConst.statSRV = probeReprojectStatSpecularRT != nullptr ? asSRV(queue, probeReprojectStatSpecularRT) : kUnvalidIdUint32; //
+	
+		auto filteredGIRT_Temp = rtPool.create("GI-ScreenProbe-Interpolate", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+
+		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
+		auto computeShader = getContext().getShaderLibrary().getShader<GISpecularSpatialFilterCS>();
+
+		pushConst.SRV = asSRV(queue, specularInterpolateRT);
+		pushConst.UAV = asUAV(queue, filteredGIRT_Temp);
+		pushConst.direction = int2(1, 0);
+		addComputePass2(queue,
+			"GI: SpecularFilter - X",
+			getContext().computePipe(computeShader, "GI: SpecularFilter - X"),
+			pushConst,
+			{ dispatchDim.x, dispatchDim.y, 1 });
+
+		pushConst.SRV = asSRV(queue, filteredGIRT_Temp);
+		pushConst.UAV = asUAV(queue, specularInterpolateRT);
+		pushConst.direction = int2(0, 1);
+		addComputePass2(queue,
+			"GI: SpecularFilter - Y",
+			getContext().computePipe(computeShader, "GI: SpecularFilter - Y"),
+			pushConst,
+			{ dispatchDim.x, dispatchDim.y, 1 });
+	}
+
 	// auto fullResDiffuseGI = rtPool.create("GI-FullRes-DiffuseGI", gbuffers.dimension.x, gbuffers.dimension.y, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 	{
 		GIUpsamplePushConsts pushConsts{};
@@ -532,6 +721,7 @@ graphics::PoolTextureRef chord::giUpdate(
 		pushConsts.low_normalSRV = asSRV(queue, gbuffers.pixelRSNormal_Half);
 
 		pushConsts.SRV = asSRV(queue, giInterpolateRT);
+		pushConsts.SRV_1 = asSRV(queue, specularInterpolateRT);
 		pushConsts.UAV = asUAV(queue, gbuffers.color);  
 		pushConsts.baseColorId = asSRV(queue, gbuffers.baseColor);
 		pushConsts.aoRoughnessMetallicId = asSRV(queue, gbuffers.aoRoughnessMetallic);
@@ -545,65 +735,11 @@ graphics::PoolTextureRef chord::giUpdate(
 			{ dispatchDim.x, dispatchDim.y, 1 });
 	}
 
-	auto specularTraceRadianceRT = rtPool.create("GI-Specular-TraceRadiance", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-	{
-		GISpecularTracePushConsts tracePushConsts{};
-
-		tracePushConsts.gbufferDim = halfDim;
-		tracePushConsts.cascadeCount = cascadeCtx.depths.size();
-		tracePushConsts.shadowViewId = cascadeCtx.viewsSRV;
-		tracePushConsts.shadowDepthIds = cascadeCtx.cascadeShadowDepthIds;
-		tracePushConsts.transmittanceId = asSRV(queue, luts.transmittance);
-		tracePushConsts.scatteringId = asSRV3DTexture(queue, luts.scatteringTexture);
-		if (luts.optionalSingleMieScatteringTexture != nullptr)
-		{
-			tracePushConsts.singleMieScatteringId = asSRV3DTexture(queue, luts.optionalSingleMieScatteringTexture);
-		}
-		tracePushConsts.irradianceTextureId = asSRV(queue, luts.irradianceTexture);
-		tracePushConsts.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
-		tracePushConsts.rayMissDistance = 128.0f;
-		tracePushConsts.maxRayTraceDistance = 800.0f;
-		tracePushConsts.cameraViewId = cameraViewId;
-		tracePushConsts.rayHitLODOffset = 2.0f;
-
-		for (int i = 0; i < worldProbeCascadeCount; i++)
-		{
-			asSRV(queue, giCtx.volumes[i].probeIrradianceBuffer);
-		}
-		tracePushConsts.clipmapConfigBufferId = worldProbeConfigBufferId;
-		tracePushConsts.clipmapCount = worldProbeCascadeCount;
-		tracePushConsts.bHistoryValid = !bHistoryInvalid;
-		tracePushConsts.skyLightLeaking = sGISkylightLeaking;
-
-		tracePushConsts.depthId     = asSRV(queue, gbuffers.depth_Half);
-		tracePushConsts.normalRSId  = asSRV(queue, gbuffers.pixelRSNormal_Half);
-		tracePushConsts.roughnessId = asSRV(queue, gbuffers.roughness_Half);
-		tracePushConsts.UAV         = asUAV(queue, specularTraceRadianceRT);
-
-
-		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
-		auto computeShader = getContext().getShaderLibrary().getShader<GISpecularTraceCS>();
-		addComputePass(queue,
-			"GI: SpecularTraceCS",
-			getContext().computePipe(computeShader, "GI: SpecularTrace", {
-				getContext().descriptorFactoryBegin()
-				.accelerateStructure(0) // TLAS
-				.buildNoInfoPush() }),
-			{ dispatchDim.x, dispatchDim.y, 1 },
-			[&](GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)
-			{
-				pipe->pushConst(cmd, tracePushConsts);
-
-				PushSetBuilder(queue, cmd)
-					.addAccelerateStructure(tlas)
-					.push(pipe, 1); // Push set 1.
-			});
-	}
-
 	// Store history. 
 	giCtx.screenProbeSpawnInfoBuffer = newScreenProbeSpawnInfoBuffer;
 	giCtx.screenProbeTraceRadiance   = probeTraceRadianceRT;
 	giCtx.historyDiffuseRT           = giInterpolateRT;
+	giCtx.historySpecularRT          = specularInterpolateRT;
 
 	if (sEnableGIDebugOutput == 1)
 	{
@@ -628,6 +764,22 @@ graphics::PoolTextureRef chord::giUpdate(
 	else if (sEnableGIDebugOutput == 6)
 	{
 		return specularTraceRadianceRT;
+	}
+	else if (sEnableGIDebugOutput == 7)
+	{
+		return reprojectSpecularRT;
+	}
+	else if (sEnableGIDebugOutput == 8)
+	{
+		return giCtx.historySpecularRT;
+	}
+	else if (sEnableGIDebugOutput == 9)
+	{
+		return probeReprojectStatSpecularRT;
+	}
+	else if (sEnableGIDebugOutput == 10)
+	{
+		return specularTraceRadiancePostFilterRT;
 	}
 
 	return nullptr;

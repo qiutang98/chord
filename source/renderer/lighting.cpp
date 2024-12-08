@@ -73,7 +73,7 @@ namespace chord
 		pushConst.lightSize = cascadeCtx.config.lightSize;
 		pushConst.cascadeBorderJitterCount = cascadeCtx.config.cascadeBorderJitterCount;
 		pushConst.pcfBiasScale = cascadeCtx.config.pcfBiasScale;
-
+		
 		pushConst.biasLerpMin_const = cascadeCtx.config.biasLerpMin_const;
 		pushConst.biasLerpMax_const = cascadeCtx.config.biasLerpMax_const;
 

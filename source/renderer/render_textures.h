@@ -16,8 +16,9 @@ namespace chord
 		static auto visibilityFormat() { return VK_FORMAT_R32_UINT; }
 
 		// Color: .xyz = Store emissive in base pass, lighting color in lighting pass.
+		//        .w store emissiveColor.gb
 		graphics::PoolTextureRef color = nullptr;
-		static auto colorFormat() { return VK_FORMAT_B10G11R11_UFLOAT_PACK32; }
+		static auto colorFormat() { return VK_FORMAT_R16G16B16A16_SFLOAT; } // VK_FORMAT_B10G11R11_UFLOAT_PACK32;
 
 		// 
 		graphics::PoolTextureRef depthStencil = nullptr;
@@ -40,12 +41,12 @@ namespace chord
 		// GBuffer D: .x Material AO.
 		//            .y Roughness.
 		//            .z Metallic.
-		//            .w free 8bit.
+		//            .w store emissiveColor.r
 		graphics::PoolTextureRef aoRoughnessMetallic = nullptr;
 		static auto aoRoughnessMetallicFormat() { return VK_FORMAT_R8G8B8A8_UNORM; }
 
 		graphics::PoolTextureRef baseColor = nullptr;
-		static auto baseColorFormat() { return VK_FORMAT_B10G11R11_UFLOAT_PACK32; }
+		static auto baseColorFormat() { return VK_FORMAT_A2B10G10R10_UNORM_PACK32; }
 
 		graphics::PoolTextureRef depth_Half = nullptr;
 		static auto depthHalfFormat() { return VK_FORMAT_R32_SFLOAT; }

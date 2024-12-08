@@ -192,6 +192,21 @@ static float3 kExtentApplyFactor[8] =
     float3(-1,  1, -1),
 };
 
+static int2 kBilinearOffset[4] = 
+{
+    int2(0, 0),
+    int2(1, 0),
+    int2(0, 1),
+    int2(1, 1),
+};
+
+float4 getBilinearWeight(float2 xy) // xy -> [0, 1]
+{
+    float x = xy.x;
+    float y = xy.y;
+    return float4((1.0 - x) * (1.0 - y), x * (1.0 - y), (1.0 - x) * y, x * y);
+}
+
 float4 projectScreen(float3 centerLS, float3 extentLS, float4x4 projectMatrix)
 {
     float2 UVs[8];  
@@ -1016,6 +1031,22 @@ float3 tbnTransform(float3x3 tbn, float3 dir)
 float3 tbnInverseTransform(float3x3 tbn, float3 dir)
 {
     return float3(dot(dir, tbn[0]), dot(dir, tbn[1]), dot(dir, tbn[2]));
+}
+
+uint pack_float2_t_uint(float2 v)
+{
+    uint2 v_h = f32tof16(v);
+    return v_h.x | (v_h.y << 16u);
+}
+
+float2 unpack_float2_f_uint(uint r)
+{
+    uint2 v_h;
+
+    v_h.x = (r >>  0u) & 0xffffu;
+    v_h.y = (r >> 16u) & 0xffffu;
+
+    return f16tof32(v_h);
 }
 
 uint2 pack_float4_t_uint2(float4 v)

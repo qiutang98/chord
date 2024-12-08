@@ -294,6 +294,11 @@ struct GPUBasicData
     uint debuglineMaxCount; // maximum of debug line can use.
     uint pointClampEdgeSampler; // All point clamp edge sampler. 
     uint linearClampEdgeSampler;
+
+    uint brdfLut; 
+    uint pad0;
+    uint pad1;
+    uint pad2;
 };
 
 struct CascadeShadowDepthIds 
@@ -341,7 +346,7 @@ struct PerframeCameraView
     float cameraFovy;
     float zNear;
     float zFar; // z Far is used for frustum culling.
-    float pad2;
+    uint bCameraCut;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);
 

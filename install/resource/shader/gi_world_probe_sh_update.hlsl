@@ -6,8 +6,7 @@ struct GIWorldProbeSHUpdatePushConsts
     uint clipmapConfigBufferId;
     uint clipmapLevel;
     uint sh_uav;
-    bool bLastCascade;
-    float energyLose;
+    uint bLastCascade;
 };
 CHORD_PUSHCONST(GIWorldProbeSHUpdatePushConsts, pushConsts);
 
@@ -38,7 +37,7 @@ void mainCS(
     SH3_gi world_gi_sh;
     if (config.isHistoryValid(world_probeCellId))
     {
-        SH3_gi_pack sh_pack = RWBATL(SH3_gi_pack, pushConsts.sh_uav, world_probePhysicsId);
+        SH3_gi_pack sh_pack = BATL(SH3_gi_pack, config.sh_SRV, world_probePhysicsId);
         world_gi_sh.unpack(sh_pack);
     }
     else
@@ -49,7 +48,7 @@ void mainCS(
     if (world_gi_sh.numSample <= 0.0)
     {
         // Try to stole SH from next cascade. 
-        if (!pushConsts.bLastCascade && !config.bRestAll)
+        if (!pushConsts.bLastCascade && !config.bResetAll)
         {
             // 
             float3 positionRS = config.getPositionRS(world_probeCellId);
@@ -68,13 +67,10 @@ void mainCS(
         }
     } 
 
-    if (world_gi_sh.isNaN())
+    if (world_gi_sh.isNaN() || config.bResetAll || perView.bCameraCut)
     {
         world_gi_sh.init();
     }
-
-    // Update energy loss. 
-    world_gi_sh.numSample *= 0.9; // pushConsts.energyLose; //
 
     // 
     BATS(SH3_gi_pack, pushConsts.sh_uav, world_probePhysicsId, world_gi_sh.pack());

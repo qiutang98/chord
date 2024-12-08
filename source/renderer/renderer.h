@@ -117,5 +117,7 @@ namespace chord
 
 		DDGIContext m_ddgiCtx;
 		GIContext m_giCtx;
+
+		bool m_bCameraCut = false;
 	};
 }

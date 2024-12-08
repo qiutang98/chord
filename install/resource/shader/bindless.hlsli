@@ -226,4 +226,10 @@ sampleTexture2D_Declare(float1)
 
 #undef sampleTexture2D_Declare
 
+float2 sampleBRDFLut(in const PerframeCameraView perView, float NoV, float roughness)
+{
+    float2 uv = saturate(float2(NoV, roughness));
+    return sampleTexture2D_float2(perView.basicData.brdfLut, uv, getLinearClampEdgeSampler(perView));
+}
+
 #endif // !SHADER_BINDLESS_HLSLI

@@ -11,9 +11,11 @@ struct GIUpsamplePushConsts
     uint full_normalSRV;
     uint low_depthSRV;
     uint low_normalSRV;
+
     uint UAV;
 
     uint SRV;
+    uint SRV_1;
 
     uint baseColorId;
     uint aoRoughnessMetallicId;
@@ -21,6 +23,8 @@ struct GIUpsamplePushConsts
 CHORD_PUSHCONST(GIUpsamplePushConsts, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
+
+#include "bsdf.hlsli"
 
 float normalEdgeStoppingWeight(float3 centerNormal, float3 sampleNormal, float power)
 {
@@ -40,6 +44,7 @@ float edgeStoppingWeight(float centerDepth, float sampleDepth, float phi_z, floa
     const float wL = 1.0f;
     return exp(0.0 - max(wL, 0.0) - max(wZ, 0.0)) * wNormal;
 }
+
 
 [numthreads(64, 1, 1)]
 void mainCS(
@@ -64,57 +69,96 @@ void mainCS(
         return;
     }
 
+    float2 fullRes_texelSize = 1.0 / pushConsts.fullDim;
+    float2 lowRes_texelSize  = 1.0 / pushConsts.lowDim;
 
+    // 
+    float2 uv = (tid + 0.5) * fullRes_texelSize;
+
+    // 
+    const float3 fullRes_positionRS = getPositionRS(uv, max(fullRes_deviceZ, kFloatEpsilon), perView); 
 
     float3 fullRes_normalRS = loadTexture2D_float4(pushConsts.full_normalSRV, tid).xyz * 2.0 - 1.0;
     fullRes_normalRS = normalize(fullRes_normalRS);
 
-    float2 fullRes_texelSize = 1.0 / pushConsts.fullDim;
-    float2 lowRes_texelSize  = 1.0 / pushConsts.lowDim;
+
 
     SamplerState pointSampler = getPointClampEdgeSampler(perView);
 
-    float2 uv = (tid + 0.5) * fullRes_texelSize;
 
-    float3 radiance = 0.0;
-    float weightSum = 0.0;
-
-    const int2 offset[4] = { int2(0, 1), int2(1, 0), int2(-1, 0), int2(0, -1) };
-    for(int i = 0; i < 4; i ++)
-    {
-        float2 lowRes_uv = uv + offset[i] * lowRes_texelSize;
-        float lowRes_depth = sampleTexture2D_float1(pushConsts.low_depthSRV, lowRes_uv, pointSampler);
-
-        if (lowRes_depth <= 0.0)
-        {
-            continue; // Sky skip. 
-        }
-
-        float3 lowRes_normalRS = sampleTexture2D_float4(pushConsts.low_normalSRV, lowRes_uv, pointSampler).xyz * 2.0 - 1.0;
-        lowRes_normalRS = normalize(lowRes_normalRS);
-
-        float w = edgeStoppingWeight(fullRes_deviceZ, lowRes_depth, 1.0f, fullRes_normalRS, lowRes_normalRS, 32.0f);
-
-        radiance  += sampleTexture2D_float4(pushConsts.SRV, lowRes_uv, pointSampler).xyz * w;
-        weightSum += w;
-    }
-
-    radiance = (weightSum < 1e-6f) ? 0.0 : radiance / weightSum;
-
-    // 
-    float3 srcColor = loadRWTexture2D_float3(pushConsts.UAV, tid);
     float3 baseColor = loadTexture2D_float3(pushConsts.baseColorId, tid);
     float4 aoRoughnessMetallic = loadTexture2D_float4(pushConsts.aoRoughnessMetallicId, tid);
 
     // 
-    float metallic   = aoRoughnessMetallic.z;
+
     float materialAo = aoRoughnessMetallic.x;
+    float roughness  = aoRoughnessMetallic.y;
+    float metallic   = aoRoughnessMetallic.z;
+
+    float3 radiance = 0.0;
+    float weightSum = 0.0;
+
+    float3 radiance_1 = 0.0;
+    float weightSum_1 = 0.0;
+
+    const float kWeights_0[3] = { 1.0, 1.0 / 2.0, 1.0 / 3.0 };
+    const float kWeights_1[3] = { 1.0, 1.0 / 8.0, 1.0 / 16.0 };
+    for(int x = -1; x <= 1; x ++)
+    {
+        for (int y = -1; y <= 1; y ++)
+        {
+            float2 lowRes_uv = uv + int2(x, y) * lowRes_texelSize;
+            float lowRes_depth = sampleTexture2D_float1(pushConsts.low_depthSRV, lowRes_uv, pointSampler);
+
+            if (lowRes_depth <= 0.0)
+            {
+                continue; // Sky skip. 
+            }
+
+            float3 lowRes_normalRS = sampleTexture2D_float4(pushConsts.low_normalSRV, lowRes_uv, pointSampler).xyz * 2.0 - 1.0;
+            lowRes_normalRS = normalize(lowRes_normalRS);
+
+            float w = edgeStoppingWeight(fullRes_deviceZ, lowRes_depth, 1.0f, fullRes_normalRS, lowRes_normalRS, 32.0f);
+            weightSum += w;
+            radiance   += sampleTexture2D_float4(pushConsts.SRV, lowRes_uv, pointSampler).xyz * w;
+
+            float roughWeight = kWeights_0[abs(x)] * kWeights_0[abs(y)];
+            float glossyWeight = kWeights_1[abs(x)] * kWeights_1[abs(y)];
+           
+            w *= lerp(glossyWeight, roughWeight, roughness);
+            radiance_1  += sampleTexture2D_float4(pushConsts.SRV_1, lowRes_uv, pointSampler).xyz * w;
+            weightSum_1 += w;
+        }
+    }
+
+    radiance = (weightSum < 1e-6f) ? 0.0 : radiance / weightSum;
+
+
+    float3 radiance_specular = (weightSum_1 < 1e-6f) ? 0.0 : radiance_1 / weightSum_1;
+
+
+    // 
+    float3 srcColor = loadRWTexture2D_float3(pushConsts.UAV, tid);
+
+
 
     //
     float3 diffuseColor = getDiffuseColor(baseColor, metallic);
+    float3 specularColor = getSpecularColor(baseColor, metallic);
 
-    // 
+    // Apply diffuse gi. 
     radiance = srcColor + radiance * diffuseColor * materialAo;
+
+    // Apply specular gi. 
+    {
+        float3 V = normalize(-fullRes_positionRS);
+        float NoV = saturate(dot(fullRes_normalRS, V));
+
+        float2 brdf = sampleBRDFLut(perView, NoV, roughness);
+        // brdf = sampleTexture2D_float2(perView.basicData.brdfLut, uv, getLinearClampEdgeSampler(perView));
+
+        radiance += radiance_specular * (specularColor * brdf.x + brdf.y);  
+    } 
 
     storeRWTexture2D_float3(pushConsts.UAV, tid, radiance); 
 }

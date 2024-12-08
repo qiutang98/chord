@@ -480,10 +480,10 @@ namespace chord
 		float normalOffsetScale    = 0.0f;
 		float shadowBiasConst      = 0.0f;
 		float shadowBiasSlope      = 0.0f;
-		float radiusScaleFixed     = 1.0f;
+		float radiusScaleFixed     = 10.0f;
 
 		//
-		float lightSize                = 1.0f;
+		float lightSize                = 10.0f;
 		float cascadeBorderJitterCount = 2.0f;
 		float pcfBiasScale             = 20.0f;
 

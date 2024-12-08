@@ -17,6 +17,7 @@ struct GIScreenProbeSHReprojectPushConst
     uint historyProbeTraceRadianceSRV;
     uint reprojectionRadianceUAV;
     uint screenProbeSampleUAV;
+    uint bResetAll;
 };
 CHORD_PUSHCONST(GIScreenProbeSHReprojectPushConst, pushConsts);
 
@@ -96,7 +97,7 @@ void mainCS(
     }
 
     // Non valid spawn probe in current frame, reset history. 
-    if (!cur_spawnInfo.isValid())
+    if (!cur_spawnInfo.isValid() || perView.bCameraCut || pushConsts.bResetAll)
     {
         if (localThreadIndex == 0)
         {

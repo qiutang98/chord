@@ -6,7 +6,7 @@
 #include <shader/gpuscene.hlsl>
 #include <graphics/helper.h>
 #include <renderer/render_helper.h>
-
+#include <renderer/lighting.h>
 #include <renderer/fullscreen.h>
 #include <application/application.h>
 #include <renderer/compute_pass.h>
@@ -89,8 +89,33 @@ namespace chord
 		
 	}
 
+	uint32 GPUScene::getBRDFLutSRV() const
+	{
+		auto range = graphics::helper::buildBasicImageSubresource();
+		auto viewType = VK_IMAGE_VIEW_TYPE_2D;
+
+		if (m_brdf == nullptr)
+		{
+			return getContext().getBuiltinResources().transparent->getSRV(range, viewType);
+		}
+
+		return m_brdf->get().requireView(
+			range,
+			viewType, true, false).SRV.get();
+	}
+
 	void GPUScene::update(uint64 frameCounter, graphics::GraphicsOrComputeQueue& computeQueue)
 	{
+		// Init brdf if no exist.
+		if (m_brdf == nullptr)
+		{
+			computeQueue.beginCommand({ computeQueue.getCurrentTimeline() });
+			{
+				m_brdf = computeBRDFLut(computeQueue, 512);
+			}
+			computeQueue.endCommand();
+		}
+
 		// Prereturn if noth
 		if (!shouldFlush())
 		{

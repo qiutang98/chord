@@ -103,10 +103,13 @@ void mainCS(
 
     // Dark area fallback.
     {
-        float3 statRadiance;
+        float3 statRadiance = 0.0;
         if (WaveIsFirstLane()) 
         {
-            statRadiance = loadTexture2D_float3(pushConsts.statSRV, probeCoord);
+            if (pushConsts.statSRV != kUnvalidIdUint32)
+            {
+                statRadiance = loadTexture2D_float3(pushConsts.statSRV, probeCoord);
+            }
         }
         statRadiance = WaveReadLaneFirst(statRadiance); 
         if (all(radiance < kFloatEpsilon))

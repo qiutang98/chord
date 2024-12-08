@@ -33,7 +33,7 @@ struct CascadeSetupPushConsts
     float splitLambda;
     uint cascadeDim;
     uint cascadeViewInfos;
-    bool bCacheValid;
+    uint bCacheValid;
 
     uint realtimeCount;
     uint tickCount;

@@ -67,6 +67,7 @@ bool DeferredRenderer::updateDimension(
 	bool bChange = m_dimensionConfig.updateDimension(outputWidth, outputHeight, renderScaleToPost, postScaleToOutput);
 	if (bChange)
 	{
+		m_bCameraCut = true;
 		clearHistory(true);
 	}
 
@@ -151,6 +152,8 @@ void DeferredRenderer::render(
 
 		currentFrame.basicData = getGPUBasicData(atmosphereParam);
 		camera->fillViewUniformParameter(currentFrame);
+
+		currentFrame.bCameraCut = m_bCameraCut;
 
 		currentFrame.renderDimension = {
 			1.0f * float(currentRenderWidth),
@@ -251,6 +254,8 @@ void DeferredRenderer::render(
 	{
 		insertTimer("FrameBegin", graphics);
 
+
+
 		m_bTLASValidCurrentFrame = perframe.asInstances.isExistInstance();
 		if (m_bTLASValidCurrentFrame)
 		{
@@ -330,8 +335,9 @@ void DeferredRenderer::render(
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
 			if (giResult == nullptr) giResult = ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
-			if (giResult == nullptr) giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionMask, camera);
-			
+			if (giResult == nullptr) giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionMask, camera, m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half, m_bCameraCut);
+			insertTimer("GI Update", graphics);
+
 			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("Nanite visualize", graphics);
 
@@ -376,6 +382,8 @@ void DeferredRenderer::render(
 		m_rendererHistory.depth_Half = gbuffers.depth_Half;
 		m_rendererHistory.vertexNormalRS_Half = gbuffers.vertexRSNormal_Half;
 	}
+
+	m_bCameraCut = false;
 }
 
 GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)

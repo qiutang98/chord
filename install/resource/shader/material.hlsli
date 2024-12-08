@@ -1,4 +1,6 @@
-#pragma once 
+#ifndef SHADER_MATERIAL_HLSLI
+#define SHADER_MATERIAL_HLSLI
+
 #include "nanite_shared.hlsli"
 
 struct TinyGBufferContext
@@ -7,6 +9,7 @@ struct TinyGBufferContext
 
     // Lighting color. 
     float3 color;
+    float3 emissivColor;
 
     // 
     float4 baseColor;
@@ -74,8 +77,8 @@ void loadGLTFMetallicRoughnessPBRMaterial(
         SamplerState emissiveSampler = Bindless(SamplerState, materialInfo.emissiveSampler);
         emissiveColor = emissiveTexture.SampleGrad(emissiveSampler, meshUv, meshUv_ddx, meshUv_ddy).xyz * materialInfo.emissiveFactor;
     }
-    emissiveColor = mul(sRGB_2_AP1, emissiveColor);
-    gbufferCtx.color = emissiveColor;
+    gbufferCtx.color = 0.0;
+    gbufferCtx.emissivColor = emissiveColor;
 
     // 
     gbufferCtx.baseColor = baseColor;
@@ -127,10 +130,14 @@ void loadGLTFMetallicRoughnessPBRMaterial(
         //
         // NOTE: Some DCC store sqrt distribution roughness when export to keep higher precision when near zero. (called perceptual roughness). 
         //       BTW, we can't control the artist behavior (all media assets download from sketchfab), so, just set roughness is roughness. 
-        gbufferCtx.roughness =  metallicRoughnessRaw.b;
+
+        // The metallic-roughness texture. The metalness values are sampled from the B channel. The roughness values are sampled from the G channel. 
+        // These values **MUST** be encoded with a linear transfer function. 
+        // If other channels are present (R or A), they **MUST** be ignored for metallic-roughness calculations. When undefined, the texture **MUST** be sampled as having `1.0` in G and B components.
+        gbufferCtx.roughness =  metallicRoughnessRaw.g;
 
         //
-        gbufferCtx.metallic  =  metallicRoughnessRaw.g;
+        gbufferCtx.metallic  =  metallicRoughnessRaw.b;
         if (materialInfo.bExistOcclusion)
         {
             gbufferCtx.materialAO = materialInfo.occlusionTextureStrength * metallicRoughnessRaw.r;
@@ -145,3 +152,5 @@ void loadGLTFMetallicRoughnessPBRMaterial(
         gbufferCtx.materialAO = 1.0f;
     }
 }
+
+#endif

@@ -7,7 +7,7 @@ struct ImGuiDrawPushConsts
     float2 scale;
     float2 translate;
     
-    bool bFont;
+    uint bFont;
     uint textureId;
     uint samplerId;
 };

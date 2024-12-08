@@ -20,6 +20,13 @@ struct GIScreenProbeInterpolatePushConsts
     uint reprojectSRV;
     uint motionVectorId;
     uint radiusUAV;
+
+    uint reprojectSpecularSRV;
+    uint specularUAV;
+    uint rouhnessSRV;
+    uint specularTraceSRV;
+
+    uint specularStatUAV;
 };
 CHORD_PUSHCONST(GIScreenProbeInterpolatePushConsts, pushConsts);
 
@@ -53,6 +60,8 @@ uint findClosetProbe(int2 probeCoord, int2 offset)
     // Pack coord.
     return uint(pos.x) | (uint(pos.y) << 16u); 
 }   
+
+groupshared float4 sRadiance[64];
   
 [numthreads(64, 1, 1)]
 void mainCS(
@@ -60,6 +69,10 @@ void mainCS(
 {
     const uint2 gid = remap8x8(localThreadIndex); // [0x0 - 8x8)
     const uint2 tid = workGroupId * 8 + gid;
+
+    sRadiance[localThreadIndex] = 0.0;
+    GroupMemoryBarrierWithGroupSync();
+
     if (any(tid >= pushConsts.gbufferDim))
     {
         // Out of bound pre-return.  
@@ -152,8 +165,11 @@ void mainCS(
 
             // 
             float threshold = pixelToEye * 0.25 * kMinProbeSpacing; 
-            if (abs(dot(seed_positionRS - pixel_positionRS, pixel_normalRS)) > threshold) 
+
+            // 
+            if (abs(dot(seed_positionRS - pixel_positionRS, pixel_normalRS)) > threshold)
             {
+                // If no in same palne, skip. 
                 probeWeightx4[i] = 0.0;
             }
             else
@@ -169,9 +185,13 @@ void mainCS(
         }
     }
 
-    // Accumulate 2x2 screen probe irradiance.
-    float3 irradiance = 0.0;
-    float weightSum = 0.0;
+    // Accumulate 2x2 screen probe diffuse_screenProbeIrradiance.
+    float3 diffuse_screenProbeIrradiance = 0.0;
+    float  diffuse_screenProbeWeightSum  = 0.0;
+
+    float3 specular_screenProbeIrradiance = 0.0;
+    float  specular_screenProbeWeightSum  = 0.0;
+    float3 rayReflectionDir = reflect(normalize(pixel_positionRS), pixel_normalRS);
 
     SH3_gi composite_sh_gi;
     composite_sh_gi.init();
@@ -189,13 +209,17 @@ void mainCS(
                 gi_sh.unpack(sh_pack); 
             }
 
-            irradiance += probeWeightx4[i] * SH_Evalulate(pixel_normalRS, gi_sh.c);
-            weightSum  += probeWeightx4[i];
+            diffuse_screenProbeIrradiance += probeWeightx4[i] * SH_Evalulate(pixel_normalRS, gi_sh.c);
+            diffuse_screenProbeWeightSum  += probeWeightx4[i];
+
+            specular_screenProbeIrradiance += probeWeightx4[i] * SH_Evalulate(rayReflectionDir, gi_sh.c);
+            specular_screenProbeWeightSum  += probeWeightx4[i];
         }
     }
 
     float  world_weight = 0.0;
-    float3 world_irradiance = 0.0;
+    float3 diffuse_world_irradiance = 0.0;
+    float3 specular_world_irradiance = 0.0;
     for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++)  
     {
         if (world_weight >= 1.0)
@@ -207,65 +231,148 @@ void mainCS(
         float weight = config.getBlendWeight(pixel_positionRS);
 
         [branch]   
-        if (weight <= 0.0)
+        if (weight <= 0.0 || config.bResetAll)
         { 
             continue;
         }
         else 
         {
-            float3 radiance = 0.0;
-            bool bSampleValid = config.evaluateSH(perView, pixel_positionRS, pixel_normalRS, radiance, true);
+            float3 diffuse_radiance = 0.0;
+            float3 specular_radiane = 0.0;
 
+            float minSampleCount;
+            bool bSampleValid = config.evaluateSH(perView, pixel_positionRS, pixel_normalRS, diffuse_radiance, minSampleCount, 1);
+            config.evaluateSH(perView, pixel_positionRS, rayReflectionDir, specular_radiane, minSampleCount, 1);
+            
             weight = bSampleValid ? weight : 0.0;
             float linearWeight = (world_weight > 0.0) ? (1.0 - world_weight) : weight;
     
             world_weight += linearWeight;
-            world_irradiance += linearWeight * radiance;
+
+
+            diffuse_world_irradiance += linearWeight * diffuse_radiance;
+            specular_world_irradiance += linearWeight * specular_radiane;
         }  
     }   
-    world_irradiance = (world_weight > 0.0) ? (world_irradiance / world_weight) : 0.0;
+    diffuse_world_irradiance = (world_weight > 0.0) ? (diffuse_world_irradiance / world_weight) : 0.0;
+    specular_world_irradiance = (world_weight > 0.0) ? (specular_world_irradiance / world_weight) : 0.0;
 
-    if (any(isnan(world_irradiance)))
+    if (any(isnan(diffuse_world_irradiance)))
     {
-        world_irradiance = 0.0;
+        diffuse_world_irradiance = 0.0;
+    }
+    if (any(isnan(specular_world_irradiance)))
+    {
+        specular_world_irradiance = 0.0;
     }
 
     // Sample world probe as fallback. 
-    if (weightSum < 1e-3f)
+    if (diffuse_screenProbeWeightSum < 1e-3f)
     {
-        irradiance = world_irradiance;
+        diffuse_screenProbeIrradiance = diffuse_world_irradiance;
     }
     else
     {
-        irradiance /= max(weightSum, kFloatEpsilon) * 2.0 * kPI;
+        diffuse_screenProbeIrradiance /= max(diffuse_screenProbeWeightSum, kFloatEpsilon) * 2.0 * kPI;
     }
 
-    // Avoid negative irradiance. 
-    irradiance = max(0.0, irradiance); 
+    if (specular_screenProbeWeightSum < 1e-3f)
+    {
+        specular_screenProbeIrradiance = specular_world_irradiance;
+    }
+    else
+    {
+        specular_screenProbeIrradiance /= max(specular_screenProbeWeightSum, kFloatEpsilon) * 2.0 * kPI;
+    }
+
+    // Avoid negative diffuse_screenProbeIrradiance. 
+    diffuse_screenProbeIrradiance = max(0.0, diffuse_screenProbeIrradiance); 
+    specular_screenProbeIrradiance = max(0.0, specular_screenProbeIrradiance);
     float resultSample = 0.0;
 
-    const bool bHistoryValid = pushConsts.reprojectSRV != kUnvalidIdUint32;
-    if (bHistoryValid)
+    if (pushConsts.reprojectSRV != kUnvalidIdUint32)
     {
         float4 reprojected = loadTexture2D_float4(pushConsts.reprojectSRV, tid);
         
-        // Stable screen probe.  
-        irradiance = lerp(irradiance, world_irradiance, 1.0 - saturate(weightSum));
-        irradiance = lerp(irradiance, world_irradiance, smoothstep(0.0, 1.0, 1.0 / (1.0 + reprojected.w)));
-
-        // 
-        reprojected.xyz = giClipAABB(reprojected.xyz, irradiance, 0.2);
-
-        irradiance = lerp(reprojected.xyz,  irradiance, 1.0 / (1.0 + reprojected.w));
+        if (any(reprojected > 0.0))
+        {
+            // Stable screen probe.  
+            diffuse_screenProbeIrradiance = lerp(diffuse_screenProbeIrradiance, diffuse_world_irradiance, 1.0 - saturate(diffuse_screenProbeWeightSum));
+            diffuse_screenProbeIrradiance = lerp(diffuse_screenProbeIrradiance, diffuse_world_irradiance, smoothstep(0.0, 1.0, 1.0 / (1.0 + reprojected.w)));
 
 
+            // 
+            reprojected.xyz = giClipAABB(reprojected.xyz, diffuse_screenProbeIrradiance, 0.2);
 
-//      irradiance = lerp(irradiance, world_irradiance, 1.0 - pow(min(reprojected.w + 1.0, kGIMaxSampleCount) / kGIMaxSampleCount, 1.25));
-        // irradiance = world_irradiance;
-        resultSample = reprojected.w;
+            diffuse_screenProbeIrradiance = lerp(reprojected.xyz,  diffuse_screenProbeIrradiance, 1.0 / (1.0 + reprojected.w));
+
+    //      diffuse_screenProbeIrradiance = lerp(diffuse_screenProbeIrradiance, diffuse_world_irradiance, 1.0 - pow(min(reprojected.w + 1.0, kGIMaxSampleCount) / kGIMaxSampleCount, 1.25));
+    //      diffuse_screenProbeIrradiance = diffuse_world_irradiance;
+            resultSample = reprojected.w;
+        }
+
     }
 
-    float4 result = float4(irradiance, min(kGIMaxSampleCount, resultSample + 1.0));
+    float3 specularRadiance = 0.0;
+    float specularSample  = 0.0;
+
+    float4 specularTraceRadiance = loadTexture2D_float4(pushConsts.specularTraceSRV, tid);
+    if(any(isnan(specularTraceRadiance)))
+    {
+        specularTraceRadiance = 0.0;
+    }
+    
+    float roughness = loadTexture2D_float1(pushConsts.rouhnessSRV, tid);
+    if (roughness == 0.0) 
+    {
+        specularRadiance = specularTraceRadiance.xyz; // Mirror surface. 
+        specularSample = 1.0;
+
+        check(!any(isnan(specularTraceRadiance.xyz)));
+    }
+    else
+    {
+    #if 0
+        float lerpFactor = roughness; // saturate(roughness * (1.0 / kGIMaxGlossyRoughness));
+        // specularTraceRadiance.xyz = lerp(specularTraceRadiance.xyz, specular_screenProbeIrradiance, pow(lerpFactor, 16.0));
+    #else 
+        float lerpFactor =  saturate(roughness * (1.0 / kGIMaxGlossyRoughness));
+        specularTraceRadiance.xyz = lerp(specularTraceRadiance.xyz, specular_screenProbeIrradiance, pow(lerpFactor, 16.0));
+    #endif
+
+
+        specularSample = 0.0;
+        specularRadiance = specularTraceRadiance.xyz; 
+ 
+        if (pushConsts.reprojectSpecularSRV != kUnvalidIdUint32)
+        {
+            float4 reprojected = loadTexture2D_float4(pushConsts.reprojectSpecularSRV, tid);
+            if (any(reprojected > 0.0))
+            {
+                specularSample = reprojected.w;
+                
+                const float maxSample = lerp(8.0, kGIMaxSampleCount, sqrt(lerpFactor));
+                float weight = 1.0 / (1.0 + specularSample);
+
+                // Tight clip box for reflection.
+                reprojected.xyz = giClipAABB(reprojected.xyz, specularTraceRadiance.xyz, 0.5);
+
+                specularRadiance = lerp(reprojected.xyz, specularTraceRadiance.xyz, weight);
+                specularSample  = min(maxSample, specularSample + 1.0);
+
+                // check(!any(isnan(specularRadiance)));
+            }
+        }
+
+        specularSample ++;
+
+        // check(!any(isnan(specularRadiance)));
+    }
+
+    storeRWTexture2D_float4(pushConsts.specularUAV, tid, float4(specularRadiance, specularSample));
+                
+
+    float4 result = float4(diffuse_screenProbeIrradiance, min(kGIMaxSampleCount, resultSample + 1.0));
     if (any(isnan(result)))
     {
         result = 0.0;
@@ -277,12 +384,57 @@ void mainCS(
     float sampleRadiusWeight = saturate(1.0 - pow(result.w / kGIMaxSampleCount, 4.0));
     float screenProbeInterpolateWeight = 0.0;
 #if 1
-    screenProbeInterpolateWeight = 1.0 - saturate(weightSum * 0.5);
+    screenProbeInterpolateWeight = 1.0 - saturate(diffuse_screenProbeWeightSum * 0.5);
 #endif
 
     // 
     float filterRadius = max(sampleRadiusWeight, screenProbeInterpolateWeight);
-    storeRWTexture2D_float1(pushConsts.radiusUAV, tid, filterRadius);
+    float specularFilterRadius = 1.0 / (1.0 + specularSample);
+    storeRWTexture2D_float2(pushConsts.radiusUAV, tid, float2(filterRadius, specularFilterRadius));
+
+    // 
+    // check(!any(isnan(specularRadiance)));
+
+    //
+    if (any(workGroupId >= pushConsts.gbufferDim / 8))
+    {
+        return;
+    }
+
+    sRadiance[localThreadIndex] = float4(specularRadiance.xyz, any(specularRadiance > 0.0) ? 1.0 : 0.0);
+    GroupMemoryBarrierWithGroupSync();
+
+    if (localThreadIndex < 32)
+    {
+        sRadiance[localThreadIndex] += sRadiance[localThreadIndex + 32];
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (localThreadIndex < 16)
+    {
+        sRadiance[localThreadIndex] += sRadiance[localThreadIndex + 16];
+    }
+    if (localThreadIndex < 8)
+    {
+        sRadiance[localThreadIndex] += sRadiance[localThreadIndex + 8];
+    }
+    if (localThreadIndex < 4)
+    {
+        sRadiance[localThreadIndex] += sRadiance[localThreadIndex + 4];
+    }
+    if (localThreadIndex < 2)
+    {
+        sRadiance[localThreadIndex] += sRadiance[localThreadIndex + 2];
+    }
+    if (localThreadIndex < 1)
+    {
+        float4 radianceSum = sRadiance[0] + sRadiance[1];
+        float3 avgRadiance = radianceSum.w > 0.0 ? radianceSum.xyz / radianceSum.w : 0.0;
+
+        if (pushConsts.specularStatUAV != kUnvalidIdUint32)
+        {
+            storeRWTexture2D_float3(pushConsts.specularStatUAV, workGroupId, avgRadiance);
+        }
+    }
 }
 
 #endif 

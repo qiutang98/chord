@@ -18,7 +18,7 @@ pushConsts
     float rayMissDistance;
     float maxRayTraceDistance;
     float rayHitLODOffset;
-    bool  bHistoryValid;
+    uint  bHistoryValid;
 
     uint  clipmapConfigBufferId;
     uint  clipmapCount;
@@ -26,7 +26,7 @@ pushConsts
 };
 ***********************************/
 
-float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 rayDirection, float deviceZ)
+float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 rayDirection, float deviceZ, int sampleWeightMode)
 {
     const GPUBasicData scene = perView.basicData;
 
@@ -65,8 +65,9 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
             pbrMaterial.initFromRayHitMaterialInfo(materialInfo);
 
             //
-            float NoV = max(0.0, dot(materialInfo.normalRS, -normalize(positionRS)));
-            float2 approxBRDF = envBRDFApproxLazarov(pbrMaterial.roughness, NoV);
+            float3 V = -normalize(positionRS);
+            float NoV = max(0.0, dot(materialInfo.normalRS, V));
+            float2 brdf = sampleBRDFLut(perView, NoV, materialInfo.roughness);
 
             // Apply sun light direct diffuse lighting. 
             float3 skyRadiance;
@@ -132,30 +133,41 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
             float3 approxDiffuseFullRough = materialInfo.diffuseColor + pbrMaterial.specularColor * 0.45;
 
             // Infinite indirect lighting. 
-            if (pushConsts.bHistoryValid)
+            float sampleIndirectVolumeSampleCount = kGIMaxSampleCount;
+            if (pushConsts.bHistoryValid && !perView.bCameraCut)
             {
                 float3 irradiance = 0.0; 
+                float3 specularIrradiance = 0.0;
+
+                float3 reflectDir = reflect(-V, materialInfo.normalRS);
                 for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++) 
                 { 
                     const GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
-                    if (config.getBlendWeight(positionRS) > 0.99)
+                    if (config.getBlendWeight(positionRS) > 0.99 && !config.bResetAll)
                     {
-                        if (config.evaluateSH(perView, positionRS, materialInfo.normalRS, irradiance))
+                        float minSampleCount;
+                        if (config.evaluateSH(perView, positionRS, materialInfo.normalRS, irradiance, minSampleCount, sampleWeightMode))
                         {
+                            config.evaluateSH(perView, positionRS, reflectDir, specularIrradiance, minSampleCount, sampleWeightMode);
+
+                            // Check volume sample count, which used for ray trace. 
+                            sampleIndirectVolumeSampleCount = min(sampleIndirectVolumeSampleCount, minSampleCount);
                             break; 
                         }
                         else
                         {
-                            irradiance = 0.0;   
+                            irradiance = 0.0; //  
                         } 
                     }  
                 }   
- 
-                radiance += irradiance * approxDiffuseFullRough;
+                //
+                radiance += irradiance * materialInfo.diffuseColor;
+                radiance += specularIrradiance * (pbrMaterial.specularColor * brdf.x + brdf.y);  
             }
 
             // Sky light leaking for diffuse, don't add for reflection.
-            radiance +=  pushConsts.skyLightLeaking * skyRadiance * approxDiffuseFullRough;
+            radiance +=  pushConsts.skyLightLeaking * skyRadiance * materialInfo.diffuseColor;
+            radiance +=  pushConsts.skyLightLeaking * skyRadiance * (pbrMaterial.specularColor * brdf.x + brdf.y);  
 
             // Emissive. 
             radiance += materialInfo.emissiveColor;

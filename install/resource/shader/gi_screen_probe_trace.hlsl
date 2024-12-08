@@ -19,14 +19,14 @@ struct GIProbeTracePushConsts
     float rayMissDistance;
     float maxRayTraceDistance;
     float rayHitLODOffset;
-    bool  bHistoryValid;
+    uint  bHistoryValid;
 
     uint  clipmapConfigBufferId;
     uint  clipmapCount;
     float skyLightLeaking;
     //////////////////////
-
-    uint cameraViewId;
+ 
+    uint cameraViewId; 
     uint probeSpawnInfoSRV;
 
     uint radianceUAV;
@@ -95,14 +95,14 @@ void mainCS(
     float3 rayDirection = getScreenProbeCellRayDirection(scene, probeCoord, gid, probeNormalRS);
 
     // 
-    float4 curTraceRadiance = rayTrace(perView, probePositionRS, rayDirection, spawnInfo.depth);
-
+    float4 curTraceRadiance = rayTrace(perView, probePositionRS, rayDirection, spawnInfo.depth, 0);
+ 
     // 
     float4 historyTraceRadiance = loadTexture2D_float4(pushConsts.historyTraceSRV, tid);
 
     uint currentProbeSample = 0;
-    bool bHistoryValid = (historyTraceRadiance.w > kFloatEpsilon); 
-    if (bHistoryValid)
+    bool bHistoryValid = (historyTraceRadiance.w > kFloatEpsilon);  
+    if (bHistoryValid) 
     {
         // Still valid, so load sample. 
         currentProbeSample = loadTexture2D_uint1(pushConsts.screenProbeSampleSRV, probeCoord);
@@ -113,10 +113,13 @@ void mainCS(
     curTraceRadiance = lerp(curTraceRadiance, historyTraceRadiance, lerpFactor);
 
     // 
-    float3 statRadiance;
+    float3 statRadiance = 0.0;
     if (WaveIsFirstLane()) 
     {
-        statRadiance = loadTexture2D_float3(pushConsts.statSRV, probeCoord);
+        if(pushConsts.statSRV != kUnvalidIdUint32 && !perView.bCameraCut)
+        {
+            statRadiance = loadTexture2D_float3(pushConsts.statSRV, probeCoord);
+        }
     }
     statRadiance = WaveReadLaneFirst(statRadiance); 
 

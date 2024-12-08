@@ -81,7 +81,6 @@ namespace chord::graphics
 		GPUTextureAssetRef black = nullptr;       // 1x1 RGBA(  0,   0,   0, 255) 
 		GPUTextureAssetRef normal = nullptr;      // 1x1 RGBA(128, 128, 255, 255) 
 
-
 		// Meshes
 		BuiltinMeshRef lowSphere = nullptr;
 	};

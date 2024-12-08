@@ -14,7 +14,7 @@ struct ShadowProjectionPushConsts
     uint uav1;
     uint normalId;
 
-    bool  bContactHardenPCF;             // false
+    uint  bContactHardenPCF;             // false
     float shadowMapTexelSize;
     float normalOffsetScale;
     float lightSize;                     // 1.0

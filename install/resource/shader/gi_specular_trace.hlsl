@@ -10,6 +10,8 @@ struct GISpecularTracePushConsts
     uint normalRSId;
     uint UAV;
 
+    uint disocclusionMask;
+
     //////////////////////
     uint cascadeCount;
     uint shadowViewId;
@@ -24,7 +26,7 @@ struct GISpecularTracePushConsts
     float rayMissDistance;
     float maxRayTraceDistance; 
     float rayHitLODOffset;
-    bool  bHistoryValid; 
+    uint  bHistoryValid; 
 
     uint  clipmapConfigBufferId;
     uint  clipmapCount; 
@@ -82,8 +84,10 @@ void mainCS(
     const uint2 tid = workGroupId * 8 + gid;
 
     float2 uv = (tid + 0.5) / pushConsts.gbufferDim;
- 
-    float4 curTraceRadiance = 0.0;
+    float roughness = loadTexture2D_float1(pushConsts.roughnessId, tid);
+
+    float4 curTraceRadiance = 0.0; // .w store hit T. 
+    float2 hitPositioin_historyUv = 0.0;
     if (all(tid < pushConsts.gbufferDim))
     {
         float deviceZ = loadTexture2D_float1(pushConsts.depthId, tid);
@@ -93,27 +97,33 @@ void mainCS(
             const float3 viewDirRS = normalize(positionRS);
             
             //
-            float roughness = loadTexture2D_float1(pushConsts.roughnessId, tid);
-            
-            // 
-            float3 normalRS = loadTexture2D_float4(pushConsts.normalRSId, tid).xyz * 2.0 - 1.0;
-            normalRS = normalize(normalRS);
 
-            const float3 viewDirVS = normalize(mul(perView.translatedWorldToView, float4(viewDirRS, 0.0)).xyz);
-            float3 normalVS = normalize(mul(perView.translatedWorldToView, float4(normalRS, 0.0)).xyz);
+            if (roughness < kGIMaxGlossyRoughness)
+            {
+                // 
+                float3 normalRS = loadTexture2D_float4(pushConsts.normalRSId, tid).xyz * 2.0 - 1.0;
+                normalRS = normalize(normalRS);
 
-            //
-            float2 blueNoise2 = STBN_float2(scene.blueNoiseCtx, tid, scene.frameCounter);
+                const float3 viewDirVS = normalize(mul(perView.translatedWorldToView, float4(viewDirRS, 0.0)).xyz);
+                float3 normalVS = normalize(mul(perView.translatedWorldToView, float4(normalRS, 0.0)).xyz);
 
-            //
-            float3 reflectDirVS = getReflectionDir(viewDirVS, normalVS, roughness, blueNoise2);
-            
-            // 
-            float3 rayDirection = normalize(mul(perView.viewToTranslatedWorld, float4(reflectDirVS, 0.0)).xyz);
-            curTraceRadiance = rayTrace(perView, positionRS, rayDirection, deviceZ);
+                //
+                float2 blueNoise2 = STBN_float2(scene.blueNoiseCtx, tid, scene.frameCounter);
+
+                //
+                float3 reflectDirVS = getReflectionDir(viewDirVS, normalVS, roughness, blueNoise2); 
+                
+                // 
+                float3 rayDirection = normalize(mul(perView.viewToTranslatedWorld, float4(reflectDirVS, 0.0)).xyz);
+                curTraceRadiance = rayTrace(perView, positionRS, rayDirection, deviceZ, -1);
+
+                if (curTraceRadiance.w > pushConsts.rayMissDistance - 10.0)
+                {
+                    curTraceRadiance.w = 0.0;
+                }
+            }
         }
     }
-
     storeRWTexture2D_float4(pushConsts.UAV, tid, curTraceRadiance);
 }
 

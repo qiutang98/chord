@@ -58,6 +58,10 @@ namespace chord
 		uint32 cameraViewId,
 		graphics::helper::AccelKHRRef tlas);
 
+	extern graphics::PoolTextureRef computeBRDFLut(
+		graphics::GraphicsOrComputeQueue& queue,
+		uint lutDim);
+
 	extern graphics::PoolTextureRef giUpdate(
 		graphics::CommandList& cmd,
 		graphics::GraphicsQueue& queue,
@@ -68,7 +72,10 @@ namespace chord
 		uint32 cameraViewId,
 		graphics::helper::AccelKHRRef tlas,
 		graphics::PoolTextureRef disocclusionMask,
-		ICamera* camera);
+		ICamera* camera,
+		graphics::PoolTextureRef depth_Half_LastFrame,
+		graphics::PoolTextureRef pixelNormalRS_Half_LastFrame, 
+		bool bCameraCut);
 
 	extern graphics::PoolTextureRef ddgiUpdate(
 		graphics::CommandList& cmd,
