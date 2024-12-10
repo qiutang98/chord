@@ -1,4 +1,5 @@
 # Chord - 现代vulkan渲染引擎
+![image](gallery/Snipaste_2024-12-11_00-01-10.png)
 
 ![image](gallery/Bistro.png)
 
