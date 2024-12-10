@@ -45,6 +45,24 @@ void PostProcessingManager::onDrawUI(SceneRef scene)
 		ui::endGroupPanel();
 	}
 
+	if (ImGui::CollapsingHeader("Bloom Setting"))
+	{
+		ui::beginGroupPanel("Bias Config");
+		ImGui::PushItemWidth(100.0f);
+
+		ImGui::DragFloat("Intensity", &copyValue.bloomIntensity, 0.01f, 0.0f, 1.0);
+		ImGui::DragFloat("Radius", &copyValue.bloomRadius, 0.01f, 0.0f, 1.0);
+
+		ImGui::DragFloat("Threshold", &copyValue.bloomThreshold, 0.01f, 0.0f, 1.0f);
+		ImGui::DragFloat("Threshold soft", &copyValue.bloomThresholdSoft, 0.01f, 0.0f, 1.0f);
+
+		ImGui::DragFloat("Sample count", &copyValue.bloomSampleCount, 1.0f, 4.0f, 10.0f);
+		ImGui::DragFloat("Gaussian sigma", &copyValue.bloomGaussianSigma, 0.01f, 0.01f, 1.0f);
+
+		ImGui::PopItemWidth();
+		ui::endGroupPanel();
+	}
+
 	if (copyValue != m_config)
 	{
 		m_config = copyValue;

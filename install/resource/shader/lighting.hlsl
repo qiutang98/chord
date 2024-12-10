@@ -44,8 +44,14 @@ CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 
 void exportGbuffer(in const TinyGBufferContext g, uint2 id)
 {
+    float3 finalColor = g.color;
+    if (any(isnan(finalColor)))
+    {
+        finalColor = 0.0;
+    }
+
     // 
-    storeRWTexture2D_float3(pushConsts.sceneColorId,          id, g.color);
+    storeRWTexture2D_float3(pushConsts.sceneColorId,          id, finalColor);
 
 #if LIGHTING_TYPE != kLightingType_None
     storeRWTexture2D_float3(pushConsts.baseColorId,           id, float3(g.baseColor.xyz));

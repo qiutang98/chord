@@ -349,8 +349,6 @@ void DeferredRenderer::render(
 			}
 		}
 
-		exposureBuffer = computeAutoExposure(graphics, gbuffers.color, postprocessConfig, m_rendererHistory.exposureBuffer, tickData.dt);
-
 		if (!perframe.builtinMeshInstances.empty())
 		{
 			debugDrawBuiltinMesh(graphics,
@@ -361,9 +359,14 @@ void DeferredRenderer::render(
 			insertTimer("DebugBuilitinMesh", graphics);
 		}
 
+		exposureBuffer = computeAutoExposure(graphics, gbuffers.color, postprocessConfig, m_rendererHistory.exposureBuffer, tickData.dt);
+
+		
+		auto bloomTex = computeBloom(graphics, gbuffers.color, postprocessConfig, viewGPUId);
+
 		check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 		check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);
-		tonemapping(viewGPUId, graphics, giResult != nullptr ? giResult : gbuffers.color, finalOutput, exposureBuffer);
+		tonemapping(viewGPUId, postprocessConfig, graphics, giResult != nullptr ? giResult : gbuffers.color, finalOutput, bloomTex);
 		insertTimer("Tonemapping", graphics);
 
 		check(finalOutput->get().getExtent().width == gbuffers.depthStencil->get().getExtent().width);

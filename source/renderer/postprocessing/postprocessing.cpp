@@ -8,12 +8,14 @@
 #include <shader/indirect_cmd.hlsl>
 #include <shader/auto_exposure.hlsl>
 #include <shader/histogram.hlsl>
+#include <shader/apply_exposure.hlsl>
 
 using namespace chord;
 using namespace chord::graphics;
 
 PRIVATE_GLOBAL_SHADER(HistogramCS, "resource/shader/histogram.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(AutoExposureCS, "resource/shader/auto_exposure.hlsl", "mainCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(ApplyExposureCS, "resource/shader/apply_exposure.hlsl", "mainCS", EShaderStage::Compute);
 
 PRIVATE_GLOBAL_SHADER(IndirectCmdParamCS, "resource/shader/indirect_cmd.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
 
@@ -114,6 +116,24 @@ PoolBufferGPUOnlyRef chord::computeAutoExposure(
             getContext().computePipe(computeShader, "AutoExposure"),
             pushConsts,
             { 1, 1, 1 });
+    }
+
+    {
+        ApplyExposurePushConsts pushConsts{};
+        uint2 dim = { color->get().getExtent().width, color->get().getExtent().height };
+
+        pushConsts.workDim = dim;
+        pushConsts.UAV = asUAV(queue, color);
+        pushConsts.SRV_exposure = asSRV(queue, exposureBuffer);
+        
+        const uint2 dispatchDim = divideRoundingUp(dim, uint2(32));
+
+        auto computeShader = getContext().getShaderLibrary().getShader<ApplyExposureCS>();
+        addComputePass2(queue,
+            "ApplyExposure",
+            getContext().computePipe(computeShader, "ApplyExposure"),
+            pushConsts,
+            { dispatchDim.x, dispatchDim.y, 1 });
     }
 
     return exposureBuffer;

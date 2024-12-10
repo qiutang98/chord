@@ -524,6 +524,15 @@ namespace chord
 		float autoExposureSpeedUp       =  2.00f;
 
 		float autoExposureExposureCompensation = 0.25f;
+
+		// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+		float bloomIntensity = 1.0f;
+		float bloomRadius = 0.80f;
+		float bloomThreshold = 0.80f;
+		float bloomThresholdSoft = 0.60f;
+		float bloomSampleCount   = 8.0f;
+		float bloomGaussianSigma = 0.2f;
+		// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 	};
 
 	struct DDGIVolumeConfigCPU

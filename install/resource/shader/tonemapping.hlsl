@@ -9,9 +9,12 @@ struct TonemappingPushConsts
     uint cameraViewId;
     uint textureId;
     uint pointClampSamplerId;
-    uint SRV_exposure;
+    uint bloomTexId;
+
+    float bloomIntensity;
 };
 CHORD_PUSHCONST(TonemappingPushConsts, pushConsts);
+
 
 
             
@@ -140,15 +143,20 @@ void mainPS(
     const GPUBasicData scene = perView.basicData;
 
     Texture2D<float4> inputTexture = TBindless(Texture2D, float4, pushConsts.textureId);
+    Texture2D<float3> bloomTexture = TBindless(Texture2D, float3, pushConsts.bloomTexId);
+
     SamplerState pointClampSampler = Bindless(SamplerState, pushConsts.pointClampSamplerId);
+    SamplerState linearClampSampler = getLinearClampEdgeSampler(perView);
 
     uint2 workPos = uint2(pushConsts.textureSize * input.uv);
 
-    float exposure = BATL(float, pushConsts.SRV_exposure, 0);
-    float4 sampleColor = exposure * inputTexture.Sample(pointClampSampler, input.uv);
+    // 
+    float4 sampleColor = inputTexture.Sample(pointClampSampler, input.uv);
+    float3 bloomColor = bloomTexture.Sample(linearClampSampler, input.uv) * pushConsts.bloomIntensity;
+    
 
     // Current engine working in ACEScg color space.
-    float3 colorAp1 = sampleColor.xyz; // mul(sRGB_2_AP1, sampleColor.xyz);
+    float3 colorAp1 = bloomColor + sampleColor.xyz; // mul(sRGB_2_AP1, sampleColor.xyz);
 
     colorAp1 = filmToneMap(
         colorAp1, 

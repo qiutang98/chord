@@ -13,10 +13,11 @@ namespace chord
 {
 	extern void tonemapping(
 		uint32 cameraViewBufferId, 
+		const PostprocessConfig& config,
 		graphics::GraphicsQueue& queue, 
 		graphics::PoolTextureRef srcImage, 
 		graphics::PoolTextureRef outImage,
-		graphics::PoolBufferGPUOnlyRef exposureBuffer);
+		graphics::PoolTextureRef bloomTex);
 	
 	struct DebugLineCtx
 	{
@@ -121,4 +122,10 @@ namespace chord
 		const PostprocessConfig& config,
 		graphics::PoolBufferGPUOnlyRef historyExposure,
 		float deltaTime);
+
+	extern graphics::PoolTextureRef computeBloom(
+		graphics::GraphicsQueue& queue,
+		graphics::PoolTextureRef color,
+		const PostprocessConfig& config,
+		uint cameraViewId);
 }
