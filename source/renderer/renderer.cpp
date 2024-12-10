@@ -337,7 +337,7 @@ void DeferredRenderer::render(
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
 			if (giResult == nullptr) giResult = ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
-			if (giResult == nullptr) giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionMask, camera, m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half, m_bCameraCut);
+			if (giResult == nullptr) giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionMask, camera, m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half, m_bCameraCut, gltfRenderCtx.timerLambda);
 			insertTimer("GI Update", graphics);
 
 			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
@@ -417,6 +417,12 @@ GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
 	// Basic data collect.
 	result.frameCounter = getFrameCounter() % uint64(UINT32_MAX);
 	result.frameCounterMod8 = getFrameCounter() % 8;
+
+	result.halton23_16tap[0] = float2{ 0.0f, 0.0f };
+	for (uint i = 1; i < 16; i++)
+	{
+		result.halton23_16tap[i] = halton2D_23(getFrameCounter() + i - 1) * 2.0f - 1.0f;
+	}
 		
 	// GPU scene.
 	GPUScene.fillGPUBasicData(result);

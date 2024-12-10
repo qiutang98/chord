@@ -18,27 +18,6 @@ CHORD_PUSHCONST(GISpecularRemoveFireFlareFilterPushConsts, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
 
-static const int kSampleCount = 16;
-static const int2 kSampleOffsets[kSampleCount] = 
-{
-    int2( 0,  0), 
-    int2( 0,  1),  
-    int2(-2,  1),  
-    int2( 2, -3), 
-    int2(-3,  0),  
-    int2( 1,  2), 
-    int2(-1, -2), 
-    int2( 3,  0), 
-    int2(-3,  3),
-    int2( 0, -3), 
-    int2(-1, -1), 
-    int2( 2,  1),  
-    int2(-2, -2), 
-    int2( 1,  0), 
-    int2( 0,  2),   
-    int2( 3, -1),
-};
-
 [numthreads(64, 1, 1)]
 void mainCS(
     uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupIndex)
@@ -86,7 +65,7 @@ void mainCS(
 
     for (int i = 0; i < 16; i ++)
     {
-        int2 sampleCoord = tid + kSampleOffsets[i];
+        int2 sampleCoord = tid + scene.halton23_16tap[i] * 4;
 
         if (any(sampleCoord < 0) || any(sampleCoord >= pushConsts.gbufferDim))
         {

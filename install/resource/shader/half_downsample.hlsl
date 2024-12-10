@@ -89,7 +89,7 @@ void mainCS(
         storeRWTexture2D_float4(pushConsts.halfPixelNormalRSId, workPos, pixelNormal);
         storeRWTexture2D_float2(pushConsts.halfMotionVectorId,  workPos, motionVector);
         storeRWTexture2D_float1(pushConsts.halfDeviceZId,       workPos, closestDepth);
-        storeRWTexture2D_float1(pushConsts.halfRoughnessId,     workPos, roughness);
+        storeRWTexture2D_float1(pushConsts.halfRoughnessId,     workPos, roughness * 0.3);
     }
 }
 

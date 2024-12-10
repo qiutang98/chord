@@ -537,6 +537,31 @@ namespace chord
 		return v;
 	}
 
+	// halton sequence compute.
+	static inline float halton(uint64_t index, uint64_t base)
+	{
+		float f = 1; float r = 0;
+		while (index > 0)
+		{
+			f = f / static_cast<float>(base);
+			r = r + f * (index % base);
+			index = index / base;
+		}
+		return r;
+	}
+
+	// halton 2d sequence compute.
+	static inline math::vec2 halton2D(uint64_t index, uint64_t baseA, uint64_t baseB)
+	{
+		return math::vec2(halton(index, baseA), halton(index, baseB));
+	}
+
+	// halton 2d 2/3
+	static inline math::vec2 halton2D_23(uint64_t index)
+	{
+		return math::vec2(halton(index, 2), halton(index, 3));
+	}
+
 	extern uint64 requireUniqueId();
 
 	extern math::mat4 infiniteInvertZPerspectiveRH_ZO(float aspect, float fovy, float zNear);

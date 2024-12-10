@@ -295,6 +295,9 @@ struct GPUBasicData
     uint pointClampEdgeSampler; // All point clamp edge sampler. 
     uint linearClampEdgeSampler;
 
+    // halton23_16tap[0] always is (0, 0), range is (-1, +1)
+    float2 halton23_16tap[16]; 
+     
     uint brdfLut; 
     uint pad0;
     uint pad1;

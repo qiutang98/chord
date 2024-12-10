@@ -84,7 +84,8 @@ graphics::PoolTextureRef chord::giUpdate(
 	ICamera* camera,
 	graphics::PoolTextureRef depth_Half_LastFrame,
 	graphics::PoolTextureRef pixelNormalRS_Half_LastFrame,
-	bool bCameraCut)
+	bool bCameraCut,
+	RendererTimerLambda timer)
 {
 	if (!sEnableGI || !getContext().isRaytraceSupport())
 	{
@@ -223,6 +224,7 @@ graphics::PoolTextureRef chord::giUpdate(
 		{
 			auto& resource = giCtx.volumes[i];
 
+		
 			auto tempProbeIrradianceBuffer = bufferPool.createGPUOnly("GI-WorldProbe-SH-Irradiance-Temp",
 				sizeof(SH3_gi_pack) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z,
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
@@ -238,9 +240,6 @@ graphics::PoolTextureRef chord::giUpdate(
 				pushConst.clipmapLevel = i;
 				pushConst.sh_uav = asUAV(queue, tempProbeIrradianceBuffer);
 				pushConst.bLastCascade = i == kCascadeCount - 1;
-			
-
-
 
 				auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHUpdateCS>();
 				addComputePass2(queue,
@@ -249,7 +248,6 @@ graphics::PoolTextureRef chord::giUpdate(
 					pushConst,
 					{ dispatchDim, 1, 1 });
 			}
-
 			{
 				GIWorldProbeSHPropagatePushConsts pushConst{};
 				pushConst.cameraViewId = cameraViewId;
@@ -271,6 +269,12 @@ graphics::PoolTextureRef chord::giUpdate(
 			}
 
 		}
+	}
+
+
+	if (timer)
+	{
+		timer("GI: World Radiance Cache Update", queue);
 	}
 
 
@@ -358,7 +362,10 @@ graphics::PoolTextureRef chord::giUpdate(
 			{ screenProbeDim.x, screenProbeDim.y, 1 });
 	}
 
-
+	if (timer)
+	{
+		timer("GI: Screen Probe Spawn & Reproject", queue);
+	}
 
 	// Pass #1: Screen probe trace. 
 	auto probeTraceRadianceRT = rtPool.create("GI-ScreenProbe-TraceRadiance", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -382,8 +389,8 @@ graphics::PoolTextureRef chord::giUpdate(
 			tracePushConsts.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
 			tracePushConsts.rayMissDistance = 128.0f;
 			tracePushConsts.maxRayTraceDistance = 800.0f;
-			tracePushConsts.cameraViewId        = cameraViewId;
-			tracePushConsts.rayHitLODOffset     = 2.0f;
+			tracePushConsts.cameraViewId = cameraViewId;
+			tracePushConsts.rayHitLODOffset = 2.0f;
 
 			for (int i = 0; i < worldProbeCascadeCount; i++)
 			{
@@ -415,25 +422,41 @@ graphics::PoolTextureRef chord::giUpdate(
 						.push(pipe, 1); // Push set 1.
 				});
 		}
+	}
+
+	if (timer)
+	{
+		timer("GI: Screen Probe RT trace", queue);
+	}
+
+	// Screen SH projection. 
+	{
+		GIScreenProbeProjectSHPushConsts pushConst{};
+		pushConst.probeDim = screenProbeDim;
+		pushConst.cameraViewId = cameraViewId;
+		pushConst.probeSpawnInfoSRV = asSRV(queue, newScreenProbeSpawnInfoBuffer);
+		pushConst.radianceSRV = asSRV(queue, probeTraceRadianceRT);
+		pushConst.shUAV = asUAV(queue, newScreenProbeSHBuffer);
+		pushConst.gbufferDim = halfDim;
+		pushConst.statSRV = bHistoryInvalid ? kUnvalidIdUint32 : asSRV(queue, probeReprojectStatRadianceRT);
+		auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeProjectSHCS>();
+		addComputePass2(queue,
+			"GI: ScreenProbeSH",
+			getContext().computePipe(computeShader, "GI: ScreenProbeSH"),
+			pushConst,
+			{ screenProbeDim.x, screenProbeDim.y, 1 });
+	}
+
+	if (timer)
+	{
+		timer("GI: Screen Probe SH projection", queue);
+	}
+
+	{
 		// Screen trace. 
 		{
-			// Screen SH projection. 
-			{
-				GIScreenProbeProjectSHPushConsts pushConst{};
-				pushConst.probeDim     = screenProbeDim;
-				pushConst.cameraViewId = cameraViewId;
-				pushConst.probeSpawnInfoSRV = asSRV(queue, newScreenProbeSpawnInfoBuffer);
-				pushConst.radianceSRV = asSRV(queue, probeTraceRadianceRT);
-				pushConst.shUAV       = asUAV(queue, newScreenProbeSHBuffer);
-				pushConst.gbufferDim  = halfDim;
-				pushConst.statSRV = bHistoryInvalid ? kUnvalidIdUint32 : asSRV(queue, probeReprojectStatRadianceRT);
-				auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeProjectSHCS>();
-				addComputePass2(queue,
-					"GI: ScreenProbeSH",
-					getContext().computePipe(computeShader, "GI: ScreenProbeSH"),
-					pushConst,
-					{ screenProbeDim.x, screenProbeDim.y, 1 });
-			}
+
+
 
 			// World probe inject. 
 			{
@@ -470,6 +493,11 @@ graphics::PoolTextureRef chord::giUpdate(
 				}
 			}
 		}
+	}
+
+	if (timer)
+	{
+		timer("GI: Screen Probe Inject World", queue);
 	}
 
 	static constexpr float kSpecularRayMissDistance = 1e5f; // Large enough for ray miss sky mark. 
@@ -529,6 +557,11 @@ graphics::PoolTextureRef chord::giUpdate(
 			});
 	}
 
+	if (timer)
+	{
+		timer("GI: Specular Trace", queue);
+	}
+
 	graphics::PoolTextureRef probeReprojectStatSpecularRT = nullptr;
 	graphics::PoolTextureRef reprojectGIRT = nullptr;
 	graphics::PoolTextureRef reprojectSpecularRT = nullptr;
@@ -575,6 +608,11 @@ graphics::PoolTextureRef chord::giUpdate(
 			{ dispatchDim.x, dispatchDim.y, 1 });
 	}
 
+	if (timer)
+	{
+		timer("GI: Reproject History", queue);
+	}
+
 
 	// Specular post trace filter.
 	graphics::PoolTextureRef specularTraceRadiancePostFilterRT = rtPool.create("GI-Specular-TraceRadiance-PostFilter", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -599,6 +637,11 @@ graphics::PoolTextureRef chord::giUpdate(
 			getContext().computePipe(computeShader, "GI: SpecularFilter-Post"),
 			pushConst,
 			{ dispatchDim.x, dispatchDim.y, 1 });
+	}
+
+	if (timer)
+	{
+		timer("GI: Specular Remove Fireflare", queue);
 	}
 
 	auto giInterpolateRT = rtPool.create("GI-ScreenProbe-Interpolate", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -636,6 +679,11 @@ graphics::PoolTextureRef chord::giUpdate(
 			pushConsts,
 			{ dispatchDim.x, dispatchDim.y, 1 });
 	}
+
+	if (timer)
+	{
+		timer("GI: Interpolate", queue);
+	}
 	
 	if (sGIEnableSpatialFilter != 0)
 	{
@@ -670,6 +718,11 @@ graphics::PoolTextureRef chord::giUpdate(
 			getContext().computePipe(computeShader, "GI: SpatialFilter"),
 			pushConsts,
 			{ dispatchDim.x, dispatchDim.y, 1 });
+	}
+
+	if (timer)
+	{
+		timer("GI: Diffuse Spatial", queue);
 	}
 
 	if (sGIEnableSpecularSpatialFilter != 0)
@@ -708,6 +761,11 @@ graphics::PoolTextureRef chord::giUpdate(
 			{ dispatchDim.x, dispatchDim.y, 1 });
 	}
 
+	if (timer)
+	{
+		timer("GI: Specular Spatial", queue);
+	}
+
 	// auto fullResDiffuseGI = rtPool.create("GI-FullRes-DiffuseGI", gbuffers.dimension.x, gbuffers.dimension.y, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 	{
 		GIUpsamplePushConsts pushConsts{};
@@ -733,6 +791,11 @@ graphics::PoolTextureRef chord::giUpdate(
 			getContext().computePipe(computeShader, "GI: SpatialUpsample"),
 			pushConsts,
 			{ dispatchDim.x, dispatchDim.y, 1 });
+	}
+
+	if (timer)
+	{
+		timer("GI: Upsample & Composite", queue);
 	}
 
 	// Store history. 

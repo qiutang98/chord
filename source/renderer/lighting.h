@@ -62,6 +62,7 @@ namespace chord
 		graphics::GraphicsOrComputeQueue& queue,
 		uint lutDim);
 
+	using RendererTimerLambda = std::function<void(const std::string&, graphics::GraphicsOrComputeQueue& queue)>;
 	extern graphics::PoolTextureRef giUpdate(
 		graphics::CommandList& cmd,
 		graphics::GraphicsQueue& queue,
@@ -75,7 +76,8 @@ namespace chord
 		ICamera* camera,
 		graphics::PoolTextureRef depth_Half_LastFrame,
 		graphics::PoolTextureRef pixelNormalRS_Half_LastFrame, 
-		bool bCameraCut);
+		bool bCameraCut,
+		RendererTimerLambda timer);
 
 	extern graphics::PoolTextureRef ddgiUpdate(
 		graphics::CommandList& cmd,
