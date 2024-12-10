@@ -11,7 +11,12 @@ struct LineDrawVertex;
 
 namespace chord
 {
-	extern void tonemapping(uint32 cameraViewBufferId, graphics::GraphicsQueue& queue, graphics::PoolTextureRef srcImage, graphics::PoolTextureRef outImage);
+	extern void tonemapping(
+		uint32 cameraViewBufferId, 
+		graphics::GraphicsQueue& queue, 
+		graphics::PoolTextureRef srcImage, 
+		graphics::PoolTextureRef outImage,
+		graphics::PoolBufferGPUOnlyRef exposureBuffer);
 	
 	struct DebugLineCtx
 	{
@@ -109,4 +114,11 @@ namespace chord
 
 		std::vector<GIWorldProbeVolumeResource> volumes;
 	};
+
+	extern graphics::PoolBufferGPUOnlyRef computeAutoExposure(
+		graphics::GraphicsQueue& queue,
+		graphics::PoolTextureRef color,
+		const PostprocessConfig& config,
+		graphics::PoolBufferGPUOnlyRef historyExposure,
+		float deltaTime);
 }

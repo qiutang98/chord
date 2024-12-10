@@ -235,6 +235,7 @@ void DeferredRenderer::render(
 	// 
 	const auto& sunShadowConfig = scene->getShadowManager().getConfig();
 	const auto& ddgiConfig = scene->getDDGIManager().getConfig();
+	const auto& postprocessConfig = scene->getPostProcessingManager().getConfig();
 
 	// 
 	auto gbuffers = allocateGBufferTextures(currentRenderWidth, currentRenderHeight);
@@ -251,6 +252,7 @@ void DeferredRenderer::render(
 
 	HZBContext hzbCtx { };
 	CascadeShadowHistory cascadeShadowCurrentFrame{ };
+	PoolBufferGPUOnlyRef exposureBuffer = nullptr;
 	{
 		insertTimer("FrameBegin", graphics);
 
@@ -347,6 +349,8 @@ void DeferredRenderer::render(
 			}
 		}
 
+		exposureBuffer = computeAutoExposure(graphics, gbuffers.color, postprocessConfig, m_rendererHistory.exposureBuffer, tickData.dt);
+
 		if (!perframe.builtinMeshInstances.empty())
 		{
 			debugDrawBuiltinMesh(graphics,
@@ -359,7 +363,7 @@ void DeferredRenderer::render(
 
 		check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 		check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);
-		tonemapping(viewGPUId, graphics, giResult != nullptr ? giResult : gbuffers.color, finalOutput);
+		tonemapping(viewGPUId, graphics, giResult != nullptr ? giResult : gbuffers.color, finalOutput, exposureBuffer);
 		insertTimer("Tonemapping", graphics);
 
 		check(finalOutput->get().getExtent().width == gbuffers.depthStencil->get().getExtent().width);
@@ -381,6 +385,7 @@ void DeferredRenderer::render(
 
 		m_rendererHistory.depth_Half = gbuffers.depth_Half;
 		m_rendererHistory.vertexNormalRS_Half = gbuffers.vertexRSNormal_Half;
+		m_rendererHistory.exposureBuffer = exposureBuffer;
 	}
 
 	m_bCameraCut = false;

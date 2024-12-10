@@ -434,6 +434,7 @@ enum class EShadingType
 #define kLightingType_GLTF_MetallicRoughnessPBR 1
 
 #define kWaveSize 32
+#define kHistogramBinCount 128
 
 // Nanite config: fit mesh shader. Best performance: 126 triangles and 64 vertices.
 #define kNaniteMeshletMaxVertices 255

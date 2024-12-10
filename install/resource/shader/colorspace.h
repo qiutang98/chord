@@ -34,6 +34,11 @@ static const float3x3 XYZ_2_AP0_MAT =
     +0.0000000000, 0.0000000000, +0.9912520182,
 };
 
+inline float ap1_luminance_f_rgb(float3 rgb)
+{
+    return dot(float3(0.2722287168, 0.6740817658, 0.0536895174), rgb);
+}
+
 static const float3x3 AP1_2_XYZ_MAT =
 {
     +0.6624541811, 0.1340042065, 0.1561876870,

@@ -314,7 +314,6 @@ ViewportCamera::ViewportCamera(WidgetViewport* inViewport)
 
 void ViewportCamera::tick(const ApplicationTickData& tickData, GLFWwindow* window)
 {
-	m_fovy = math::radians(60.0f);
 	// Skip non window viewport.
 	if (window == nullptr)
 	{

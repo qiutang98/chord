@@ -64,6 +64,11 @@ namespace chord
 			m_ddgiManager = std::make_unique<DDGIManager>();
 		}
 
+		if (m_postprocessingManager == nullptr)
+		{
+			m_postprocessingManager = std::make_unique<PostProcessingManager>();
+		}
+
 		// Construct root node post construct.
 		if (m_root == nullptr)
 		{

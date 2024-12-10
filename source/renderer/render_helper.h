@@ -509,6 +509,23 @@ namespace chord
 		CascadeShadowMapConfig cascadeConfig;
 	};
 
+	struct PostprocessConfig
+	{
+		CHORD_DEFAULT_COMPARE_ARCHIVE(PostprocessConfig);
+
+		uint  bAutoExposureEnable     = true;
+		float autoExposureFixExposure = 1.00f;
+		float autoExposureLowPercent  = 0.50f;
+		float autoExposureHighPercent = 0.95f;
+
+		float autoExposureMinBrightness = -3.00f;
+		float autoExposureMaxBrightness =  1.00f;
+		float autoExposureSpeedDown     =  1.00f;
+		float autoExposureSpeedUp       =  2.00f;
+
+		float autoExposureExposureCompensation = 0.25f;
+	};
+
 	struct DDGIVolumeConfigCPU
 	{
 		CHORD_DEFAULT_COMPARE_ARCHIVE(DDGIVolumeConfigCPU);
@@ -587,13 +604,16 @@ namespace chord
 		HZBContext hzbCtx;
 
 		//
+		graphics::PoolBufferGPUOnlyRef exposureBuffer = nullptr;
+
+		//
 		CascadeShadowHistory cascadeCtx;
 
 		// 
-		graphics::PoolTextureRef depth_Half;
-		graphics::PoolTextureRef vertexNormalRS_Half;
+		graphics::PoolTextureRef depth_Half = nullptr;
+		graphics::PoolTextureRef vertexNormalRS_Half = nullptr;
 
 		// 
-		graphics::PoolTextureRef diffuseColor_Half;
+		graphics::PoolTextureRef diffuseColor_Half = nullptr;
 	};
 }

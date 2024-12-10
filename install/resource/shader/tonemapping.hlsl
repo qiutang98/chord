@@ -9,8 +9,12 @@ struct TonemappingPushConsts
     uint cameraViewId;
     uint textureId;
     uint pointClampSamplerId;
+    uint SRV_exposure;
 };
 CHORD_PUSHCONST(TonemappingPushConsts, pushConsts);
+
+
+            
 
 #ifndef __cplusplus // HLSL only area.
 
@@ -139,7 +143,9 @@ void mainPS(
     SamplerState pointClampSampler = Bindless(SamplerState, pushConsts.pointClampSamplerId);
 
     uint2 workPos = uint2(pushConsts.textureSize * input.uv);
-    float4 sampleColor = inputTexture.Sample(pointClampSampler, input.uv);
+
+    float exposure = BATL(float, pushConsts.SRV_exposure, 0);
+    float4 sampleColor = exposure * inputTexture.Sample(pointClampSampler, input.uv);
 
     // Current engine working in ACEScg color space.
     float3 colorAp1 = sampleColor.xyz; // mul(sRGB_2_AP1, sampleColor.xyz);
