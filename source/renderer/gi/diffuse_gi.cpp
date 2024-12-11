@@ -152,11 +152,6 @@ graphics::PoolTextureRef chord::giUpdate(
 						sizeof(SH3_gi_pack) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z, 
 						VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 					queue.clearUAV(resource.probeIrradianceBuffer, 0U);
-
-					resource.probeDirectionBuffer = bufferPool.createGPUOnly("GI-WorldProbe-Direction",
-						sizeof(uint) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z,
-						VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-					queue.clearUAV(resource.probeDirectionBuffer, 0U);
 				}
 
 				// 
@@ -176,8 +171,6 @@ graphics::PoolTextureRef chord::giUpdate(
 
 				worldProbeConfigs[i].probeSpacing = resource.probeSpacing;
 				worldProbeConfigs[i].sh_SRV = asSRV(queue, resource.probeIrradianceBuffer);
-
-				worldProbeConfigs[i].dir_UAV = asUAV(queue, resource.probeDirectionBuffer);
 
 				worldProbeConfigs[i].bResetAll = bHistoryInvalid;
 
@@ -255,7 +248,7 @@ graphics::PoolTextureRef chord::giUpdate(
 				pushConst.clipmapLevel = i;
 				pushConst.sh_uav  = asUAV(queue, resource.probeIrradianceBuffer);
 				pushConst.sh_srv  = asSRV(queue, tempProbeIrradianceBuffer);
-				pushConst.dir_srv = asSRV(queue, resource.probeDirectionBuffer);
+
 				pushConst.energyLose = 0.90f;
 
 				auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHPropagateCS>();

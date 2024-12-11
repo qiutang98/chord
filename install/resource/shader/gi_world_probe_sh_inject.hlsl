@@ -110,17 +110,6 @@ void mainCS(
     }
 
     BATS(SH3_gi_pack, config.sh_UAV, physicsCellIdx, world_gi_sh.pack());
-
-    // Update probe SH direction. 
-    float3 probeDirection = unpack_dir_f_uint(RWBATL(uint, config.dir_UAV, physicsCellIdx));
-    if (any(isinf(probeDirection)) || any(isnan(probeDirection)) || config.bResetAll)
-    {
-        probeDirection = 0.0;
-    }
-    probeDirection = lerp(spawnInfo.normalRS, probeDirection, weight);
-    probeDirection = normalize(probeDirection);
-
-    BATS(uint, config.dir_UAV, physicsCellIdx, pack_dir_2_uint(probeDirection));
 }
 
 #endif // 

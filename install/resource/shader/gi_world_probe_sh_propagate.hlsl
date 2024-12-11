@@ -8,7 +8,7 @@ struct GIWorldProbeSHPropagatePushConsts
     uint sh_uav;
 
     uint sh_srv;
-    uint dir_srv;
+
     //
     float energyLose;
 };
@@ -43,7 +43,6 @@ void mainCS(
         SH3_gi_pack sh_pack = BATL(SH3_gi_pack, pushConsts.sh_srv, world_probePhysicsId);
         world_gi_sh.unpack(sh_pack);
     }
-    float3 world_probeDirection = unpack_dir_f_uint(BATL(uint, pushConsts.dir_srv, world_probePhysicsId));
 
     //
     float weightSum = world_gi_sh.numSample * world_gi_sh.numSample;
@@ -78,12 +77,6 @@ void mainCS(
 
                 // Skip too low sample probe. 
                 if (sample_gi_sh.numSample < 1e-3f)
-                {
-                    continue;
-                }
-
-                float3 sample_probeDirection = unpack_dir_f_uint(BATL(uint, pushConsts.dir_srv, sample_probePhysicsId));
-                if (dot(sample_probeDirection, world_probeDirection) < 0.0)
                 {
                     continue;
                 }

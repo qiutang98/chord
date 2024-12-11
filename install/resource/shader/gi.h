@@ -146,7 +146,7 @@ struct GIWorldProbeVolumeConfig
     uint sh_SRV; //
 
     float3 probeCenterRS;
-    uint dir_UAV; //
+    uint pad0; //
 
     int3 scrollOffset; 
     int pad1; //
