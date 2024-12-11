@@ -64,6 +64,8 @@ void mainCS(
         #else 
             nextConfig.sampleSH(perView, positionRS, world_gi_sh); 
         #endif
+
+            world_gi_sh.numSample = min(world_gi_sh.numSample, 1.0f);
         }
     } 
 
