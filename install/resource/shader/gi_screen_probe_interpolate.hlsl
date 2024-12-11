@@ -290,6 +290,19 @@ void mainCS(
     specular_screenProbeIrradiance = max(0.0, specular_screenProbeIrradiance);
     float resultSample = 0.0;
 
+#if 0
+    // Screen edge use world fall back.
+    if (world_weight > 0.0)
+    {
+        float2 fov = 0.05 * float2(perView.renderDimension.y / perView.renderDimension.x, 1);
+
+        float2 border = smoothstep(0, fov, pixel_uv) * (1 - smoothstep(1 - fov, 1.0, pixel_uv));
+        float vignette = border.x * border.y;
+
+        diffuse_screenProbeIrradiance = lerp(diffuse_world_irradiance, diffuse_screenProbeIrradiance, vignette);
+    }
+#endif
+
     if (pushConsts.reprojectSRV != kUnvalidIdUint32)
     {
         float4 reprojected = loadTexture2D_float4(pushConsts.reprojectSRV, tid);
@@ -377,7 +390,6 @@ void mainCS(
     {
         result = 0.0;
     }
-
     storeRWTexture2D_float4(pushConsts.diffuseGIUAV, tid, result);
 
  

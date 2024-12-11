@@ -29,6 +29,11 @@ void mainCS(
     }
     exposure = WaveReadLaneFirst(exposure);
 
+    if (isnan(exposure) || isinf(exposure) || exposure < 1e-6f)
+    {
+        exposure = 1.0f;
+    }
+
 
     [unroll(2)]
     for (uint x = 0; x < 2; x ++)

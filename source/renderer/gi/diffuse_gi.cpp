@@ -213,54 +213,54 @@ graphics::PoolTextureRef chord::giUpdate(
 		worldProbeCascadeCount = kCascadeCount;
 
 		// SH Update. 
-		for (int i = kCascadeCount - 1; i >=0 ; i--)
+		for (int i = 0; i < worldProbeCascadeCount; i++)
 		{
-			auto& resource = giCtx.volumes[i];
+			asUAV(queue, giCtx.volumes[i].probeIrradianceBuffer);
+		}
 
-		
-			auto tempProbeIrradianceBuffer = bufferPool.createGPUOnly("GI-WorldProbe-SH-Irradiance-Temp",
-				sizeof(SH3_gi_pack) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z,
-				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		{
+			const uint dispatchDim = divideRoundingUp(kProbeDim * kProbeDim * kProbeDim * kCascadeCount, 64);
 
+			GIWorldProbeSHUpdatePushConsts pushConst{};
+			pushConst.cameraViewId = cameraViewId;
+			pushConst.clipmapConfigBufferId = worldProbeConfigBufferId;
+			pushConst.clipmapCount = kCascadeCount;
+
+			auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHUpdateCS>();
+			addComputePass2(queue,
+				"GI: WorldProbeSHUpdate",
+				getContext().computePipe(computeShader, "GI: WorldProbeSHUpdate"),
+				pushConst,
+				{ dispatchDim, 1, 1 });
+
+		}
+
+		for (int i = 0; i < worldProbeCascadeCount; i++)
+		{
+			asSRV(queue, giCtx.volumes[i].probeIrradianceBuffer);
+			asUAV(queue, giCtx.volumes[i].probeIrradianceBuffer);
+		}
+
+		{
 			const uint dispatchDim = divideRoundingUp(kProbeDim * kProbeDim * kProbeDim, 64);
 
-			{
-				asSRV(queue, resource.probeIrradianceBuffer);
+			GIWorldProbeSHPropagatePushConsts pushConst{};
+			pushConst.cameraViewId = cameraViewId;
+			pushConst.clipmapConfigBufferId = worldProbeConfigBufferId;
+			pushConst.energyLose = 0.90f;
+			pushConst.clipmapCount = kCascadeCount;
 
-				GIWorldProbeSHUpdatePushConsts pushConst{};
-				pushConst.cameraViewId = cameraViewId;
-				pushConst.clipmapConfigBufferId = worldProbeConfigBufferId;
-				pushConst.clipmapLevel = i;
-				pushConst.sh_uav = asUAV(queue, tempProbeIrradianceBuffer);
-				pushConst.bLastCascade = i == kCascadeCount - 1;
+			auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHPropagateCS>();
+			addComputePass2(queue,
+				"GI: WorldProbeSHPropagate",
+				getContext().computePipe(computeShader, "GI: WorldProbeSHPropagate"),
+				pushConst,
+				{ dispatchDim, 1, 1 });
+		}
 
-				auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHUpdateCS>();
-				addComputePass2(queue,
-					"GI: WorldProbeSHUpdate",
-					getContext().computePipe(computeShader, "GI: WorldProbeSHUpdate"),
-					pushConst,
-					{ dispatchDim, 1, 1 });
-			}
-			{
-				GIWorldProbeSHPropagatePushConsts pushConst{};
-				pushConst.cameraViewId = cameraViewId;
-				pushConst.clipmapConfigBufferId = worldProbeConfigBufferId;
-				pushConst.clipmapLevel = i;
-				pushConst.sh_uav  = asUAV(queue, resource.probeIrradianceBuffer);
-				pushConst.sh_srv  = asSRV(queue, tempProbeIrradianceBuffer);
-
-				pushConst.energyLose = 0.90f;
-
-				auto computeShader = getContext().getShaderLibrary().getShader<GIWorldProbeSHPropagateCS>();
-				addComputePass2(queue,
-					"GI: WorldProbeSHPropagate",
-					getContext().computePipe(computeShader, "GI: WorldProbeSHPropagate"),
-					pushConst,
-					{ dispatchDim, 1, 1 });
-
-				asSRV(queue, resource.probeIrradianceBuffer);
-			}
-
+		for (int i = 0; i < worldProbeCascadeCount; i++)
+		{
+			asSRV(queue, giCtx.volumes[i].probeIrradianceBuffer);
 		}
 	}
 

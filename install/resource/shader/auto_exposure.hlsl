@@ -128,6 +128,11 @@ void mainCS(
             exposure = pushConsts.fixExposure;
         }
 
+        if (isnan(exposure) || isinf(exposure) || exposure < 1e-6f)
+        {
+            exposure = 1.0f;
+        }
+
         BATS(float, pushConsts.UAV_exposure, 0, exposure);
     }
 }
