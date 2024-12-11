@@ -4,8 +4,11 @@ struct GIWorldProbeSHPropagatePushConsts
 {
     uint cameraViewId;
     uint clipmapConfigBufferId;
-    uint clipmapCount;
-    
+    uint clipmapLevel;
+    uint sh_uav;
+
+    uint sh_srv;
+
     //
     float energyLose;
 };
@@ -20,19 +23,11 @@ void mainCS(
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
     const GPUBasicData scene = perView.basicData;
 
-    // 
-    check(64 % pushConsts.clipmapCount == 0); 
-
-    uint cascadeId = localThreadIndex % pushConsts.clipmapCount;
-    uint localProbeOffset = localThreadIndex / pushConsts.clipmapCount;
-    uint workGroupProbeCount = 64 / pushConsts.clipmapCount; // How many probe can handle per work group, included all cascacdes.
-
-
     // Get world probe linear index. 
-    const uint world_probeLinearIndex = workGroupId * workGroupProbeCount + localProbeOffset;
+    const uint world_probeLinearIndex = workGroupId * 64 + localThreadIndex;
 
     // Load probe config. 
-    GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
+    GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, pushConsts.clipmapLevel);
 
     if (world_probeLinearIndex >= config.getProbeCount())
     {
@@ -45,7 +40,7 @@ void mainCS(
 
     SH3_gi world_gi_sh;
     {
-        SH3_gi_pack sh_pack = RWBATL(SH3_gi_pack, config.sh_UAV, world_probePhysicsId);
+        SH3_gi_pack sh_pack = BATL(SH3_gi_pack, pushConsts.sh_srv, world_probePhysicsId);
         world_gi_sh.unpack(sh_pack);
     }
 
@@ -76,7 +71,7 @@ void mainCS(
                 
                 SH3_gi sample_gi_sh;
                 {
-                    SH3_gi_pack sh_pack = RWBATL(SH3_gi_pack, config.sh_UAV, sample_probePhysicsId);
+                    SH3_gi_pack sh_pack = BATL(SH3_gi_pack, pushConsts.sh_srv, sample_probePhysicsId);
                     sample_gi_sh.unpack(sh_pack);
                 }
 
@@ -108,7 +103,7 @@ void mainCS(
     world_gi_sh.numSample *= 0.9; // pushConsts.energyLose; //
 
     // 
-    BATS(SH3_gi_pack, config.sh_UAV, world_probePhysicsId, world_gi_sh.pack());
+    BATS(SH3_gi_pack, pushConsts.sh_uav, world_probePhysicsId, world_gi_sh.pack());
 }
 
 #endif //  
