@@ -109,7 +109,9 @@ void mainCS(
         world_gi_sh.numSample ++;
     }
 
+    //
+    world_gi_sh.numSample = min(world_gi_sh.numSample, maxNumSample);
     BATS(SH3_gi_pack, config.sh_UAV, physicsCellIdx, world_gi_sh.pack());
-}
+} 
 
 #endif // 
