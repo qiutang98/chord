@@ -110,7 +110,10 @@ void mainCS(
     }
 
     //
-    world_gi_sh.numSample = min(world_gi_sh.numSample, maxNumSample);
+#if 0
+    const float maxAccumulateSample = 8192.0 * pow(1.3, cascadeId);
+    world_gi_sh.numSample = min(world_gi_sh.numSample, maxAccumulateSample);
+#endif
     BATS(SH3_gi_pack, config.sh_UAV, physicsCellIdx, world_gi_sh.pack());
 } 
 

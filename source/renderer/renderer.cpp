@@ -21,7 +21,12 @@ using namespace chord::graphics;
 constexpr uint32 kTimerFramePeriod = 3;
 constexpr uint32 kTimerStampMaxCount = 128;
 
-
+static inline uint32 getJitterPhaseCount(uint32 renderWidth, uint32 displayWidth)
+{
+	const float basePhaseCount = 8.0f;
+	const uint32 jitterPhaseCount = uint32(basePhaseCount * pow((float(displayWidth) / renderWidth), 2.0f));
+	return jitterPhaseCount;
+}
 
 DeferredRenderer::DeferredRenderer(const std::string& name)
 	: m_name(name)
