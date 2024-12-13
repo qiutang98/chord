@@ -27,6 +27,8 @@ struct GIScreenProbeInterpolatePushConsts
     uint specularTraceSRV;
 
     uint specularStatUAV;
+    uint bJustUseWorldCache;
+    uint bDisableWorldCache;
 };
 CHORD_PUSHCONST(GIScreenProbeInterpolatePushConsts, pushConsts);
 
@@ -220,40 +222,45 @@ void mainCS(
     float  world_weight = 0.0;
     float3 diffuse_world_irradiance = 0.0;
     float3 specular_world_irradiance = 0.0;
-    for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++)  
+
+    if (!pushConsts.bDisableWorldCache)
     {
-        if (world_weight >= 1.0)
+        for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++)  
         {
-            break;
-        }
+            if (world_weight >= 1.0)
+            {
+                break;
+            }
 
-        const GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
-        float weight = config.getBlendWeight(pixel_positionRS);
+            const GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
+            float weight = config.getBlendWeight(pixel_positionRS);
 
-        [branch]   
-        if (weight <= 0.0 || config.bResetAll)
-        { 
-            continue;
-        }
-        else 
-        {
-            float3 diffuse_radiance = 0.0;
-            float3 specular_radiane = 0.0;
+            [branch]   
+            if (weight <= 0.0 || config.bResetAll)
+            { 
+                continue;
+            }
+            else 
+            {
+                float3 diffuse_radiance = 0.0;
+                float3 specular_radiane = 0.0;
 
-            float minSampleCount;
-            bool bSampleValid = config.evaluateSH(perView, pixel_positionRS, pixel_normalRS, diffuse_radiance, minSampleCount, 1);
-            config.evaluateSH(perView, pixel_positionRS, rayReflectionDir, specular_radiane, minSampleCount, 1);
-            
-            weight = bSampleValid ? weight : 0.0;
-            float linearWeight = (world_weight > 0.0) ? (1.0 - world_weight) : weight;
-    
-            world_weight += linearWeight;
+                float minSampleCount;
+                bool bSampleValid = config.evaluateSH(perView, pixel_positionRS, pixel_normalRS, diffuse_radiance, minSampleCount, 1);
+                config.evaluateSH(perView, pixel_positionRS, rayReflectionDir, specular_radiane, minSampleCount, 1);
+                
+                weight = bSampleValid ? weight : 0.0;
+                float linearWeight = (world_weight > 0.0) ? (1.0 - world_weight) : weight;
+        
+                world_weight += linearWeight;
 
 
-            diffuse_world_irradiance += linearWeight * diffuse_radiance;
-            specular_world_irradiance += linearWeight * specular_radiane;
-        }  
-    }   
+                diffuse_world_irradiance += linearWeight * diffuse_radiance;
+                specular_world_irradiance += linearWeight * specular_radiane;
+            }  
+        }   
+    }
+
     diffuse_world_irradiance = (world_weight > 0.0) ? (diffuse_world_irradiance / world_weight) : 0.0;
     specular_world_irradiance = (world_weight > 0.0) ? (specular_world_irradiance / world_weight) : 0.0;
 
@@ -302,6 +309,11 @@ void mainCS(
         diffuse_screenProbeIrradiance = lerp(diffuse_world_irradiance, diffuse_screenProbeIrradiance, vignette);
     }
 #endif
+
+    if (pushConsts.bJustUseWorldCache && world_weight > 0.0)
+    {
+        diffuse_screenProbeIrradiance = diffuse_world_irradiance;
+    }
 
     if (pushConsts.reprojectSRV != kUnvalidIdUint32)
     {

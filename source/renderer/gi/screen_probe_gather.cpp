@@ -52,7 +52,42 @@ static uint32 sGIEnableSpecularSpatialFilter = 1;
 static AutoCVarRef cVarGISpecularEnableSpatialFilter(
 	"r.gi.specular.spatial",
 	sGIEnableSpecularSpatialFilter,
-	"GI specular spatial filter pass enable or not."
+	"GI specular spatial filter pass enable or not." 
+);
+
+static uint32 sGIInterpretationJustUseWorldCache = 0; 
+static AutoCVarRef cVarGIInterpretationJustUseWorldCache(
+	"r.gi.interpolation.justUseWorldCache",
+	sGIInterpretationJustUseWorldCache,
+	"Just use world cache radiance when interpolate or not."
+);
+
+static uint32 sGIInterpretationDisableWorldCache = 0;
+static AutoCVarRef cVarGIInterpretationDisableWorldCache(
+	"r.gi.interpolation.disableWorldCache",
+	sGIInterpretationDisableWorldCache,
+	"Disable world cache radiance when interpolate or not."
+);
+
+static uint32 sGITraceSampleWorldCache = 1;
+static AutoCVarRef cVarGITraceSampleWorldCache(
+	"r.gi.trace.sampleWorldCache",
+	sGITraceSampleWorldCache,
+	"Sample world cache radiance when trace or not."
+);
+
+static uint32 sGIWorldCacheProbeDim = 32;
+static AutoCVarRef cVarGIWorldCacheProbeDim(
+	"r.gi.worldcache.probeDim",
+	sGIWorldCacheProbeDim,
+	"GI world probe cache dim, only 16, 24, 32, 48, 64 recommend used."
+);
+
+static float sGIWorldCacheProbeVoxelSize = 1.0f;
+static AutoCVarRef cVarGIWorldCacheProbeVoxelSize(
+	"r.gi.worldcache.voxelSize",
+	sGIWorldCacheProbeVoxelSize,
+	"GI world probe voxel size."
 );
 
 PRIVATE_GLOBAL_SHADER(GIScreenProbeSpawnCS, "resource/shader/gi_screen_probe_spawn.hlsl", "mainCS", EShaderStage::Compute);
@@ -71,7 +106,7 @@ PRIVATE_GLOBAL_SHADER(GISpatialUpsampleCS, "resource/shader/gi_upsample.hlsl", "
 PRIVATE_GLOBAL_SHADER(GISpecularTraceCS, "resource/shader/gi_specular_trace.hlsl", "mainCS", EShaderStage::Compute);
 
 
-graphics::PoolTextureRef chord::giUpdate(
+void chord::giUpdate(
 	graphics::CommandList& cmd,
 	graphics::GraphicsQueue& queue,
 	const AtmosphereLut& luts,
@@ -89,10 +124,11 @@ graphics::PoolTextureRef chord::giUpdate(
 {
 	if (!sEnableGI || !getContext().isRaytraceSupport())
 	{
+		// Reset cache.
 		giCtx = { };
 		bCameraCut = true;
 
-		return nullptr;
+		return;
 	}
 
 	auto& rtPool = getContext().getTexturePool();
@@ -104,8 +140,8 @@ graphics::PoolTextureRef chord::giUpdate(
 	bool bHistoryInvalid = false;
 	{
 		static constexpr int   kCascadeCount = 8;
-		static constexpr int   kProbeDim = 64;
-		static constexpr float kVoxelSize = kMinProbeSpacing; // 0.5; 1.0; 2.0; 4.0; 8.0; 16.0; 32.0; 64.0;
+		const int3 kProbeDim = { sGIWorldCacheProbeDim, sGIWorldCacheProbeDim, sGIWorldCacheProbeDim };
+		const float kVoxelSize = sGIWorldCacheProbeVoxelSize; // 1.0; 2.0; 4.0; 8.0; 16.0; 32.0; 64.0; 128.0;
 		{
 			float voxelSize = kVoxelSize;
 			for (int i = 0; i < kCascadeCount; i++)
@@ -121,7 +157,7 @@ graphics::PoolTextureRef chord::giUpdate(
 
 				auto& resource = giCtx.volumes[i];
 				bHistoryInvalid
-					|= (resource.probeDim.x != kProbeDim)
+					|= (resource.probeDim != kProbeDim)
 					|| (resource.probeSpacing.x != voxelSize)
 					|| (resource.probeIrradianceBuffer == nullptr);
 
@@ -137,13 +173,13 @@ graphics::PoolTextureRef chord::giUpdate(
 				auto& resource = giCtx.volumes[i];
 				if (bHistoryInvalid)
 				{
-					resource.probeDim = { kProbeDim, kProbeDim, kProbeDim };
+					resource.probeDim = kProbeDim;
 					resource.probeSpacing = { voxelSize, voxelSize, voxelSize };
 				}
 				else
 				{
 					check(resource.probeSpacing.x == voxelSize);
-					check(resource.probeDim.x == kProbeDim);
+					check(resource.probeDim == kProbeDim);
 				}
 
 				if (bHistoryInvalid)
@@ -222,7 +258,7 @@ graphics::PoolTextureRef chord::giUpdate(
 				sizeof(SH3_gi_pack) * resource.probeDim.x * resource.probeDim.y * resource.probeDim.z,
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
-			const uint dispatchDim = divideRoundingUp(kProbeDim * kProbeDim * kProbeDim, 64);
+			const uint dispatchDim = divideRoundingUp(kProbeDim.x * kProbeDim.y * kProbeDim.z, 64);
 
 			{
 				asSRV(queue, resource.probeIrradianceBuffer);
@@ -395,6 +431,7 @@ graphics::PoolTextureRef chord::giUpdate(
 			tracePushConsts.probeSpawnInfoSRV = asSRV(queue, newScreenProbeSpawnInfoBuffer);
 			tracePushConsts.radianceUAV = asUAV(queue, probeTraceRadianceRT);
 			tracePushConsts.skyLightLeaking = sGISkylightLeaking;
+			tracePushConsts.bSampleWorldCache = (sGITraceSampleWorldCache != 0);
 			tracePushConsts.historyTraceSRV = asSRV(queue, probeReprojectTraceRadianceRT);
 			tracePushConsts.screenProbeSampleSRV = asSRV(queue, giCtx.screenProbeSampleRT);
 			tracePushConsts.statSRV = bHistoryInvalid ? kUnvalidIdUint32 : asSRV(queue, probeReprojectStatRadianceRT);
@@ -524,7 +561,7 @@ graphics::PoolTextureRef chord::giUpdate(
 		tracePushConsts.clipmapCount = worldProbeCascadeCount;
 		tracePushConsts.bHistoryValid = !bHistoryInvalid;
 		tracePushConsts.skyLightLeaking = sGISkylightLeaking;
-
+		tracePushConsts.bSampleWorldCache = (sGITraceSampleWorldCache != 0);
 		tracePushConsts.depthId = asSRV(queue, gbuffers.depth_Half);
 		tracePushConsts.normalRSId = asSRV(queue, gbuffers.pixelRSNormal_Half);
 		tracePushConsts.roughnessId = asSRV(queue, gbuffers.roughness_Half);
@@ -663,6 +700,8 @@ graphics::PoolTextureRef chord::giUpdate(
 		pushConsts.rouhnessSRV = asSRV(queue, gbuffers.roughness_Half);
 		pushConsts.specularTraceSRV = asSRV(queue, specularTraceRadiancePostFilterRT);
 		pushConsts.specularStatUAV = probeReprojectStatSpecularRT != nullptr ? asUAV(queue, probeReprojectStatSpecularRT) : kUnvalidIdUint32; // 
+		pushConsts.bJustUseWorldCache = (sGIInterpretationJustUseWorldCache != 0);
+		pushConsts.bDisableWorldCache = (sGIInterpretationDisableWorldCache != 0);
 		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
 
 		auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeInterpolateCS>();
@@ -799,44 +838,42 @@ graphics::PoolTextureRef chord::giUpdate(
 
 	if (sEnableGIDebugOutput == 1)
 	{
-		return giCtx.historyDiffuseRT;
+		debugBlitColor(queue, giCtx.historyDiffuseRT, gbuffers.color);
 	}
 	else if (sEnableGIDebugOutput == 2)
 	{
-		return probeTraceRadianceRT;
+		debugBlitColor(queue, probeTraceRadianceRT, gbuffers.color);
 	}
 	else if (sEnableGIDebugOutput == 3)
 	{
-		return probeReprojectTraceRadianceRT;
+		debugBlitColor(queue, probeReprojectTraceRadianceRT, gbuffers.color);
 	}
 	else if (sEnableGIDebugOutput == 4)
 	{
-		return probeReprojectStatRadianceRT;
+		debugBlitColor(queue, probeReprojectStatRadianceRT, gbuffers.color);
 	}
 	else if (sEnableGIDebugOutput == 5)
 	{
-		return filteredRadiusRT;
+		debugBlitColor(queue, filteredRadiusRT, gbuffers.color);
 	}
 	else if (sEnableGIDebugOutput == 6)
 	{
-		return specularTraceRadianceRT;
+		debugBlitColor(queue, specularTraceRadianceRT, gbuffers.color);
 	}
 	else if (sEnableGIDebugOutput == 7)
 	{
-		return reprojectSpecularRT;
+		debugBlitColor(queue, reprojectSpecularRT, gbuffers.color);
 	}
 	else if (sEnableGIDebugOutput == 8)
 	{
-		return giCtx.historySpecularRT;
+		debugBlitColor(queue, giCtx.historySpecularRT, gbuffers.color);
 	}
 	else if (sEnableGIDebugOutput == 9)
 	{
-		return probeReprojectStatSpecularRT;
+		debugBlitColor(queue, probeReprojectStatSpecularRT, gbuffers.color);
 	}
 	else if (sEnableGIDebugOutput == 10)
 	{
-		return specularTraceRadiancePostFilterRT;
+		debugBlitColor(queue, specularTraceRadiancePostFilterRT, gbuffers.color);
 	}
-
-	return nullptr;
 }

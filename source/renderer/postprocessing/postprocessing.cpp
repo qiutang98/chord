@@ -9,6 +9,7 @@
 #include <shader/auto_exposure.hlsl>
 #include <shader/histogram.hlsl>
 #include <shader/apply_exposure.hlsl>
+#include <shader/debug_blit.hlsl>
 
 using namespace chord;
 using namespace chord::graphics;
@@ -18,6 +19,28 @@ PRIVATE_GLOBAL_SHADER(AutoExposureCS, "resource/shader/auto_exposure.hlsl", "mai
 PRIVATE_GLOBAL_SHADER(ApplyExposureCS, "resource/shader/apply_exposure.hlsl", "mainCS", EShaderStage::Compute);
 
 PRIVATE_GLOBAL_SHADER(IndirectCmdParamCS, "resource/shader/indirect_cmd.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
+
+PRIVATE_GLOBAL_SHADER(DebugBlitCS, "resource/shader/debug_blit.hlsl", "mainCS", EShaderStage::Compute);
+
+void chord::debugBlitColor(
+    graphics::GraphicsQueue& queue, 
+    graphics::PoolTextureRef input, 
+    graphics::PoolTextureRef output)
+{
+    DebugBlitPushConsts pushConst{};
+    pushConst.dimension = { output->get().getExtent().width, output->get().getExtent().height };
+    pushConst.pointClampSamplerId = getContext().getSamplerManager().pointClampEdge().index.get();
+    pushConst.SRV = asSRV(queue, input);
+    pushConst.UAV = asUAV(queue, output);
+
+    const uint2 dispatchDim = divideRoundingUp(pushConst.dimension, uint2(8));
+    auto computeShader = getContext().getShaderLibrary().getShader<DebugBlitCS>();
+    addComputePass2(queue,
+        "DebugBlitCS",
+        getContext().computePipe(computeShader, "DebugBlitCS"),
+        pushConst,
+        { dispatchDim.x, dispatchDim.y, 1 });
+}
 
 PoolBufferGPUOnlyRef chord::indirectDispatchCmdFill(
     const std::string& name,

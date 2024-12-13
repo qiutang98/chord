@@ -23,6 +23,7 @@ pushConsts
     uint  clipmapConfigBufferId;
     uint  clipmapCount;
     float skyLightLeaking;
+    uint  bSampleWorldCache;
 };
 ***********************************/
 
@@ -134,7 +135,7 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
 
             // Infinite indirect lighting. 
             float sampleIndirectVolumeSampleCount = kGIMaxSampleCount;
-            if (pushConsts.bHistoryValid && !perView.bCameraCut)
+            if (pushConsts.bHistoryValid && !perView.bCameraCut && pushConsts.bSampleWorldCache)
             {
                 float3 irradiance = 0.0; 
                 float3 specularIrradiance = 0.0;

@@ -31,6 +31,7 @@ struct GISpecularTracePushConsts
     uint  clipmapConfigBufferId;
     uint  clipmapCount; 
     float skyLightLeaking;
+    uint  bSampleWorldCache;
     //////////////////////
 
 

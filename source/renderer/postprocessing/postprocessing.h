@@ -127,4 +127,10 @@ namespace chord
 		graphics::PoolTextureRef color,
 		const PostprocessConfig& config,
 		uint cameraViewId);
+
+	extern void debugBlitColor(
+		graphics::GraphicsQueue& queue,
+		graphics::PoolTextureRef input,
+		graphics::PoolTextureRef output
+	);
 }

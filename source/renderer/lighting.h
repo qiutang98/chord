@@ -63,7 +63,7 @@ namespace chord
 		uint lutDim);
 
 	using RendererTimerLambda = std::function<void(const std::string&, graphics::GraphicsOrComputeQueue& queue)>;
-	extern graphics::PoolTextureRef giUpdate(
+	extern void giUpdate(
 		graphics::CommandList& cmd,
 		graphics::GraphicsQueue& queue,
 		const AtmosphereLut& luts,
@@ -79,7 +79,7 @@ namespace chord
 		bool bCameraCut,
 		RendererTimerLambda timer);
 
-	extern graphics::PoolTextureRef ddgiUpdate(
+	extern void ddgiUpdate(
 		graphics::CommandList& cmd,
 		graphics::GraphicsQueue& queue,
 		const AtmosphereLut& luts,

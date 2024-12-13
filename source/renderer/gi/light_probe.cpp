@@ -13,7 +13,7 @@
 using namespace chord;
 using namespace chord::graphics;
 
-static uint32 sEnableDDGI = 0;
+static uint32 sEnableDDGI = 1;
 static AutoCVarRef cVarEnableDDGI(
 	"r.ddgi",
 	sEnableDDGI,
@@ -59,7 +59,7 @@ static inline float getRandomFloat()
 	return distribution(gen);
 }
 
-graphics::PoolTextureRef chord::ddgiUpdate(
+void chord::ddgiUpdate(
 	graphics::CommandList& cmd,
 	graphics::GraphicsQueue& queue,
 	const AtmosphereLut& luts,
@@ -76,7 +76,7 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 	{
 		// Clear all resource of ddgi. 
 		ddgiCtx = {};
-		return nullptr;
+		return;
 	}
 
 	std::array<DDGIVoulmeConfig, kDDGICsacadeCount> configs { };
@@ -629,10 +629,9 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 		asSRV(queue, resource.probeTraceHistoryValidBuffer);
 	}
 
-	PoolTextureRef ddgiTexture = nullptr; getContext().getTexturePool().create("DDGIApply", gbuffers.dimension.x, gbuffers.dimension.y, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 	if (sEnableDDGIDebugOutput > 0)
 	{
-		ddgiTexture = getContext().getTexturePool().create("DDGIApply", gbuffers.dimension.x, gbuffers.dimension.y, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		PoolTextureRef ddgiTexture = getContext().getTexturePool().create("DDGIApply", gbuffers.dimension.x, gbuffers.dimension.y, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
 		const uint2 dispatchDim = divideRoundingUp(gbuffers.dimension, uint2(8));
 		DDGIDebugSamplePushConsts pushConst{};
@@ -652,7 +651,7 @@ graphics::PoolTextureRef chord::ddgiUpdate(
 			getContext().computePipe(computeShader, "DDGI: DebugSample"),
 			pushConst,
 			{ dispatchDim.x, dispatchDim.y, 1 });
-	}
 
-	return ddgiTexture;
+		debugBlitColor(queue, ddgiTexture, gbuffers.color);
+	}
 }

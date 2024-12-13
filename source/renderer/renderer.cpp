@@ -18,8 +18,19 @@
 
 using namespace chord;
 using namespace chord::graphics;
+
+static uint32 sGIMethod = 0;
+static AutoCVarRef cVarEnableDDGI(
+	"r.gi.method",
+	sGIMethod,
+	"GI Method Selected:"
+	"0: Screen Probe Gather GI."
+	"1: DDGI. (WIP)"
+);
+
 constexpr uint32 kTimerFramePeriod = 3;
 constexpr uint32 kTimerStampMaxCount = 128;
+
 
 static inline uint32 getJitterPhaseCount(uint32 renderWidth, uint32 displayWidth)
 {
@@ -338,12 +349,26 @@ void DeferredRenderer::render(
 			insertTimer("PCSS", graphics);
 		}
 
-		graphics::PoolTextureRef giResult = nullptr;
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
-			if (giResult == nullptr) giResult = ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
-			if (giResult == nullptr) giResult = giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionMask, camera, m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half, m_bCameraCut, gltfRenderCtx.timerLambda);
-			insertTimer("GI Update", graphics);
+			if (sGIMethod == 0)
+			{
+				giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionMask, camera, m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half, m_bCameraCut, gltfRenderCtx.timerLambda);
+			}
+			else
+			{
+				m_giCtx = {};
+			}
+			
+			if (sGIMethod == 1)
+			{
+				ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
+				insertTimer("DDGI Update", graphics);
+			}
+			else
+			{
+				m_ddgiCtx = {};
+			}
 
 			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
 			insertTimer("Nanite visualize", graphics);
@@ -365,13 +390,14 @@ void DeferredRenderer::render(
 		}
 
 		exposureBuffer = computeAutoExposure(graphics, gbuffers.color, postprocessConfig, m_rendererHistory.exposureBuffer, tickData.dt);
-
+		insertTimer("AutoExposure", graphics);
 		
 		auto bloomTex = computeBloom(graphics, gbuffers.color, postprocessConfig, viewGPUId);
+		insertTimer("Bloom", graphics);
 
 		check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
 		check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);
-		tonemapping(viewGPUId, postprocessConfig, graphics, giResult != nullptr ? giResult : gbuffers.color, finalOutput, bloomTex);
+		tonemapping(viewGPUId, postprocessConfig, graphics, gbuffers.color, finalOutput, bloomTex);
 		insertTimer("Tonemapping", graphics);
 
 		check(finalOutput->get().getExtent().width == gbuffers.depthStencil->get().getExtent().width);

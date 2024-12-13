@@ -24,6 +24,7 @@ struct GIProbeTracePushConsts
     uint  clipmapConfigBufferId;
     uint  clipmapCount;
     float skyLightLeaking;
+    uint  bSampleWorldCache;
     //////////////////////
  
     uint cameraViewId; 
