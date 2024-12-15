@@ -51,7 +51,7 @@ void PostProcessingManager::onDrawUI(SceneRef scene)
 		ImGui::PushItemWidth(100.0f);
 
 		ImGui::DragFloat("Intensity", &copyValue.bloomIntensity, 0.01f, 0.0f, 1.0);
-		ImGui::DragFloat("Radius", &copyValue.bloomRadius, 0.01f, 0.0f, 1.0);
+		// ImGui::DragFloat("Radius", &copyValue.bloomRadius, 0.01f, 0.0f, 1.0);
 
 		ImGui::DragFloat("Threshold", &copyValue.bloomThreshold, 0.01f, 0.0f, 1.0f);
 		ImGui::DragFloat("Threshold soft", &copyValue.bloomThresholdSoft, 0.01f, 0.0f, 1.0f);

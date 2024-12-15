@@ -16,22 +16,39 @@ namespace chord
 
     void ICamera::fillViewUniformParameter(PerframeCameraView& outUB) const
     {
-		const float4x4& projectionWithZFar = getProjectMatrixExistZFar();
+		// 
+        const math::mat4& relativeView  = getRelativeCameraViewMatrix();
+		outUB.translatedWorldToView = relativeView;
+		outUB.viewToTranslatedWorld = math::inverse(outUB.translatedWorldToView);
 
-        const math::mat4& relativeView = getRelativeCameraViewMatrix();
-        const math::mat4& projection   = getProjectMatrix();
+		// No jitter.
+		{
+			const math::mat4& projection = getProjectMatrix();
+			outUB.translatedWorldToClip_NoJitter = projection * relativeView;
 
-        const math::mat4 viewProjection = projection * relativeView;
+			const float4x4& projectionWithZFar = getProjectMatrixExistZFar();
+			const float4x4 relativeViewProjectionWithZFar_NoJitter = projectionWithZFar * relativeView;
+			outUB.clipToTranslatedWorldWithZFar_NoJitter = math::inverse(relativeViewProjectionWithZFar_NoJitter);
+		}
 
-		outUB.translatedWorldToClip_NoJitter = viewProjection;
 
-        outUB.translatedWorldToView = relativeView;
-        outUB.viewToClip = projection;
-        outUB.translatedWorldToClip = viewProjection;
+		// Jitter.
+		{
+			// Build jitter matrix.
+			math::mat4 curJitterMatrix = math::mat4(1.0f);
+			curJitterMatrix[3][0] += 2.0f * outUB.jitterData.x / (float)outUB.renderDimension.x;
+			curJitterMatrix[3][1] += -2.0f * outUB.jitterData.y / (float)outUB.renderDimension.y;
 
-        outUB.viewToTranslatedWorld = math::inverse(outUB.translatedWorldToView);
-        outUB.clipToView = math::inverse(outUB.viewToClip);
-        outUB.clipToTranslatedWorld = math::inverse(outUB.translatedWorldToClip);
+			const math::mat4& projection = curJitterMatrix * getProjectMatrix();
+
+			//
+			outUB.viewToClip = projection;
+			outUB.clipToView = math::inverse(outUB.viewToClip);
+
+			//
+			outUB.translatedWorldToClip = projection * relativeView;
+			outUB.clipToTranslatedWorld = math::inverse(outUB.translatedWorldToClip);
+		}
 
 		const Frustum frustum = computeRelativeWorldFrustum();
 		outUB.frustumPlane[0] = frustum.planes[0];
@@ -53,9 +70,6 @@ namespace chord
 		outUB.zFar  = float(m_zFar);
 
 		//
-		const float4x4 relativeViewProjectionWithZFar = projectionWithZFar * relativeView;
-		outUB.clipToTranslatedWorldWithZFar = math::inverse(relativeViewProjectionWithZFar);
-
 		outUB.cameraWorldPos = fillDouble3(m_position);
     }
 

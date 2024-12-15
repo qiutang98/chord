@@ -188,11 +188,11 @@ void mainCS(
     }
 
     // Accumulate 2x2 screen probe diffuse_screenProbeIrradiance.
-    float3 diffuse_screenProbeIrradiance = 0.0;
-    float  diffuse_screenProbeWeightSum  = 0.0;
+    float  screenProbeWeightSum  = 0.0;
 
+    float3 diffuse_screenProbeIrradiance = 0.0;
     float3 specular_screenProbeIrradiance = 0.0;
-    float  specular_screenProbeWeightSum  = 0.0;
+
     float3 rayReflectionDir = reflect(normalize(pixel_positionRS), pixel_normalRS);
 
     SH3_gi composite_sh_gi;
@@ -212,10 +212,9 @@ void mainCS(
             }
 
             diffuse_screenProbeIrradiance += probeWeightx4[i] * SH_Evalulate(pixel_normalRS, gi_sh.c);
-            diffuse_screenProbeWeightSum  += probeWeightx4[i];
-
             specular_screenProbeIrradiance += probeWeightx4[i] * SH_Evalulate(rayReflectionDir, gi_sh.c);
-            specular_screenProbeWeightSum  += probeWeightx4[i];
+
+            screenProbeWeightSum  += probeWeightx4[i];
         }
     }
 
@@ -274,23 +273,18 @@ void mainCS(
     }
 
     // Sample world probe as fallback. 
-    if (diffuse_screenProbeWeightSum < 1e-3f)
+    if (screenProbeWeightSum < 1e-3f)
     {
+        specular_screenProbeIrradiance = specular_world_irradiance;
         diffuse_screenProbeIrradiance = diffuse_world_irradiance;
     }
     else
     {
-        diffuse_screenProbeIrradiance /= max(diffuse_screenProbeWeightSum, kFloatEpsilon) * 2.0 * kPI;
+        diffuse_screenProbeIrradiance /= max(screenProbeWeightSum, kFloatEpsilon) * 2.0 * kPI;
+        specular_screenProbeIrradiance /= max(screenProbeWeightSum, kFloatEpsilon) * 2.0 * kPI;
     }
 
-    if (specular_screenProbeWeightSum < 1e-3f)
-    {
-        specular_screenProbeIrradiance = specular_world_irradiance;
-    }
-    else
-    {
-        specular_screenProbeIrradiance /= max(specular_screenProbeWeightSum, kFloatEpsilon) * 2.0 * kPI;
-    }
+
 
     // Avoid negative diffuse_screenProbeIrradiance. 
     diffuse_screenProbeIrradiance = max(0.0, diffuse_screenProbeIrradiance); 
@@ -318,16 +312,18 @@ void mainCS(
     if (pushConsts.reprojectSRV != kUnvalidIdUint32)
     {
         float4 reprojected = loadTexture2D_float4(pushConsts.reprojectSRV, tid);
+//      float4 reprojected = sampleTexture2D_float4(pushConsts.reprojectSRV, pixel_uv, getLinearClampEdgeSampler(perView));
         
         if (any(reprojected > 0.0))
         {
             // Stable screen probe.  
-            diffuse_screenProbeIrradiance = lerp(diffuse_screenProbeIrradiance, diffuse_world_irradiance, 1.0 - saturate(diffuse_screenProbeWeightSum));
+            diffuse_screenProbeIrradiance = lerp(diffuse_screenProbeIrradiance, diffuse_world_irradiance, 1.0 - saturate(screenProbeWeightSum));
             diffuse_screenProbeIrradiance = lerp(diffuse_screenProbeIrradiance, diffuse_world_irradiance, smoothstep(0.0, 1.0, 1.0 / (1.0 + reprojected.w)));
 
 
-            // 
-            reprojected.xyz = giClipAABB(reprojected.xyz, diffuse_screenProbeIrradiance, 0.2);
+            // TODO: Split interpolate and clip rectify, which can add some spatial filter before clip AABB, help reduce flicker.
+            float clipHistoryAABBSize_GI = lerp(0.6, 0.2, saturate(screenProbeWeightSum));
+            reprojected.xyz = giClipAABB(reprojected.xyz, diffuse_screenProbeIrradiance, clipHistoryAABBSize_GI);
 
             diffuse_screenProbeIrradiance = lerp(reprojected.xyz,  diffuse_screenProbeIrradiance, 1.0 / (1.0 + reprojected.w));
 
@@ -379,8 +375,9 @@ void mainCS(
                 const float maxSample = lerp(8.0, kGIMaxSampleCount, sqrt(lerpFactor));
                 float weight = 1.0 / (1.0 + specularSample);
 
-                // Tight clip box for reflection.
-                reprojected.xyz = giClipAABB(reprojected.xyz, specularTraceRadiance.xyz, 0.5);
+                // TODO: Split interpolate and clip rectify, which can add some spatial filter before clip AABB, help reduce flicker.
+                float clipHistoryAABBSize_Specular = lerp(0.6, 0.2, saturate(screenProbeWeightSum));
+                reprojected.xyz = giClipAABB(reprojected.xyz, specularTraceRadiance.xyz, clipHistoryAABBSize_Specular);
 
                 specularRadiance = lerp(reprojected.xyz, specularTraceRadiance.xyz, weight);
                 specularSample  = min(maxSample, specularSample + 1.0);
@@ -408,7 +405,7 @@ void mainCS(
     float sampleRadiusWeight = saturate(1.0 - pow(result.w / kGIMaxSampleCount, 4.0));
     float screenProbeInterpolateWeight = 0.0;
 #if 1
-    screenProbeInterpolateWeight = 1.0 - saturate(diffuse_screenProbeWeightSum * 0.5);
+    screenProbeInterpolateWeight = 1.0 - saturate(screenProbeWeightSum * 0.5);
 #endif
 
     // 

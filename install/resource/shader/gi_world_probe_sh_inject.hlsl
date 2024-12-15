@@ -71,7 +71,7 @@ void mainCS(
         screen_gi_sh.unpack(sh_pack);
     }
 
-    // Jitter along view ray half vector. 
+    // Blue noise jitter sample cell id.
     int3 cellId = config.getVirtualVolumeIdFromPosition(screen_probePositionRS + jitterOffset, false);
     if (any(cellId < 0) || any(cellId >= config.probeDim))
     {

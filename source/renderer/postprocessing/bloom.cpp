@@ -35,6 +35,7 @@ IMPLEMENT_GLOBAL_SHADER(BloomUpSampleCS, "resource/shader/bloom_upsample.hlsl", 
 
 static inline math::vec4 getBloomPrefilter(float threshold, float thresholdSoft)
 {
+	// https://catlikecoding.com/unity/tutorials/advanced-rendering/bloom/
 	float knee = threshold * thresholdSoft;
 	math::vec4 prefilter{ };
 

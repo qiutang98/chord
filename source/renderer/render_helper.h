@@ -526,12 +526,12 @@ namespace chord
 		float autoExposureExposureCompensation = 0.25f;
 
 		// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-		float bloomIntensity = 1.0f;
-		float bloomRadius = 0.60f;
-		float bloomThreshold = 0.80f;
-		float bloomThresholdSoft = 0.60f;
-		float bloomSampleCount   = 8.0f;
-		float bloomGaussianSigma = 0.1f;
+		float bloomIntensity     = 0.25f;
+		float bloomRadius        = 1.00f;
+		float bloomThreshold     = 1.00f;
+		float bloomThresholdSoft = 0.50f;
+		float bloomSampleCount   = 4.00f;
+		float bloomGaussianSigma = 0.20f;
 		// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 	};
 
@@ -608,6 +608,11 @@ namespace chord
 		graphics::PoolTextureRef softShadowMask = nullptr;
 	};
 
+	struct TSRHistory
+	{
+		graphics::PoolTextureRef lowResResolveTAAColor = nullptr;
+	};
+
 	struct DeferredRendererHistory
 	{
 		HZBContext hzbCtx;
@@ -624,5 +629,7 @@ namespace chord
 
 		// 
 		graphics::PoolTextureRef diffuseColor_Half = nullptr;
+
+		TSRHistory tsrHistory = {};
 	};
 }

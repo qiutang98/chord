@@ -344,12 +344,16 @@ struct PerframeCameraView
     GPUStorageDouble4 cameraWorldPosLastFrame; 
 
     // clip to translated world with z far (no infinite z).
-    float4x4 clipToTranslatedWorldWithZFar;
+    float4x4 clipToTranslatedWorldWithZFar_NoJitter;
 
     float cameraFovy;
     float zNear;
     float zFar; // z Far is used for frustum culling.
     uint bCameraCut;
+     
+    // Halton sequence jitter data, .xy is current frame jitter data, .zw is prev frame jitter data.
+    // Range (-0.5, 0.5)
+    float4 jitterData; // .xy is current frame
 };
 CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);
 
@@ -457,6 +461,11 @@ enum class EShadingType
 #define subpixelPrecisionBits  8
 #define subpixelPrecisionCount (1 << subpixelPrecisionBits)
 #define subpixel
+
+// 
+#define kMaxHalfFloat    65504.0f
+#define kMax11BitsFloat  65024.0f
+#define kMax10BitsFloat  64512.0f
 
 struct NaniteShadingMeshlet
 {

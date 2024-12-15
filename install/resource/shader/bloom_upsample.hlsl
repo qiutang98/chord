@@ -66,7 +66,8 @@ void mainCS(
 
 #if DIM_COMPOSITE_UPSAMPLE
     float3 currentColor = loadRWTexture2D_float3(pushConsts.UAV, workPos);
-    sum.xyz = lerp(currentColor, sum.xyz, pushConsts.blurRadius);
+//  sum.xyz = lerp(currentColor, sum.xyz, pushConsts.blurRadius);
+    sum.xyz = currentColor + sum.xyz * pushConsts.blurRadius;  
 #endif 
 
     // 

@@ -70,6 +70,9 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
             float NoV = max(0.0, dot(materialInfo.normalRS, V));
             float2 brdf = sampleBRDFLut(perView, NoV, materialInfo.roughness);
 
+            //
+            float3 approxDiffuseFullRough = materialInfo.diffuseColor + pbrMaterial.specularColor * 0.45;
+
             // Apply sun light direct diffuse lighting. 
             float3 skyRadiance;
             {
@@ -123,7 +126,7 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
                     sunDirectRadiance = sunShadingResult.color();
                 #else
                     // Full lambert diffuse. 
-                    sunDirectRadiance = NoL * Fd_LambertDiffuse(materialInfo.diffuseColor); 
+                    sunDirectRadiance = NoL * Fd_LambertDiffuse(approxDiffuseFullRough); 
                 #endif 
 
                     // Do lambert diffuse lighting here.
@@ -131,7 +134,7 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
                 } 
             }
 
-            float3 approxDiffuseFullRough = materialInfo.diffuseColor + pbrMaterial.specularColor * 0.45;
+
 
             // Infinite indirect lighting. 
             float sampleIndirectVolumeSampleCount = kGIMaxSampleCount;

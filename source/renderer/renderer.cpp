@@ -166,7 +166,21 @@ void DeferredRenderer::render(
 		auto lastFrame = m_perframeCameraView;
 		auto& currentFrame = m_perframeCameraView;
 
+
+
 		currentFrame.basicData = getGPUBasicData(atmosphereParam);
+
+		{
+			// TODO: Super Resolution.
+			const uint jitterPeriod = getJitterPhaseCount(currentRenderWidth, currentRenderWidth);
+			const uint frameCounter = currentFrame.basicData.frameCounter;
+
+			currentFrame.jitterData.x = halton((frameCounter % jitterPeriod) + 1, 2) - 0.5f;
+			currentFrame.jitterData.y = halton((frameCounter % jitterPeriod) + 1, 3) - 0.5f;
+
+
+		}
+
 		camera->fillViewUniformParameter(currentFrame);
 
 		currentFrame.bCameraCut = m_bCameraCut;
@@ -183,6 +197,10 @@ void DeferredRenderer::render(
 		currentFrame.translatedWorldToClipLastFrame_NoJitter = lastFrame.translatedWorldToClip_NoJitter;
 		currentFrame.clipToTranslatedWorld_LastFrame = lastFrame.clipToTranslatedWorld;
 		
+		//
+		currentFrame.jitterData.z = lastFrame.jitterData.x;
+		currentFrame.jitterData.w = lastFrame.jitterData.y;
+
 		currentFrame.cameraWorldPosLastFrame = lastFrame.cameraWorldPos;
 		for (uint i = 0; i < 6; i++) { currentFrame.frustumPlaneLastFrame[i] = lastFrame.frustumPlane[i]; }
 	}
@@ -267,6 +285,7 @@ void DeferredRenderer::render(
 	debugLineCtx.prepareForRender(graphics);
 
 	HZBContext hzbCtx { };
+	TSRHistory tsrHistory { };
 	CascadeShadowHistory cascadeShadowCurrentFrame{ };
 	PoolBufferGPUOnlyRef exposureBuffer = nullptr;
 	{
@@ -391,13 +410,22 @@ void DeferredRenderer::render(
 
 		exposureBuffer = computeAutoExposure(graphics, gbuffers.color, postprocessConfig, m_rendererHistory.exposureBuffer, tickData.dt);
 		insertTimer("AutoExposure", graphics);
-		
-		auto bloomTex = computeBloom(graphics, gbuffers.color, postprocessConfig, viewGPUId);
+
+		tsrHistory = computeTSR(
+			graphics, gbuffers.color, 
+			gbuffers.depthStencil, 
+			gbuffers.motionVector, 
+			m_rendererHistory.tsrHistory.lowResResolveTAAColor, 
+			viewGPUId,
+			m_perframeCameraView);
+		insertTimer("TSR", graphics);
+
+		auto fullResColor = tsrHistory.lowResResolveTAAColor;
+
+		auto bloomTex = computeBloom(graphics, fullResColor, postprocessConfig, viewGPUId);
 		insertTimer("Bloom", graphics);
 
-		check(finalOutput->get().getExtent().width == gbuffers.color->get().getExtent().width);
-		check(finalOutput->get().getExtent().height == gbuffers.color->get().getExtent().height);
-		tonemapping(viewGPUId, postprocessConfig, graphics, gbuffers.color, finalOutput, bloomTex);
+		tonemapping(viewGPUId, postprocessConfig, graphics, fullResColor, finalOutput, bloomTex);
 		insertTimer("Tonemapping", graphics);
 
 		check(finalOutput->get().getExtent().width == gbuffers.depthStencil->get().getExtent().width);
@@ -420,6 +448,7 @@ void DeferredRenderer::render(
 		m_rendererHistory.depth_Half = gbuffers.depth_Half;
 		m_rendererHistory.vertexNormalRS_Half = gbuffers.vertexRSNormal_Half;
 		m_rendererHistory.exposureBuffer = exposureBuffer;
+		m_rendererHistory.tsrHistory = tsrHistory;
 	}
 
 	m_bCameraCut = false;

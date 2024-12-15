@@ -22,69 +22,31 @@ CHORD_PUSHCONST(BloomDownSamplePushConsts, pushConsts);
 // Bloom prefilter.
 float3 prefilter(float3 c, float4 prefilterFactor) 
 {
+#if DIM_PASS_0
+    // https://catlikecoding.com/unity/tutorials/advanced-rendering/bloom/
     float brightness = max(c.r, max(c.g, c.b));
     float soft = brightness - prefilterFactor.y;
 
+    // 
     soft = clamp(soft, 0, prefilterFactor.z);
     soft = soft * soft * prefilterFactor.w;
     
+    //
     float contribution = max(soft, brightness - prefilterFactor.x);
     contribution /= max(brightness, 0.00001);
 
+    // 
     return c * contribution;
+#else 
+    // Don't do any operation if no first pass.
+    return c;
+#endif 
 }
 
-// 13 tap downsample kernal.
-static const uint kDownSampleCount = 13;
-static const float2 kDownSampleCoords[kDownSampleCount] = 
+float getKarisWeight(float3 c)
 {
-    float2( 0.0,  0.0),
-	float2(-1.0, -1.0), 
-    float2( 1.0, -1.0), 
-    float2( 1.0,  1.0),
-    float2(-1.0,  1.0),
-	float2(-2.0, -2.0),
-    float2( 0.0, -2.0), 
-    float2( 2.0, -2.0), 
-    float2( 2.0,  0.0), 
-    float2( 2.0,  2.0), 
-    float2( 0.0,  2.0), 
-    float2(-2.0,  2.0), 
-    float2(-2.0,  0.0)
-};
-
-static const float kWeights[kDownSampleCount] = 
-{
-    0.125, // 0, 0
-    0.125, // 1, 1
-    0.125, // 1, 1
-    0.125, // 1, 1
-    0.125, // 1, 1
-    0.03125, // 2, 2
-    0.0625,  // 0, 2
-    0.03125, // 2, 2
-    0.0625,  // 
-    0.03125, 
-    0.0625, 
-    0.03125, 
-    0.0625  // 
-};
-
-static const int kDownSampleGroupCnt = 5;
-static const int kSamplePerGroup = 4;
-static const int kDownSampleGroups[kDownSampleGroupCnt][kSamplePerGroup] = 
-{
-	{ 1, 2,  3,  4},
-    { 5, 6,  0, 12},
-    { 6, 7,  8,  0},
-    { 0, 8,  9, 10},
-    {12, 0, 10, 11}
-};
-static const float kDownSampleGroupWeights[kDownSampleGroupCnt] = 
-{
-	0.5, 0.125, 0.125, 0.125, 0.125
-};
-
+    return 1.0 / (1.0 + ap1_luminance_f_rgb(c));
+}
 
 [numthreads(64, 1, 1)]
 void mainCS(
@@ -103,51 +65,43 @@ void mainCS(
     float2 srcTexelSize = 1.0 / pushConsts.srcDim;
 
     // 
-    SamplerState pointSampler = getPointClampEdgeSampler(perView);
+    SamplerState linearSampler = getLinearClampEdgeSampler(perView);
 
-    float3 samples[kDownSampleCount]; 
-    for (uint i = 0; i < kDownSampleCount; i ++)
-    {
-        float2 sampleUv = uv + kDownSampleCoords[i] * srcTexelSize;
-
-        // When downsample, we should not use clamp to edge sampler.
-        // Evaluate some bright pixel on the edge, if clamp to edge, down sample level edge pixel will capture it in multi sample.
-        // And accumulate all of them then get a bright pixel.
-        samples[i] = sampleTexture2D_float3(pushConsts.SRV, sampleUv, pointSampler);
-
-    #if DIM_PASS_0
-        samples[i] = prefilter(samples[i], pushConsts.prefilterFactor);
-    #endif
-    }
+    // a - b - c
+    // - j - k -
+    // d - e - f
+    // - l - m -
+    // g - h - i
+    float3 a = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2(-2, -2), linearSampler), pushConsts.prefilterFactor);
+    float3 b = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2( 0, -2), linearSampler), pushConsts.prefilterFactor);
+    float3 c = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2( 2, -2), linearSampler), pushConsts.prefilterFactor);
+    float3 d = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2(-2,  0), linearSampler), pushConsts.prefilterFactor);
+    float3 e = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2( 0,  0), linearSampler), pushConsts.prefilterFactor);
+    float3 f = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2( 2,  0), linearSampler), pushConsts.prefilterFactor);
+    float3 g = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2(-2,  2), linearSampler), pushConsts.prefilterFactor);
+    float3 h = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2( 0,  2), linearSampler), pushConsts.prefilterFactor);
+    float3 i = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2( 2,  2), linearSampler), pushConsts.prefilterFactor);
+    float3 j = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2(-1, -1), linearSampler), pushConsts.prefilterFactor);
+    float3 k = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2( 1, -1), linearSampler), pushConsts.prefilterFactor);
+    float3 l = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2(-1,  1), linearSampler), pushConsts.prefilterFactor);
+    float3 m = prefilter(sampleTexture2D_float3(pushConsts.SRV, uv + srcTexelSize * int2( 1,  1), linearSampler), pushConsts.prefilterFactor);
 
     float3 outColor = 0.0;
 
 #if DIM_PASS_0
-    float sampleKarisWeight[kDownSampleCount];
-    for(uint i = 0; i < kDownSampleCount; i ++)
-    {
-        sampleKarisWeight[i] = 1.0 / (1.0 + ap1_luminance_f_rgb(samples[i]));
-    }
+    float3 c_0 = (a + b + d + e) * 0.25; c_0 *= getKarisWeight(c_0);
+    float3 c_1 = (b + c + e + f) * 0.25; c_1 *= getKarisWeight(c_1);
+    float3 c_2 = (d + e + g + h) * 0.25; c_2 *= getKarisWeight(c_2);
+    float3 c_3 = (e + f + h + i) * 0.25; c_3 *= getKarisWeight(c_3);
+    float3 c_4 = (j + k + l + m) * 0.25; c_4 *= getKarisWeight(c_4);
     
-    for(int i = 0; i < kDownSampleGroupCnt; i++)
-    {
-        float sumedKarisWeight = 0; 
-        for(int j = 0; j < kSamplePerGroup; j++)
-        {
-            sumedKarisWeight += sampleKarisWeight[kDownSampleGroups[i][j]];
-        }
-
-        // Anti AA filter.
-        for(int j = 0; j < kSamplePerGroup; j++)
-        {
-            outColor += kDownSampleGroupWeights[i] * sampleKarisWeight[kDownSampleGroups[i][j]] / sumedKarisWeight * samples[kDownSampleGroups[i][j]];
-        }
-    }
+    outColor += 0.125 * (c_0 + c_1 + c_2 + c_3);
+    outColor += 0.500 * (c_4                  );
 #else
-    for (uint i = 0; i < kDownSampleCount; i ++)
-    {
-        outColor += samples[i] * kWeights[i];
-    }
+    outColor += 0.03125 * (a + c + g + i);
+    outColor += 0.06250 * (b + d + f + h);
+    outColor += 0.12500 * (j + k + l + m);
+    outColor += 0.12500 * (e            );
 #endif
 
     storeRWTexture2D_float3(pushConsts.UAV, workPos, outColor);

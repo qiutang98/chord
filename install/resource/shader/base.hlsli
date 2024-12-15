@@ -1072,4 +1072,73 @@ float4 unpack_float4_f_uint2(uint2 r)
 
     return f16tof32(v_h);
 }
+
+uint zOrder3DEncode(uint3 coord, const uint dimension)
+{
+    uint index = 0;
+    const uint stepCount = log2(dimension);
+    
+    for (uint i = 0; i < stepCount; i++)
+    {
+        index |= ((coord.x >> i) & 0x1) << (3 * i + 0);
+        index |= ((coord.y >> i) & 0x1) << (3 * i + 1);
+        index |= ((coord.z >> i) & 0x1) << (3 * i + 2);
+    }
+
+    return index;
+}
+
+// This function take a rgb color (best is to provide color in sRGB space)
+// and return a YCoCg color in [0..1] space for 8bit (An offset is apply in the function)
+// Ref: http://www.nvidia.com/object/real-time-ycocg-dxt-compression.html
+#define YCOCG_CHROMA_BIAS (128.0 / 255.0)
+float3 RGBToYCoCg_srgb(float3 rgb)
+{
+    float3 YCoCg;
+    YCoCg.x = dot(rgb, float3(0.25, 0.5, 0.25));
+    YCoCg.y = dot(rgb, float3(0.5, 0.0, -0.5))    + YCOCG_CHROMA_BIAS;
+    YCoCg.z = dot(rgb, float3(-0.25, 0.5, -0.25)) + YCOCG_CHROMA_BIAS;
+
+    return YCoCg;
+}
+
+float3 YCoCgToRGB_srgb(float3 YCoCg)
+{
+    float Y = YCoCg.x;
+
+    // 
+    float Co = YCoCg.y - YCOCG_CHROMA_BIAS;
+    float Cg = YCoCg.z - YCOCG_CHROMA_BIAS;
+
+    float3 rgb;
+    rgb.r = Y + Co - Cg;
+    rgb.g = Y + Cg;
+    rgb.b = Y - Co - Cg;
+
+    return rgb;
+}
+
+// https://github.com/playdeadgames/temporal
+float3 clipAABB_compute(float3 aabbMin, float3 aabbMax, float3 testSample, float bias)
+{
+    float3 aabbCenter = 0.5 * (aabbMax + aabbMin);
+    float3 extentClip = 0.5 * (aabbMax - aabbMin) + bias;
+
+
+    float3 colorVector = testSample - aabbCenter;
+    float3 colorVectorClip = colorVector / extentClip;
+
+    colorVectorClip  = abs(colorVectorClip);
+    float maxAbsUnit = max(max(colorVectorClip.x, colorVectorClip.y), colorVectorClip.z);
+
+    if (maxAbsUnit > 1.0) 
+    {
+        return aabbCenter + colorVector / maxAbsUnit; 
+    } 
+
+    // point is inside aabb
+    return testSample; 
+}
+
+
 #endif // !SHADER_BASE_HLSLI

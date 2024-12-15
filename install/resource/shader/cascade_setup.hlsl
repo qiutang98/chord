@@ -174,7 +174,7 @@ void cascadeComputeCS(uint localThreadIndex : SV_GroupIndex)
 
 		for (uint i = 0; i < 8; i++)
 		{
-			float4 invCorner = mul(perView.clipToTranslatedWorldWithZFar, float4(cascadeFrustumCorner[i], 1.0f));
+			float4 invCorner = mul(perView.clipToTranslatedWorldWithZFar_NoJitter, float4(cascadeFrustumCorner[i], 1.0f));
 			cascadeFrustumCorner[i] = invCorner.xyz / invCorner.w;
 		}
     }

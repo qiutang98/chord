@@ -107,9 +107,8 @@ namespace chord
 		graphics::PoolBufferRef screenProbeSpawnInfoBuffer = nullptr;
 		graphics::PoolTextureRef screenProbeTraceRadiance = nullptr;
 		graphics::PoolTextureRef screenProbeSampleRT = nullptr;
+
 		graphics::PoolTextureRef historyDiffuseRT = nullptr;
-
-
 		graphics::PoolTextureRef historySpecularRT = nullptr;
 
 		std::vector<GIWorldProbeVolumeResource> volumes;
@@ -132,5 +131,15 @@ namespace chord
 		graphics::GraphicsQueue& queue,
 		graphics::PoolTextureRef input,
 		graphics::PoolTextureRef output
+	);
+
+	extern TSRHistory computeTSR(
+		graphics::GraphicsQueue& queue,
+		graphics::PoolTextureRef color,
+		graphics::PoolTextureRef depth,
+		graphics::PoolTextureRef motionVector,
+		graphics::PoolTextureRef historyLowResColor,
+		uint32 cameraViewId,
+		const PerframeCameraView& perframe
 	);
 }

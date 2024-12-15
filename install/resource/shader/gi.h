@@ -205,7 +205,10 @@ struct GIWorldProbeVolumeConfig
 
     int getPhysicalLinearVolumeId(int3 virtualIndex)
     {
-        return getLinearProbeIndex(getPhysicalVolumeId(virtualIndex));
+        int3 physicsIndex = getPhysicalVolumeId(virtualIndex);
+
+    //  return zOrder3DEncode(physicsIndex, probeDim.x);
+        return getLinearProbeIndex(physicsIndex);
     }
 
     float3 getPositionRS(int3 virtualProbeIndex)
@@ -284,6 +287,7 @@ struct GIWorldProbeVolumeConfig
 
             SH3_gi sample_world_gi_sh;
             {
+                
                 SH3_gi_pack sh_pack = BATL(SH3_gi_pack, sh_SRV, adjacentPhysicsProbeLinearIndex);
                 sample_world_gi_sh.unpack(sh_pack);
             }
@@ -490,31 +494,8 @@ float3 getScreenProbeCellRayDirection(const GPUBasicData scene, uint2 probeCoord
     return tbnTransform(tbn, texelDirection);
 }
 
-// https://github.com/playdeadgames/temporal
-// AMD brixelizer GI modify version.
-float3 giClipAABB_compute(float3 aabbMin, float3 aabbMax, float3 testSample)
-{
-    float3 aabbCenter = 0.5 * (aabbMax + aabbMin);
-    float3 extentClip = 0.5 * (aabbMax - aabbMin) + 0.001;
-
-
-    float3 colorVector = testSample - aabbCenter;
-    float3 colorVectorClip = colorVector / extentClip;
-
-    colorVectorClip  = abs(colorVectorClip);
-    float maxAbsUnit = max(max(colorVectorClip.x, colorVectorClip.y), colorVectorClip.z);
-
-    if (maxAbsUnit > 1.0) 
-    {
-        return aabbCenter + colorVector / maxAbsUnit; 
-    } 
-
-    // point is inside aabb
-    return testSample; 
-}
-
 float3 giClipAABB(float3 test, float3 center, float size)
 {
-    return giClipAABB_compute(center - size, center + size, test);
+    return clipAABB_compute(center - size, center + size, test, 0.001);
 }
 #endif
