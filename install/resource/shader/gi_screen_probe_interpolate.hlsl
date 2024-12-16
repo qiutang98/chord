@@ -386,12 +386,12 @@ void mainCS(
                 float weight = 1.0 / (1.0 + specularSample);
 
                 // TODO: Split interpolate and clip rectify, which can add some spatial filter before clip AABB, help reduce flicker.
-                float3 avgColor_wave = WaveActiveSum(diffuse_screenProbeIrradiance) / WaveActiveSum(true);
+                float3 avgColor_wave = WaveActiveSum(specularTraceRadiance.xyz) / WaveActiveSum(true);
                 float clipHistoryAABBSize_Specular = lerp(0.6, 0.2, saturate(screenProbeWeightSum));
                 reprojected.xyz = giClipAABB(reprojected.xyz, avgColor_wave, clipHistoryAABBSize_Specular);
 
                 specularRadiance = lerp(reprojected.xyz, specularTraceRadiance.xyz, weight);
-                specularSample  = min(maxSample, specularSample + 1.0);
+                specularSample  = min(maxSample, specularSample + 1.0); 
 
                 // check(!any(isnan(specularRadiance)));
             }
