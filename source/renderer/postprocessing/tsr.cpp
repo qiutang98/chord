@@ -8,6 +8,7 @@
 #include <shader/tsr_prepare.hlsl>
 #include <shader/tsr_rectify.hlsl>
 #include <shader/tsr_reprojection.hlsl>
+#include <shader/tsr_sharpen.hlsl>
 
 using namespace chord;
 using namespace chord::graphics;
@@ -15,8 +16,16 @@ using namespace chord::graphics;
 PRIVATE_GLOBAL_SHADER(TSRPrepareCS, "resource/shader/tsr_prepare.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(TSRRectifyCS, "resource/shader/tsr_rectify.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(TSRReprojectionCS, "resource/shader/tsr_reprojection.hlsl", "mainCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(TSRSharpeness, "resource/shader/tsr_sharpen.hlsl", "mainCS", EShaderStage::Compute);
 
-TSRHistory chord::computeTSR(
+static float sTSRSharpeness = 0.5f;
+static AutoCVarRef cVarTSRSharpeness(
+	"r.tsr.sharpness",
+	sTSRSharpeness,
+	"Sharpeness for TSR."
+);
+
+TSRResult chord::computeTSR(
 	GraphicsQueue& queue, 
 	PoolTextureRef color, 
 	PoolTextureRef depth, 
@@ -114,8 +123,28 @@ TSRHistory chord::computeTSR(
 			{ dispatchDim.x, dispatchDim.y, 1 });
 	}
 
-	TSRHistory history{};
-	history.lowResResolveTAAColor = lowResolveColor;
+	auto sharpenColor = getContext().getTexturePool().create("sharpenColor", renderDim.x, renderDim.y, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	{
+		TSRSharpenPushConsts pushConsts{};
+		pushConsts.gbufferDim = renderDim;
+		pushConsts.cameraViewId = cameraViewId;
+		pushConsts.sharpeness = sTSRSharpeness;
+		pushConsts.SRV = asSRV(queue, lowResolveColor);
+		pushConsts.UAV = asUAV(queue, sharpenColor);
 
-	return history;
+		const uint2 dispatchDim = divideRoundingUp(renderDim, uint2(16));
+
+		auto computeShader = getContext().getShaderLibrary().getShader<TSRSharpeness>();
+		addComputePass2(queue,
+			"TSRSharpeness",
+			getContext().computePipe(computeShader, "TSRSharpeness"),
+			pushConsts,
+			{ dispatchDim.x, dispatchDim.y, 1 });
+	}
+
+	TSRResult result{};
+	result.history.lowResResolveTAAColor = lowResolveColor;
+	result.presentColor = sharpenColor;
+
+	return result;
 }

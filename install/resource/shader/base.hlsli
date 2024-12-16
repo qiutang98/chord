@@ -56,6 +56,7 @@ float3 linstep(float3 min, float3 max, float3 v) { return clamp((v - min) / (max
 float4 linstep(float4 min, float4 max, float4 v) { return clamp((v - min) / (max - min), 0, 1); }
 
 float max3(float x, float y, float z) { return max(x, max(y, z)); }
+float min3(float x, float y, float z) { return min(x, min(y, z)); }
 
 // https://gpuopen.com/learn/optimized-reversible-tonemapper-for-resolve/
 // https://www.shadertoy.com/view/Xdd3Rr

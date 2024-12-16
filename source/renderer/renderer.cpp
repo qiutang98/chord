@@ -411,16 +411,18 @@ void DeferredRenderer::render(
 		exposureBuffer = computeAutoExposure(graphics, gbuffers.color, postprocessConfig, m_rendererHistory.exposureBuffer, tickData.dt);
 		insertTimer("AutoExposure", graphics);
 
-		tsrHistory = computeTSR(
+		auto tsrResult = computeTSR(
 			graphics, gbuffers.color, 
 			gbuffers.depthStencil, 
 			gbuffers.motionVector, 
 			m_rendererHistory.tsrHistory.lowResResolveTAAColor, 
 			viewGPUId,
 			m_perframeCameraView);
+		tsrHistory = tsrResult.history;
+
 		insertTimer("TSR", graphics);
 
-		auto fullResColor = tsrHistory.lowResResolveTAAColor;
+		auto fullResColor = tsrResult.presentColor;
 
 		auto bloomTex = computeBloom(graphics, fullResColor, postprocessConfig, viewGPUId);
 		insertTimer("Bloom", graphics);

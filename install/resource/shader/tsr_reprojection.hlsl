@@ -19,8 +19,6 @@ CHORD_PUSHCONST(TSRReprojectionPushConsts, pushConsts);
 #include "base.hlsli"
 #include "bindless.hlsli"
 
-// TODO: Variant reproject dispatch.
-
 float lanczos_2_approx_Weight(float x2) 
 {
     float a = (2.0f / 5.0f) * x2 - 1;

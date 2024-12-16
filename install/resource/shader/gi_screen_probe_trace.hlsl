@@ -1,5 +1,8 @@
 #include "gi.h"
 
+// TODO: Ray sort before ray tracing.
+// TODO: Wavelet tracing.
+
 struct GIProbeTracePushConsts
 {
     uint2 probeDim;

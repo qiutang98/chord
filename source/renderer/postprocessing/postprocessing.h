@@ -133,7 +133,12 @@ namespace chord
 		graphics::PoolTextureRef output
 	);
 
-	extern TSRHistory computeTSR(
+	struct TSRResult
+	{
+		TSRHistory history;
+		graphics::PoolTextureRef presentColor = nullptr;
+	};
+	extern TSRResult computeTSR(
 		graphics::GraphicsQueue& queue,
 		graphics::PoolTextureRef color,
 		graphics::PoolTextureRef depth,

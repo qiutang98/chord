@@ -1,5 +1,8 @@
 #include "gi.h"
 
+// TODO: Ray sort before ray tracing.
+// TODO: Wavelet tracing.
+
 struct GISpecularTracePushConsts
 {
     uint2 gbufferDim;
