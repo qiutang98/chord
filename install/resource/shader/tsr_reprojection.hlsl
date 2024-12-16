@@ -19,20 +19,18 @@ CHORD_PUSHCONST(TSRReprojectionPushConsts, pushConsts);
 #include "base.hlsli"
 #include "bindless.hlsli"
 
-float lanczosWeight(float x, float r) 
-{
-    static const float kPi2 = kPI * kPI;
-    if (x == 0.0)
-    {
-        return 1.0;
-    }
+// TODO: Variant reproject dispatch.
 
-    return (r * sin(kPI * x) * sin(kPI * (x / r) )) / (kPi2 * x * x);
+float lanczos_2_approx_Weight(float x2) 
+{
+    float a = (2.0f / 5.0f) * x2 - 1;
+    float b = (1.0f / 4.0f) * x2 - 1;
+    return ((25.0f / 16.0f) * a * a - (25.0f / 16.0f - 1)) * (b * b);
 }
 
 float lanczosWeight(float2 x, float r) 
 {
-    return lanczosWeight(x.x, r) * lanczosWeight(x.y, r);
+    return lanczos_2_approx_Weight(x.x * x.x) * lanczos_2_approx_Weight(x.y * x.y);
 }
 
 float3 sampleHistoryLanczos(float2 coord, int r)
@@ -130,20 +128,15 @@ float3 sampleHistoryBicubic5Tap(float2 uv, SamplerState linearSampler, float sha
     return clamp(filteredVal, 0.0, kMaxHalfFloat);
 }
 
-[numthreads(64, 1, 1)]
+[numthreads(256, 1, 1)]
 void mainCS(
     uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupIndex)
 {
     PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId); 
     const GPUBasicData scene = perView.basicData;
 
-    const int2 gid = remap8x8(localThreadIndex); 
-    const int2 tid = workGroupId * 8 + gid;
-
-    if (any(tid >= pushConsts.gbufferDim))
-    {
-        return;
-    }
+    const int2 gid = remap16x16(localThreadIndex);
+    const int2 tid = workGroupId * 16 + gid;
 
     float2 pixel_uv = (tid + 0.5) / pushConsts.gbufferDim;
     float2 pixel_uv_history = pixel_uv + loadTexture2D_float2(pushConsts.closestMotionVectorId, tid);
@@ -153,15 +146,18 @@ void mainCS(
     if (all(pixel_uv_history > 0.0) && all(pixel_uv_history < 1.0))
     {
         historyColor = sampleHistoryBicubic5Tap(pixel_uv_history, getLinearClampEdgeSampler(perView));
-    //  historyColor = sampleHistoryLanczos(pixel_uv_history, 2);
+        // historyColor = sampleHistoryLanczos(pixel_uv_history, 2); 
     }
-    else
+    else 
     {
         // History out of frame, stretch fill empty area. (point sample)
         historyColor = sampleTexture2D_float3(pushConsts.historyColorId, pixel_uv_history, getPointClampEdgeSampler(perView));
     }
 
-    storeRWTexture2D_float3(pushConsts.UAV, tid, historyColor);
+    if (all(tid < pushConsts.gbufferDim))
+    {
+        storeRWTexture2D_float3(pushConsts.UAV, tid, historyColor);
+    }
 }
 
 #endif

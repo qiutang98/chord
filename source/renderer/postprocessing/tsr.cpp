@@ -60,7 +60,7 @@ TSRHistory chord::computeTSR(
 			pushConsts.historyColorId = asSRV(queue, historyLowResColor);
 			pushConsts.UAV = asUAV(queue, reprojectedHistory);
 
-			const uint2 dispatchDim = divideRoundingUp(renderDim, uint2(8));
+			const uint2 dispatchDim = divideRoundingUp(renderDim, uint2(16));
 
 			auto computeShader = getContext().getShaderLibrary().getShader<TSRReprojectionCS>();
 			addComputePass2(queue,

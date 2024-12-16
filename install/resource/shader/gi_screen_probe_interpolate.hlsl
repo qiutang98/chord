@@ -320,10 +320,20 @@ void mainCS(
             diffuse_screenProbeIrradiance = lerp(diffuse_screenProbeIrradiance, diffuse_world_irradiance, 1.0 - saturate(screenProbeWeightSum));
             diffuse_screenProbeIrradiance = lerp(diffuse_screenProbeIrradiance, diffuse_world_irradiance, smoothstep(0.0, 1.0, 1.0 / (1.0 + reprojected.w)));
 
+            float3 maxIrradiance_wave = WaveActiveMax(diffuse_screenProbeIrradiance);
+            float3 minIrradiance_wave = WaveActiveMin(diffuse_screenProbeIrradiance);
+            
+
+            float3 boundIrradiance_wave = maxIrradiance_wave - minIrradiance_wave;
+
 
             // TODO: Split interpolate and clip rectify, which can add some spatial filter before clip AABB, help reduce flicker.
+            float3 avgColor_wave = WaveActiveSum(diffuse_screenProbeIrradiance) / WaveActiveSum(true);
             float clipHistoryAABBSize_GI = lerp(0.6, 0.2, saturate(screenProbeWeightSum));
-            reprojected.xyz = giClipAABB(reprojected.xyz, diffuse_screenProbeIrradiance, clipHistoryAABBSize_GI);
+            reprojected.xyz = giClipAABB(reprojected.xyz, avgColor_wave, clipHistoryAABBSize_GI);
+
+            // reprojected.xyz = giClipAABB(reprojected.xyz, diffuse_screenProbeIrradiance, clipHistoryAABBSize_GI + boundIrradiance_wave);
+            // reprojected.xyz = clipAABB_compute(minIrradiance_wave, maxIrradiance_wave, reprojected.xyz, 0.001);
 
             diffuse_screenProbeIrradiance = lerp(reprojected.xyz,  diffuse_screenProbeIrradiance, 1.0 / (1.0 + reprojected.w));
 
@@ -376,8 +386,9 @@ void mainCS(
                 float weight = 1.0 / (1.0 + specularSample);
 
                 // TODO: Split interpolate and clip rectify, which can add some spatial filter before clip AABB, help reduce flicker.
+                float3 avgColor_wave = WaveActiveSum(diffuse_screenProbeIrradiance) / WaveActiveSum(true);
                 float clipHistoryAABBSize_Specular = lerp(0.6, 0.2, saturate(screenProbeWeightSum));
-                reprojected.xyz = giClipAABB(reprojected.xyz, specularTraceRadiance.xyz, clipHistoryAABBSize_Specular);
+                reprojected.xyz = giClipAABB(reprojected.xyz, avgColor_wave, clipHistoryAABBSize_Specular);
 
                 specularRadiance = lerp(reprojected.xyz, specularTraceRadiance.xyz, weight);
                 specularSample  = min(maxSample, specularSample + 1.0);

@@ -494,7 +494,7 @@ float3 getScreenProbeCellRayDirection(const GPUBasicData scene, uint2 probeCoord
     return tbnTransform(tbn, texelDirection);
 }
 
-float3 giClipAABB(float3 test, float3 center, float size)
+float3 giClipAABB(float3 test, float3 center, float3 size)
 {
     return clipAABB_compute(center - size, center + size, test, 0.001);
 }
