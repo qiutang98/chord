@@ -29,8 +29,12 @@ struct GIScreenProbeInterpolatePushConsts
     uint specularStatUAV;
     uint bJustUseWorldCache;
     uint bDisableWorldCache;
+    uint rtAOSRV;
+
+    uint baseColorSRV;
 };
 CHORD_PUSHCONST(GIScreenProbeInterpolatePushConsts, pushConsts);
+
 
 #ifndef __cplusplus // HLSL only area.
 
@@ -284,11 +288,15 @@ void mainCS(
         specular_screenProbeIrradiance /= max(screenProbeWeightSum, kFloatEpsilon) * 2.0 * kPI;
     }
 
-
+    float rtAo = sampleTexture2D_float1(pushConsts.rtAOSRV, pixel_uv,  getLinearClampEdgeSampler(perView));
 
     // Avoid negative diffuse_screenProbeIrradiance. 
-    diffuse_screenProbeIrradiance = max(0.0, diffuse_screenProbeIrradiance); 
+    diffuse_screenProbeIrradiance = rtAo * max(0.0, diffuse_screenProbeIrradiance); 
+    diffuse_world_irradiance *= rtAo;
+
     specular_screenProbeIrradiance = max(0.0, specular_screenProbeIrradiance);
+
+
     float resultSample = 0.0;
 
 #if 0

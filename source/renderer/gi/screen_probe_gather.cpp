@@ -15,6 +15,8 @@
 #include <shader/gi_specular_trace.hlsl>
 #include <shader/gi_spatial_filter_specular.hlsl>
 #include <shader/gi_spatial_specular_remove_fireflare.hlsl>
+#include <shader/gi_rt_ao.hlsl>
+
 #include <random>
 
 using namespace chord;
@@ -90,6 +92,27 @@ static AutoCVarRef cVarGIWorldCacheProbeVoxelSize(
 	"GI world probe voxel size."
 );
 
+static uint32 sEnableGIRTAO = 1;
+static AutoCVarRef cVarEnableRTAOGI(
+	"r.gi.rtao",
+	sEnableGIRTAO,
+	"Enable rtao or not."
+);
+
+static float sGIRTAORayLenght = 1.0f;
+static AutoCVarRef cVarGIRTAORayLenght(
+	"r.gi.rtao.raylenght",
+	sGIRTAORayLenght,
+	"RTAO ray lenght."
+);
+
+static float sGIRTAOPower = 0.25f;
+static AutoCVarRef cVarRTAOPower(
+	"r.gi.rtao.power",
+	sGIRTAOPower,
+	"RTAO ray power."
+);
+
 PRIVATE_GLOBAL_SHADER(GIScreenProbeSpawnCS, "resource/shader/gi_screen_probe_spawn.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIScreenProbeInterpolateCS, "resource/shader/gi_screen_probe_interpolate.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIScreenProbeTraceCS, "resource/shader/gi_screen_probe_trace.hlsl", "mainCS", EShaderStage::Compute);
@@ -104,6 +127,7 @@ PRIVATE_GLOBAL_SHADER(GISpecularSpatialFilterCS, "resource/shader/gi_spatial_fil
 PRIVATE_GLOBAL_SHADER(GISpecularRemoveFireFlareFilterCS, "resource/shader/gi_spatial_specular_remove_fireflare.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GISpatialUpsampleCS, "resource/shader/gi_upsample.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GISpecularTraceCS, "resource/shader/gi_specular_trace.hlsl", "mainCS", EShaderStage::Compute);
+PRIVATE_GLOBAL_SHADER(GIRTAOCS, "resource/shader/gi_rt_ao.hlsl", "mainCS", EShaderStage::Compute);
 
 
 void chord::giUpdate(
@@ -674,6 +698,49 @@ void chord::giUpdate(
 		timer("GI: Specular Remove Fireflare", queue);
 	}
 
+	PoolTextureRef rtAORT = nullptr;
+	if (sEnableGIRTAO != 0)
+	{
+		rtAORT = rtPool.create("GI-RTAO", halfDim.x, halfDim.y, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		{
+			GIRTAOPushConsts pushConst{};
+			pushConst.gbufferDim = halfDim;
+			pushConst.cameraViewId = cameraViewId;
+
+			pushConst.depthSRV = asSRV(queue, gbuffers.depth_Half);
+			pushConst.normalRSId = asSRV(queue, gbuffers.vertexRSNormal_Half);
+
+			pushConst.rayLength = sGIRTAORayLenght;
+			pushConst.power = sGIRTAOPower;
+			pushConst.rtAO_UAV = asUAV(queue, rtAORT);
+
+			const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8, 4));
+
+			auto computeShader = getContext().getShaderLibrary().getShader<GIRTAOCS>();
+			addComputePass(queue,
+				"GI: RTAO",
+				getContext().computePipe(computeShader, "GI: RTAO", {
+					getContext().descriptorFactoryBegin()
+					.accelerateStructure(0) // TLAS
+					.buildNoInfoPush() }),
+				{ dispatchDim.x, dispatchDim.y, 1 },
+				[&](GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)
+				{
+					pipe->pushConst(cmd, pushConst);
+
+					PushSetBuilder(queue, cmd)
+						.addAccelerateStructure(tlas)
+						.push(pipe, 1); // Push set 1.
+				});
+		}
+		if (timer)
+		{
+			timer("GI: RTAO", queue);
+		}
+	}
+
+
+
 	auto giInterpolateRT = rtPool.create("GI-ScreenProbe-Interpolate", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 	auto specularInterpolateRT = rtPool.create("GI-Specular-Interpolate", halfDim.x, halfDim.y, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 	auto filteredRadiusRT = rtPool.create("GI-Spatial-FilterRadius", halfDim.x, halfDim.y, VK_FORMAT_R8G8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -702,6 +769,8 @@ void chord::giUpdate(
 		pushConsts.specularStatUAV = probeReprojectStatSpecularRT != nullptr ? asUAV(queue, probeReprojectStatSpecularRT) : kUnvalidIdUint32; // 
 		pushConsts.bJustUseWorldCache = (sGIInterpretationJustUseWorldCache != 0);
 		pushConsts.bDisableWorldCache = (sGIInterpretationDisableWorldCache != 0);
+		pushConsts.rtAOSRV = rtAORT != nullptr ? asSRV(queue, rtAORT) : getContext().getWhiteTextureSRV();
+
 		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
 
 		auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeInterpolateCS>();
@@ -875,5 +944,9 @@ void chord::giUpdate(
 	else if (sEnableGIDebugOutput == 10)
 	{
 		debugBlitColor(queue, specularTraceRadiancePostFilterRT, gbuffers.color);
+	}
+	else if (sEnableGIDebugOutput == 11 && rtAORT != nullptr)
+	{
+		debugBlitColor(queue, rtAORT, gbuffers.color);
 	}
 }

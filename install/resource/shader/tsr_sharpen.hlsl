@@ -2,6 +2,8 @@
 
 struct TSRSharpenPushConsts
 {
+    CHORD_DEFAULT_COMPARE_ARCHIVE(TSRSharpenPushConsts);
+
     uint2 gbufferDim;
     
     float sharpeness;
