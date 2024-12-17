@@ -121,7 +121,7 @@ struct RayHitMaterialInfo
 
             float4 metallicRoughnessRaw = metallicRoughnessTexture.SampleLevel(metallicRoughnessSampler, uv, sampleTextureLod);
             metallic  = metallicRoughnessRaw.b;
-            roughness = metallicRoughnessRaw.g;
+            roughness = metallicRoughnessRaw.g; 
         }
         else
         {

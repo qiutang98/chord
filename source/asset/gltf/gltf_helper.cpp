@@ -590,6 +590,12 @@ namespace chord
 				{
 					// Metallic roughness image use .gb channel.
 					int32 metallicRoughnessImageIndex = model.textures.at(material.pbrMetallicRoughness.metallicRoughnessTexture.index).source;
+
+					if (material.occlusionTexture.index == -1)
+					{
+						imageChannelUsageMap[metallicRoughnessImageIndex].rgba.r = true;
+					}
+					
 					imageChannelUsageMap[metallicRoughnessImageIndex].rgba.g = true;
 					imageChannelUsageMap[metallicRoughnessImageIndex].rgba.b = true;
 				}

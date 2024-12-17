@@ -46,6 +46,11 @@ void mainCS(
             if (all(coord < pushConsts.workDim))
             {
                 float3 color = exposure * loadRWTexture2D_float3(pushConsts.UAV, coord);
+
+                if (any(isnan(color)) || any(isinf(color)))
+                {
+                    color = 0.0f;
+                }
                 storeRWTexture2D_float3(pushConsts.UAV, coord, color);
             }
         }

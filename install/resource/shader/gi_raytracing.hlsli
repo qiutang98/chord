@@ -68,7 +68,7 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
             //
             float3 V = -normalize(positionRS);
             float NoV = max(0.0, dot(materialInfo.normalRS, V));
-            float2 brdf = sampleBRDFLut(perView, NoV, materialInfo.roughness);
+            float2 brdf = sampleBRDFLut(perView, NoV, materialInfo.roughness); 
 
             //
             float3 approxDiffuseFullRough = materialInfo.diffuseColor + pbrMaterial.specularColor * 0.45;
@@ -179,18 +179,81 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
     }
     else 
     {
-        // Sky sample.
+        const float3 sunDirection = -scene.sunInfo.direction;
+        const float3 worldDirectionRS = rayDirection;
+
+        // Compute the radiance reflected by the ground, if the ray intersects it.
+        float groundAlpha = 0.0;
+        float3 groundRadiance = 0.0;
+
+        // Can hack to float here when unit is kilometers.
+        float3 cameraToEarthCenterKm = perView.cameraToEarthCenter_km.castFloat3();
+        float3 cameraPositionWS_km = perView.cameraPositionWS_km.castFloat3();
+        {
+            float3 p = cameraToEarthCenterKm; 
+
+            // 
+            float pov = dot(p, worldDirectionRS);
+            float pop = dot(p, p);
+
+            float rayEarthCenterSquaredDistance = pop - pov * pov;
+            float distance2intersection = -pov - sqrt(scene.atmosphere.bottom_radius * scene.atmosphere.bottom_radius - rayEarthCenterSquaredDistance);
+            if (distance2intersection > 0.0)
+            {
+                float3 intersectPoint = cameraPositionWS_km + worldDirectionRS * distance2intersection;
+                float3 normal = normalize(intersectPoint - scene.atmosphere.earthCenterKm);
+
+                // Compute the radiance reflected by the ground.
+                float3 skyIrradiance;
+                float3 sunIrradiance = GetSunAndSkyIrradiance(
+                    scene.atmosphere, 
+                    transmittanceTexture,
+                    irradianceTexture, 
+                    intersectPoint - scene.atmosphere.earthCenterKm, 
+                    normal, 
+                    sunDirection,
+                    skyIrradiance);
+
+                float sunVis = 1.0f; 
+                float skyVis = 1.0f; 
+
+                // Lambert lighting diffuse model.
+                groundRadiance = scene.atmosphere.ground_albedo * (1.0 / kPI) * (sunIrradiance * sunVis + skyIrradiance * skyVis);
+
+            #if 0
+                // Composite transmittance here lose visibility info.
+                // Air perspective finish on volumetric fog.
+                float3 transmittance;
+                float3 inScatter = GetSkyRadianceToPoint( 
+                    scene.atmosphere, 
+                    transmittanceTexture,
+                    scatteringTexture, 
+                    singleMieScatteringTexture,  
+                    cameraToEarthCenterKm,
+                    intersectPoint - scene.atmosphere.earthCenterKm, 
+                    sunDirection, 
+                    transmittance);
+
+                groundRadiance = groundRadiance * transmittance + inScatter;
+            #endif
+                groundAlpha = 1.0;  
+            } 
+        }
+
         float3 transmittance;
-        float3 skyRadiance = GetSkyRadiance(
+        radiance = GetSkyRadiance(
             scene.atmosphere,  
-            transmittanceTexture, 
+            transmittanceTexture,
             scatteringTexture, 
             singleMieScatteringTexture,  
-            perView.cameraToEarthCenter_km.castFloat3(),
-            rayDirection, 
-            -scene.sunInfo.direction,  
+            cameraToEarthCenterKm,
+            worldDirectionRS, 
+            sunDirection,  
             transmittance); 
-        radiance = finalRadianceExposureModify(scene, skyRadiance);
+
+        // 
+        radiance = lerp(radiance, groundRadiance, groundAlpha);
+        radiance = finalRadianceExposureModify(scene, radiance);
 
         // Far distance hit. 
         hitT = pushConsts.rayMissDistance; // Small offset as sky hit. 

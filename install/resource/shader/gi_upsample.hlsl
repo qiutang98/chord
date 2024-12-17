@@ -147,16 +147,15 @@ void mainCS(
     float3 specularColor = getSpecularColor(baseColor, metallic);
 
     // Apply diffuse gi. 
-    radiance = srcColor + radiance * diffuseColor * materialAo;
+    radiance = srcColor + radiance * diffuseColor;
 
     // Apply specular gi. 
     {
         float3 V = normalize(-fullRes_positionRS);
         float NoV = saturate(dot(fullRes_normalRS, V));
 
-        float2 brdf = sampleBRDFLut(perView, NoV, roughness);
-        // brdf = sampleTexture2D_float2(perView.basicData.brdfLut, uv, getLinearClampEdgeSampler(perView));
-
+        float2 brdf = sampleBRDFLut(perView, NoV, sqrt(roughness)); // sqrt remap Reflection distribution.
+        // float2 brdf = envBRDFApproxLazarov(sqrt(roughness), NoV); 
         radiance += radiance_specular * (specularColor * brdf.x + brdf.y);  
     } 
 

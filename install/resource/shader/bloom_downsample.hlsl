@@ -104,6 +104,11 @@ void mainCS(
     outColor += 0.12500 * (e            );
 #endif
 
+    if (any(isnan(outColor)))
+    {
+        outColor = 0.0;
+    }
+
     storeRWTexture2D_float3(pushConsts.UAV, workPos, outColor);
 }
 #endif

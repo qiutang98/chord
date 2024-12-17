@@ -212,6 +212,11 @@ void mainCS(
     float3 color = lerp(historyColor, filteredColor, blendFactor);
     color = clamp(colorSpaceInverse(color), 0.0, kMaxHalfFloat);
 
+    if (any(isnan(color)))
+    {
+        color = 0.0;
+    }
+
     // 
     storeRWTexture2D_float3(pushConsts.UAV, tid, color);
 }
