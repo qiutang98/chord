@@ -31,6 +31,7 @@ struct GIScreenProbeInterpolatePushConsts
     uint bDisableWorldCache;
     uint rtAOSRV;
 
+    uint AOMethod;
     uint baseColorSRV;
 };
 CHORD_PUSHCONST(GIScreenProbeInterpolatePushConsts, pushConsts);
@@ -66,6 +67,47 @@ uint findClosetProbe(int2 probeCoord, int2 offset)
     // Pack coord.
     return uint(pos.x) | (uint(pos.y) << 16u); 
 }   
+
+// Oat and Sander 2007, "Ambient Aperture Lighting" approximation mentioned by Jimenez et al. 2016
+// Copy code from paper: Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"
+float sphericalCapsIntersection(float cosCap1, float cosCap2, float cosDistance)
+{
+    float r1 = acosFastPositive(cosCap1);
+    float r2 = acosFastPositive(cosCap2);
+    float d  = acosFast(cosDistance);
+
+    if (min(r1, r2) <= max(r1, r2) - d)
+    {
+        return 1.0 - max(cosCap1, cosCap2);
+    }
+
+    if (r1 + r2 <= d)
+    {
+        return 0.0;
+    }
+
+    float delta = abs(r1 - r2);
+    float x = 1.0 - saturate((d - delta) / max(r1 + r2 - delta, 1e-4));
+
+    float area = x * x * (-2.0 * x + 3.0);
+    return area * (1.0 - max(cosCap1, cosCap2));
+}
+
+// Oat and Sander 2007, "Ambient Aperture Lighting" approximation mentioned by Jimenez et al. 2016
+// Copy code from paper: Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"
+float computeGTSO(float3 reflectionDir, float3 bentNormal, float visibility, float roughness)
+{
+    roughness = max(roughness, 0.03);
+
+    float cosAv = sqrt(1.0 - visibility);
+    float cosAs = exp2(-3.321928 * roughness * roughness);
+
+    // 
+    float cosB = dot(bentNormal, reflectionDir);
+    float ao = sphericalCapsIntersection(cosAv, cosAs, cosB) / (1.0 - cosAs);
+
+    return lerp(1.0, ao, smoothstep(0.01, 0.09, roughness));
+}
 
 groupshared float4 sRadiance[64];
   
@@ -108,11 +150,28 @@ void mainCS(
         spawnInfo.unpack(packProbeSpawnInfo);
     }
 
+    const float2 pixel_uv = (tid + 0.5) / pushConsts.gbufferDim;
+
     // Load current pixel normal. 
     float3 pixel_normalRS = loadTexture2D_float4(pushConsts.normalRSId, tid).xyz * 2.0 - 1.0;
     pixel_normalRS = normalize(pixel_normalRS);
- 
-    const float2 pixel_uv = (tid + 0.5) / pushConsts.gbufferDim;
+
+    float rtAo = 1.0f;
+    float3 bentNormal = pixel_normalRS;
+    bool bExistBentNormal = false;
+
+    if (pushConsts.AOMethod == 1)
+    {
+        float4 ssaoBentNormal = sampleTexture2D_float4(pushConsts.rtAOSRV, pixel_uv,  getLinearClampEdgeSampler(perView));
+        rtAo = ssaoBentNormal.w;
+
+        bentNormal = normalize(ssaoBentNormal.xyz * 2.0 - 1.0);
+        bExistBentNormal = true;
+    }
+    else if (pushConsts.AOMethod == 2)
+    {
+        rtAo = sampleTexture2D_float1(pushConsts.rtAOSRV, pixel_uv,  getLinearClampEdgeSampler(perView));
+    }
 
     // Get current pixel world position.
     const float3 pixel_positionRS = getPositionRS(pixel_uv, max(pixel_deviceZ, kFloatEpsilon), perView); 
@@ -197,7 +256,13 @@ void mainCS(
     float3 diffuse_screenProbeIrradiance = 0.0;
     float3 specular_screenProbeIrradiance = 0.0;
 
+    float roughness = loadTexture2D_float1(pushConsts.rouhnessSRV, tid);
     float3 rayReflectionDir = reflect(normalize(pixel_positionRS), pixel_normalRS);
+    float gtso = 1.0f;
+    if (bExistBentNormal)
+    {
+        gtso = computeGTSO(rayReflectionDir, bentNormal, rtAo, roughness);
+    }
 
     SH3_gi composite_sh_gi;
     composite_sh_gi.init();
@@ -215,7 +280,7 @@ void mainCS(
                 gi_sh.unpack(sh_pack); 
             }
 
-            diffuse_screenProbeIrradiance += probeWeightx4[i] * SH_Evalulate(pixel_normalRS, gi_sh.c);
+            diffuse_screenProbeIrradiance += probeWeightx4[i] * SH_Evalulate(bentNormal, gi_sh.c);
             specular_screenProbeIrradiance += probeWeightx4[i] * SH_Evalulate(rayReflectionDir, gi_sh.c);
 
             screenProbeWeightSum  += probeWeightx4[i];
@@ -249,7 +314,7 @@ void mainCS(
                 float3 specular_radiane = 0.0;
 
                 float minSampleCount;
-                bool bSampleValid = config.evaluateSH(perView, pixel_positionRS, pixel_normalRS, diffuse_radiance, minSampleCount, 1);
+                bool bSampleValid = config.evaluateSH(perView, pixel_positionRS, bentNormal, diffuse_radiance, minSampleCount, 1);
                 config.evaluateSH(perView, pixel_positionRS, rayReflectionDir, specular_radiane, minSampleCount, 1);
                 
                 weight = bSampleValid ? weight : 0.0;
@@ -288,14 +353,14 @@ void mainCS(
         specular_screenProbeIrradiance /= max(screenProbeWeightSum, kFloatEpsilon) * 2.0 * kPI;
     }
 
-    float rtAo = sampleTexture2D_float1(pushConsts.rtAOSRV, pixel_uv,  getLinearClampEdgeSampler(perView));
+
 
     // Avoid negative diffuse_screenProbeIrradiance. 
     diffuse_screenProbeIrradiance = rtAo * max(0.0, diffuse_screenProbeIrradiance); 
-    diffuse_world_irradiance *= rtAo;
+    diffuse_world_irradiance = diffuse_world_irradiance * rtAo;
 
-    specular_screenProbeIrradiance = max(0.0, specular_screenProbeIrradiance);
-
+    specular_screenProbeIrradiance = gtso * max(0.0, specular_screenProbeIrradiance);
+    specular_world_irradiance = gtso * specular_world_irradiance;
 
     float resultSample = 0.0;
 
@@ -361,7 +426,6 @@ void mainCS(
         specularTraceRadiance = 0.0;
     }
     
-    float roughness = loadTexture2D_float1(pushConsts.rouhnessSRV, tid);
     if (roughness == 0.0) 
     {
         specularRadiance = specularTraceRadiance.xyz; // Mirror surface. 
@@ -371,13 +435,18 @@ void mainCS(
     }
     else
     {
-    #if 0
-        float lerpFactor = roughness; // saturate(roughness * (1.0 / kGIMaxGlossyRoughness));
-        // specularTraceRadiance.xyz = lerp(specularTraceRadiance.xyz, specular_screenProbeIrradiance, pow(lerpFactor, 16.0));
-    #else 
         float lerpFactor =  saturate(roughness * (1.0 / kGIMaxGlossyRoughness));
+        float4 reprojected = 0.0;
+        if (pushConsts.reprojectSpecularSRV != kUnvalidIdUint32)
+        {
+            reprojected = loadTexture2D_float4(pushConsts.reprojectSpecularSRV, tid);
+
+            // Stable screen probe.  
+            specular_screenProbeIrradiance = lerp(specular_screenProbeIrradiance, specular_world_irradiance, 1.0 - saturate(screenProbeWeightSum));
+            specular_screenProbeIrradiance = lerp(specular_screenProbeIrradiance, specular_world_irradiance, smoothstep(0.0, 1.0, 1.0 / (1.0 + reprojected.w)));
+        }
+
         specularTraceRadiance.xyz = lerp(specularTraceRadiance.xyz, specular_screenProbeIrradiance, pow(lerpFactor, 16.0));
-    #endif
 
 
         specularSample = 0.0;
@@ -385,7 +454,6 @@ void mainCS(
  
         if (pushConsts.reprojectSpecularSRV != kUnvalidIdUint32)
         {
-            float4 reprojected = loadTexture2D_float4(pushConsts.reprojectSpecularSRV, tid);
             if (any(reprojected > 0.0))
             {
                 specularSample = reprojected.w;

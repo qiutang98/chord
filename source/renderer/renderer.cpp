@@ -345,7 +345,7 @@ void DeferredRenderer::render(
 
 		auto mainViewCulledCmdBuffer = postInstanceCullingBuffer.second;
 
-		PoolTextureRef disocclusionMask = nullptr;
+		DisocclusionPassResult disocclusionPassCtx = {};
 
 
 		VisibilityTileMarkerContext visibilityCtx;
@@ -359,11 +359,15 @@ void DeferredRenderer::render(
 
 			if (m_rendererHistory.depth_Half != nullptr && m_rendererHistory.vertexNormalRS_Half != nullptr)
 			{
-				disocclusionMask = computeDisocclusionMask(graphics, gbuffers, viewGPUId, m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half);
+				disocclusionPassCtx = computeDisocclusionMask(graphics, gbuffers, viewGPUId, 
+					m_rendererHistory.depth_Half, 
+					m_rendererHistory.vertexNormalRS_Half);
+
 				insertTimer("DisocclusionMask", graphics);
 			}
 
-			auto cascadeResult = cascadeShadowEvaluate(graphics, gbuffers, viewGPUId, cascadeContext, m_rendererHistory.cascadeCtx.softShadowMask, disocclusionMask);
+			auto cascadeResult = cascadeShadowEvaluate(graphics, gbuffers, viewGPUId, cascadeContext, 
+				m_rendererHistory.cascadeCtx.softShadowMask, disocclusionPassCtx.disocclusionMask);
 			cascadeShadowCurrentFrame.softShadowMask = cascadeResult.softShadowMask;
 			insertTimer("PCSS", graphics);
 		}
@@ -372,7 +376,15 @@ void DeferredRenderer::render(
 		{
 			if (sGIMethod == 0)
 			{
-				giUpdate(cmd, graphics, atmosphereLuts, cascadeContext, m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionMask, camera, m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half, m_bCameraCut, gltfRenderCtx.timerLambda);
+				giUpdate(cmd, 
+					graphics, 
+					atmosphereLuts, 
+					cascadeContext, 
+					m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionPassCtx,
+					camera, 
+					hzbCtx.maxHZB,
+					m_perframeCameraView,
+					m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half, m_bCameraCut, gltfRenderCtx.timerLambda);
 			}
 			else
 			{
@@ -381,7 +393,8 @@ void DeferredRenderer::render(
 			
 			if (sGIMethod == 1)
 			{
-				ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
+				ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, 
+					gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
 				insertTimer("DDGI Update", graphics);
 			}
 			else

@@ -71,6 +71,10 @@ namespace chord
 
 		//
 		outUB.cameraWorldPos = fillDouble3(m_position);
+
+		// 
+		// const math::vec3 forwardVector = math::normalize(m_front);
+		outUB.forwardRS = float3(outUB.viewToTranslatedWorld * float4(0.0f, 0.0f, -1.0f, 0.0f));
     }
 
 	Frustum ICamera::computeRelativeWorldFrustum() const

@@ -220,7 +220,7 @@ namespace chord
 		}
 	}
 
-	graphics::PoolTextureRef chord::computeDisocclusionMask(
+	DisocclusionPassResult chord::computeDisocclusionMask(
 		graphics::GraphicsQueue& queue,
 		GBufferTextures& gbuffers,
 		uint32 cameraViewId,
@@ -245,7 +245,6 @@ namespace chord
 		pushConsts.pointClampedEdgeSampler = getContext().getSamplerManager().pointClampEdge().index.get();
 		pushConsts.linearClampedEdgeSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
 
-
 		auto mask = getContext().getTexturePool().create(
 			"DisocclusionMask_Half", 
 			halfWidth, 
@@ -258,7 +257,10 @@ namespace chord
 		auto computeShader = getContext().getShaderLibrary().getShader<DisocclusionMask_CS>();
 		addComputePass2(queue, "DisocclusionMask_CS", getContext().computePipe(computeShader, "DisocclusionMask_Pipe"), pushConsts, { dispatchDim.x, dispatchDim.y, 1 });
 	
-		return mask;
+		DisocclusionPassResult result{};
+		result.disocclusionMask = mask;
+
+		return result;
 	}
 
 

@@ -69,7 +69,7 @@ void mainCS(uint2 tid : SV_DispatchThreadID)
         if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
         {
             float t = query.CommittedRayT();
-            float normalize_t = saturate(t / pushConsts.rayLength);
+            float normalize_t = saturate(t / pushConsts.rayLength); // Ray length based AO. 
             AO = pow(normalize_t, pushConsts.power);
         }
     }

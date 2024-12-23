@@ -354,6 +354,9 @@ struct PerframeCameraView
     // Halton sequence jitter data, .xy is current frame jitter data, .zw is prev frame jitter data.
     // Range (-0.5, 0.5)
     float4 jitterData; // .xy is current frame
+
+    float3 forwardRS; // view dir (0, 0, -1) in 
+    float pad0;
 };
 CHORD_CHECK_SIZE_GPU_SAFE(PerframeCameraView);
 

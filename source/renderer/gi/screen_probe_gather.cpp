@@ -16,6 +16,7 @@
 #include <shader/gi_spatial_filter_specular.hlsl>
 #include <shader/gi_spatial_specular_remove_fireflare.hlsl>
 #include <shader/gi_rt_ao.hlsl>
+#include <shader/gi_ssao.hlsl>
 
 #include <random>
 
@@ -92,11 +93,14 @@ static AutoCVarRef cVarGIWorldCacheProbeVoxelSize(
 	"GI world probe voxel size."
 );
 
-static uint32 sEnableGIRTAO = 1;
-static AutoCVarRef cVarEnableRTAOGI(
-	"r.gi.rtao",
-	sEnableGIRTAO,
-	"Enable rtao or not."
+static uint32 sAOMethod = 1;
+static AutoCVarRef cVarAOMethodGI(
+	"r.gi.aoMethod",
+	sAOMethod,
+	"AO method when composite to GI."
+	" 0: None."
+	" 1: SSAO."
+	" 2: RTAO."
 );
 
 static float sGIRTAORayLenght = 1.0f;
@@ -111,6 +115,34 @@ static AutoCVarRef cVarRTAOPower(
 	"r.gi.rtao.power",
 	sGIRTAOPower,
 	"RTAO ray power."
+);
+
+static float sGISSAO_ViewRadius = 0.2f;
+static AutoCVarRef cVarGISSAO_ViewRadius(
+	"r.gi.ssao.viewRadius",
+	sGISSAO_ViewRadius,
+	"SSAO view radius."
+);
+
+static float sGISSAO_Falloff = 0.1f;
+static AutoCVarRef cVarGISSAO_Falloff(
+	"r.gi.ssao.falloff",
+	sGISSAO_Falloff,
+	"SSAO falloff."
+);
+
+static uint32 sGISSAO_StepCount = 4;
+static AutoCVarRef cVarGISSAO_StepCount(
+	"r.gi.ssao.stepCount",
+	sGISSAO_StepCount,
+	"SSAO step count."
+);
+
+static uint32 sGISSAO_SliceCount = 2;
+static AutoCVarRef cVarGISSAO_SliceCount(
+	"r.gi.ssao.sliceCount",
+	sGISSAO_SliceCount,
+	"SSAO slice count."
 );
 
 PRIVATE_GLOBAL_SHADER(GIScreenProbeSpawnCS, "resource/shader/gi_screen_probe_spawn.hlsl", "mainCS", EShaderStage::Compute);
@@ -128,7 +160,7 @@ PRIVATE_GLOBAL_SHADER(GISpecularRemoveFireFlareFilterCS, "resource/shader/gi_spa
 PRIVATE_GLOBAL_SHADER(GISpatialUpsampleCS, "resource/shader/gi_upsample.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GISpecularTraceCS, "resource/shader/gi_specular_trace.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIRTAOCS, "resource/shader/gi_rt_ao.hlsl", "mainCS", EShaderStage::Compute);
-
+PRIVATE_GLOBAL_SHADER(GISSAOCS, "resource/shader/gi_ssao.hlsl", "mainCS", EShaderStage::Compute);
 
 void chord::giUpdate(
 	graphics::CommandList& cmd,
@@ -139,8 +171,10 @@ void chord::giUpdate(
 	GBufferTextures& gbuffers,
 	uint32 cameraViewId,
 	graphics::helper::AccelKHRRef tlas,
-	graphics::PoolTextureRef disocclusionMask,
+	const DisocclusionPassResult& disocclusionCtx,
 	ICamera* camera,
+	graphics::PoolTextureRef hzb,
+	const PerframeCameraView& perframe,
 	graphics::PoolTextureRef depth_Half_LastFrame,
 	graphics::PoolTextureRef pixelNormalRS_Half_LastFrame,
 	bool bCameraCut,
@@ -590,7 +624,7 @@ void chord::giUpdate(
 		tracePushConsts.normalRSId = asSRV(queue, gbuffers.pixelRSNormal_Half);
 		tracePushConsts.roughnessId = asSRV(queue, gbuffers.roughness_Half);
 		tracePushConsts.UAV = asUAV(queue, specularTraceRadianceRT);
-		tracePushConsts.disocclusionMask = disocclusionMask != nullptr ? asSRV(queue, disocclusionMask) : kUnvalidIdUint32; //
+		tracePushConsts.disocclusionMask = disocclusionCtx.disocclusionMask != nullptr ? asSRV(queue, disocclusionCtx.disocclusionMask) : kUnvalidIdUint32; //
 
 		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
 		auto computeShader = getContext().getShaderLibrary().getShader<GISpecularTraceCS>();
@@ -620,7 +654,7 @@ void chord::giUpdate(
 	graphics::PoolTextureRef reprojectGIRT = nullptr;
 	graphics::PoolTextureRef reprojectSpecularRT = nullptr;
 
-	if (giCtx.historyDiffuseRT != nullptr && disocclusionMask != nullptr &&
+	if (giCtx.historyDiffuseRT != nullptr && disocclusionCtx.disocclusionMask != nullptr &&
 		depth_Half_LastFrame != nullptr && pixelNormalRS_Half_LastFrame != nullptr)
 	{
 		reprojectGIRT = rtPool.create("GI-Reproject", halfDim.x, halfDim.y,
@@ -644,7 +678,7 @@ void chord::giUpdate(
 		pushConst.motionVectorId = asSRV(queue, gbuffers.motionVector_Half);
 		pushConst.reprojectGIUAV = asUAV(queue, reprojectGIRT);
 		pushConst.depthSRV = asSRV(queue, gbuffers.depth_Half);
-		pushConst.disoccludedMaskSRV = asSRV(queue, disocclusionMask);
+		pushConst.disoccludedMaskSRV = asSRV(queue, disocclusionCtx.disocclusionMask);
 		pushConst.historyGISRV = asSRV(queue, giCtx.historyDiffuseRT);
 		pushConst.historySpecularSRV = asSRV(queue, giCtx.historySpecularRT);
 		pushConst.reprojectSpecularUAV = asUAV(queue, reprojectSpecularRT);
@@ -698,10 +732,52 @@ void chord::giUpdate(
 		timer("GI: Specular Remove Fireflare", queue);
 	}
 
-	PoolTextureRef rtAORT = nullptr;
-	if (sEnableGIRTAO != 0)
+	PoolTextureRef AORT = nullptr;
+	if (sAOMethod == 1)
 	{
-		rtAORT = rtPool.create("GI-RTAO", halfDim.x, halfDim.y, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		AORT = rtPool.create("GI-SSAO-BentNormal", halfDim.x, halfDim.y, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		{
+			GISSAOPushConsts pushConsts{};
+			pushConsts.workDim = halfDim;
+			pushConsts.cameraViewId = cameraViewId;
+			pushConsts.hzbSRV = asSRV(queue, hzb);
+
+			pushConsts.depthSRV = asSRV(queue, gbuffers.depth_Half);
+			pushConsts.normalSRV = asSRV(queue, gbuffers.vertexRSNormal_Half);
+
+			const float viewRadius = sGISSAO_ViewRadius; // 0.2f
+			const float falloff = sGISSAO_Falloff; // 0.1f
+
+			pushConsts.maxPixelScreenRadius = 128.0f; // TOO large radius will cause texture cache miss.
+			pushConsts.stepCount = sGISSAO_StepCount;
+			pushConsts.sliceCount = sGISSAO_SliceCount;
+
+			float falloffRange = viewRadius * falloff;
+			float falloffFrom = viewRadius * (1.0f - falloff);
+
+			pushConsts.uvRadius = viewRadius * 0.5f * math::max(perframe.viewToClip[0][0], perframe.viewToClip[1][1]);
+			pushConsts.falloff_mul = -1.0f / falloffRange;
+			pushConsts.falloff_add = falloffFrom / falloffRange + 1.0f;
+
+			pushConsts.UAV = asUAV(queue, AORT);
+
+			const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
+
+			auto computeShader = getContext().getShaderLibrary().getShader<GISSAOCS>();
+			addComputePass2(queue,
+				"GI: SSAO",
+				getContext().computePipe(computeShader, "GI: SSAO"),
+				pushConsts,
+				{ dispatchDim.x, dispatchDim.y, 1 });
+		}
+		if (timer)
+		{
+			timer("GI: SSAO", queue);
+		}
+	}
+	else if (sAOMethod == 2)
+	{
+		AORT = rtPool.create("GI-RTAO", halfDim.x, halfDim.y, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 		{
 			GIRTAOPushConsts pushConst{};
 			pushConst.gbufferDim = halfDim;
@@ -712,7 +788,7 @@ void chord::giUpdate(
 
 			pushConst.rayLength = sGIRTAORayLenght;
 			pushConst.power = sGIRTAOPower;
-			pushConst.rtAO_UAV = asUAV(queue, rtAORT);
+			pushConst.rtAO_UAV = asUAV(queue, AORT);
 
 			const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8, 4));
 
@@ -769,8 +845,8 @@ void chord::giUpdate(
 		pushConsts.specularStatUAV = probeReprojectStatSpecularRT != nullptr ? asUAV(queue, probeReprojectStatSpecularRT) : kUnvalidIdUint32; // 
 		pushConsts.bJustUseWorldCache = (sGIInterpretationJustUseWorldCache != 0);
 		pushConsts.bDisableWorldCache = (sGIInterpretationDisableWorldCache != 0);
-		pushConsts.rtAOSRV = rtAORT != nullptr ? asSRV(queue, rtAORT) : getContext().getWhiteTextureSRV();
-
+		pushConsts.rtAOSRV = AORT != nullptr ? asSRV(queue, AORT) : getContext().getWhiteTextureSRV();
+		pushConsts.AOMethod = sAOMethod;
 		const uint2 dispatchDim = divideRoundingUp(halfDim, uint2(8));
 
 		auto computeShader = getContext().getShaderLibrary().getShader<GIScreenProbeInterpolateCS>();
@@ -945,8 +1021,8 @@ void chord::giUpdate(
 	{
 		debugBlitColor(queue, specularTraceRadiancePostFilterRT, gbuffers.color);
 	}
-	else if (sEnableGIDebugOutput == 11 && rtAORT != nullptr)
+	else if (sEnableGIDebugOutput == 11 && AORT != nullptr)
 	{
-		debugBlitColor(queue, rtAORT, gbuffers.color);
+		debugBlitColor(queue, AORT, gbuffers.color);
 	}
 }

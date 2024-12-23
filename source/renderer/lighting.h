@@ -36,7 +36,11 @@ namespace chord
 		const AtmosphereLut& skyLuts,
 		const VisibilityTileMarkerContext& marker);
 
-	extern graphics::PoolTextureRef computeDisocclusionMask(
+	struct DisocclusionPassResult
+	{
+		graphics::PoolTextureRef disocclusionMask;
+	};
+	extern DisocclusionPassResult computeDisocclusionMask(
 		graphics::GraphicsQueue& queue,
 		GBufferTextures& gbuffers,
 		uint32 cameraViewId,
@@ -72,8 +76,10 @@ namespace chord
 		GBufferTextures& gbuffers,
 		uint32 cameraViewId,
 		graphics::helper::AccelKHRRef tlas,
-		graphics::PoolTextureRef disocclusionMask,
+		const DisocclusionPassResult& disocclusionCtx,
 		ICamera* camera,
+		graphics::PoolTextureRef hzb,
+		const PerframeCameraView& perframe,
 		graphics::PoolTextureRef depth_Half_LastFrame,
 		graphics::PoolTextureRef pixelNormalRS_Half_LastFrame, 
 		bool bCameraCut,
