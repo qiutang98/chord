@@ -1,6 +1,9 @@
 # Chord - 现代vulkan渲染引擎
+![image](gallery/sponza.png)
+![image](gallery/Bistro_3.png)
 ![image](gallery/Bistro_Indoor.png) 
 ![image](gallery/Bistro.png)
+![image](gallery/Bistro_4.png)
 
 一个现代风格的Vulkan渲染器，里面试验了许多现代图形渲染技术（包含UE5中流行的Nanite与Lumen）。
 
