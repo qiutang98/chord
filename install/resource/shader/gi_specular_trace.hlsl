@@ -43,6 +43,7 @@ CHORD_PUSHCONST(GISpecularTracePushConsts, pushConsts);
 
 #ifndef __cplusplus // HLSL only area.
 
+#define RAY_TRACE_FULL_GGX 1
 
 #include "base.hlsli"  
 #include "bindless.hlsli"

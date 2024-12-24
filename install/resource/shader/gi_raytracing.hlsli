@@ -27,6 +27,10 @@ pushConsts
 };
 ***********************************/
 
+#ifndef RAY_TRACE_FULL_GGX
+#define RAY_TRACE_FULL_GGX 0
+#endif
+
 float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 rayDirection, float deviceZ, int sampleWeightMode)
 {
     const GPUBasicData scene = perView.basicData;
@@ -64,11 +68,6 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
 
             PBRMaterial pbrMaterial;
             pbrMaterial.initFromRayHitMaterialInfo(materialInfo);
-
-            //
-            float3 V = -normalize(positionRS);
-            float NoV = max(0.0, dot(materialInfo.normalRS, V));
-            float2 brdf = sampleBRDFLut(perView, NoV, materialInfo.roughness); 
 
             //
             float3 approxDiffuseFullRough = materialInfo.diffuseColor + pbrMaterial.specularColor * 0.45;
@@ -119,14 +118,14 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
                     }
 
                     float3 sunDirectRadiance = 0.0;
-                #if 1
+                #if RAY_TRACE_FULL_GGX
                     // GGX specular and lambert diffuse.
                     ShadingResult sunShadingResult = evaluateDirectionalDirectLight_LightingType_GLTF_MetallicRoughnessPBR(
                         scene.sunInfo.direction, sunRadiance, pbrMaterial, materialInfo.normalRS, normalize(positionRS));
                     sunDirectRadiance = sunShadingResult.color();
                 #else
                     // Full lambert diffuse. 
-                    sunDirectRadiance = NoL * Fd_LambertDiffuse(approxDiffuseFullRough); 
+                    sunDirectRadiance = sunRadiance * NoL * Fd_LambertDiffuse(approxDiffuseFullRough); 
                 #endif 
 
                     // Do lambert diffuse lighting here.
@@ -141,9 +140,6 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
             if (pushConsts.bHistoryValid && !perView.bCameraCut && pushConsts.bSampleWorldCache)
             {
                 float3 irradiance = 0.0; 
-                float3 specularIrradiance = 0.0;
-
-                float3 reflectDir = reflect(-V, materialInfo.normalRS);
                 for (uint cascadeId = 0; cascadeId < pushConsts.clipmapCount; cascadeId ++) 
                 { 
                     const GIWorldProbeVolumeConfig config = BATL(GIWorldProbeVolumeConfig, pushConsts.clipmapConfigBufferId, cascadeId);
@@ -152,10 +148,6 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
                         float minSampleCount;
                         if (config.evaluateSH(perView, positionRS, materialInfo.normalRS, irradiance, minSampleCount, sampleWeightMode))
                         {
-                            config.evaluateSH(perView, positionRS, reflectDir, specularIrradiance, minSampleCount, sampleWeightMode);
-
-                            // Check volume sample count, which used for ray trace. 
-                            sampleIndirectVolumeSampleCount = min(sampleIndirectVolumeSampleCount, minSampleCount);
                             break; 
                         }
                         else
@@ -164,14 +156,12 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
                         } 
                     }  
                 }   
-                //
-                radiance += irradiance * materialInfo.diffuseColor;
-                radiance += specularIrradiance * (pbrMaterial.specularColor * brdf.x + brdf.y);  
+
+                radiance += irradiance * Fd_LambertDiffuse(approxDiffuseFullRough); 
             }
 
-            // Sky light leaking for diffuse, don't add for reflection.
-            radiance +=  pushConsts.skyLightLeaking * skyRadiance * materialInfo.diffuseColor;
-            radiance +=  pushConsts.skyLightLeaking * skyRadiance * (pbrMaterial.specularColor * brdf.x + brdf.y);  
+            // Sky light leaking for diffuse.
+            radiance +=  pushConsts.skyLightLeaking * skyRadiance * approxDiffuseFullRough;
 
             // Emissive. 
             radiance += materialInfo.emissiveColor;

@@ -145,6 +145,20 @@ static AutoCVarRef cVarGISSAO_SliceCount(
 	"SSAO slice count."
 );
 
+static float sGICompositeDiffuseScale = 2.0f;
+static AutoCVarRef cVarGICompositeDiffuseScale(
+	"r.gi.composite.diffuseScale",
+	sGICompositeDiffuseScale,
+	"GI composite diffuse scale."
+);
+
+static float sGICompositeSpecularScale = 2.0f;
+static AutoCVarRef cVarGICompositeSpecularScale(
+	"r.gi.composite.specularScale",
+	sGICompositeSpecularScale,
+	"GI composite specular scale."
+);
+
 PRIVATE_GLOBAL_SHADER(GIScreenProbeSpawnCS, "resource/shader/gi_screen_probe_spawn.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIScreenProbeInterpolateCS, "resource/shader/gi_screen_probe_interpolate.hlsl", "mainCS", EShaderStage::Compute);
 PRIVATE_GLOBAL_SHADER(GIScreenProbeTraceCS, "resource/shader/gi_screen_probe_trace.hlsl", "mainCS", EShaderStage::Compute);
@@ -960,6 +974,9 @@ void chord::giUpdate(
 		pushConsts.UAV = asUAV(queue, gbuffers.color);
 		pushConsts.baseColorId = asSRV(queue, gbuffers.baseColor);
 		pushConsts.aoRoughnessMetallicId = asSRV(queue, gbuffers.aoRoughnessMetallic);
+
+		pushConsts.diffuseGIScale = sGICompositeDiffuseScale;
+		pushConsts.specularGIScale = sGICompositeSpecularScale;
 
 		const uint2 dispatchDim = divideRoundingUp(gbuffers.dimension, uint2(8));
 		auto computeShader = getContext().getShaderLibrary().getShader<GISpatialUpsampleCS>();

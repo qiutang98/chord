@@ -19,6 +19,8 @@ struct GIUpsamplePushConsts
 
     uint baseColorId;
     uint aoRoughnessMetallicId;
+    float diffuseGIScale;
+    float specularGIScale;
 };
 CHORD_PUSHCONST(GIUpsamplePushConsts, pushConsts);
 
@@ -143,8 +145,8 @@ void mainCS(
 
 
     //
-    float3 diffuseColor = getDiffuseColor(baseColor, metallic);
-    float3 specularColor = getSpecularColor(baseColor, metallic);
+    float3 diffuseColor  = pushConsts.diffuseGIScale * getDiffuseColor(baseColor, metallic);
+    float3 specularColor = pushConsts.specularGIScale * getSpecularColor(baseColor, metallic);
 
     // Apply diffuse gi. 
     radiance = srcColor + radiance * diffuseColor;
@@ -160,7 +162,7 @@ void mainCS(
     } 
 
     storeRWTexture2D_float3(pushConsts.UAV, tid, radiance); 
-}
+} 
 
 
 #endif 
