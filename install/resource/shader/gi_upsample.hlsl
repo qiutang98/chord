@@ -144,7 +144,7 @@ void mainCS(
 
 
 
-    //
+    // TODO: Use exposure fusion tech to make gi scale factor suitable. 
     float3 diffuseColor  = pushConsts.diffuseGIScale * getDiffuseColor(baseColor, metallic);
     float3 specularColor = pushConsts.specularGIScale * getSpecularColor(baseColor, metallic);
 
