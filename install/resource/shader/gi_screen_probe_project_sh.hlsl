@@ -99,7 +99,7 @@ void mainCS(
     float4 radianceHitT = loadTexture2D_float4(pushConsts.radianceSRV, tid);
 
     // 
-    float3 radiance  = radianceHitT.xyz;
+    float3 radiance  = radianceHitT.xyz * max(0.0, dot(probeNormalRS, rayDirection));
 
     // Dark area fallback.
     {

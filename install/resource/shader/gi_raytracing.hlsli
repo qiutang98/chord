@@ -157,7 +157,8 @@ float4 rayTrace(in const PerframeCameraView perView, float3 rayOrigin, float3 ra
                     }  
                 }   
 
-                radiance += irradiance * Fd_LambertDiffuse(approxDiffuseFullRough); 
+                // When project to sh already mul NoL, so don't need div pi here.
+                radiance += irradiance * approxDiffuseFullRough; // Fd_LambertDiffuse(approxDiffuseFullRough); 
             }
 
             // Sky light leaking for diffuse.
