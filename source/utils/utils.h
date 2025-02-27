@@ -44,6 +44,8 @@
 	#define CHORD_UNLIKELY
 #endif // ENABLE_LIKELY
 
+#define CHORD_DEBUG_BREAK __debugbreak();
+#define CHORD_CRASH CHORD_DEBUG_BREAK ::abort();
 
 #ifdef ENABLE_LOG
 	#define chord_macro_sup_enableLogOnly(x) x
@@ -65,7 +67,7 @@
 #endif
 
 #define chord_macro_sup_ensureMsgfContent(x, p, ...) \
-do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' failed with message '{3}' in function '{1}' at line #{0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); chord::debugBreak(); } } while(0)
+do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' failed with message '{3}' in function '{1}' at line #{0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); CHORD_DEBUG_BREAK } } while(0)
 
 #define chord_macro_sup_checkEntryContent(x) x("Check entry in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__)
 #define chord_macro_sup_unimplementedContent(x) x("Unimplemented code entry in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__)
@@ -154,6 +156,9 @@ namespace chord
 
 	// Asset version control all asset.
 	extern const uint32 kAssetVersion;
+
+	// Now event handle just a pointer.
+	using EventHandle = void*;
 
 	class ApplicationTickData
 	{
@@ -425,14 +430,6 @@ namespace chord
 		uint32 height;
 	};
 	extern void setConsoleFont(const std::vector<ConsoleFontConfig>& fontTypes);
-
-	extern void debugBreak();
-
-	static inline void applicationCrash()
-	{
-		debugBreak();
-		::abort();
-	}
 
 	static inline bool same(const char* a, const char* b)
 	{

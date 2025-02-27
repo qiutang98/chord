@@ -22,8 +22,10 @@ source_group("cmake" FILES "CMakeLists.txt" ${editorIconPath})
 
 # Visual studio incremental build.
 if(MSVC)
-    target_compile_options(flower PUBLIC "/ZI")
-    target_link_options(flower PUBLIC "/INCREMENTAL")   
+    target_compile_options(flower PRIVATE "/ZI")
+    target_link_options(flower PRIVATE "/INCREMENTAL")   
+else()
+    message(FATAL_ERROR "Current only test on MSVC.")
 endif()
 
 set_target_properties(flower PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/install") 

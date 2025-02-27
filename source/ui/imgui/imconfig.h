@@ -10,9 +10,6 @@
 // Romote assert to engine assert.
 #define IM_ASSERT(_EXPR)  check(_EXPR)
 
-// Remote debug break to engine debug break.
-#define IM_DEBUG_BREAK chord::debugBreak
-
 // Use math::vec2 as ImVec2 pass type.
 #define IM_VEC2_CLASS_EXTRA  \
     constexpr ImVec2(const chord::math::vec2& f) : x(f.x), y(f.y) {} \

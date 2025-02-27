@@ -1,9 +1,3 @@
-#define VOLK_IMPLEMENTATION
-#include <volk/volk.h>
-
-#define VMA_IMPLEMENTATION
-#include <vma/vk_mem_alloc.h>
-
 #include <graphics/graphics.h>
 #include <utils/cvar.h>
 #include <application/application.h>

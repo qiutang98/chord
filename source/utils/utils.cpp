@@ -71,13 +71,6 @@ void chord::setConsoleFont(const std::vector<ConsoleFontConfig>& fontTypes)
 #endif 
 }
 
-void chord::debugBreak()
-{
-#if CHORD_DEBUG
-__debugbreak();
-#endif 
-}
-
 void chord::namedThread(std::thread& t, const std::wstring& name)
 {
 #if _WIN32

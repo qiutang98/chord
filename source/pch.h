@@ -50,7 +50,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/euler_angles.hpp>
@@ -120,3 +119,14 @@ namespace glm
 
 #include <utfcpp/utf8/cpp17.h>
 #include <utfcpp/utf8.h>
+
+#include <stb/stb_image.h>
+#include <stb/stb_image_write.h>
+#include <stb/stb_image_resize.h>
+#include <stb/stb_dxt.h>
+
+#define TINYGLTF_NO_INCLUDE_STB_IMAGE_WRITE
+#define TINYGLTF_USE_CPP14
+#define TINYGLTF_NO_INCLUDE_JSON 
+#define TINYGLTF_NO_INCLUDE_STB_IMAGE
+#include <tinygltf/tiny_gltf.h>

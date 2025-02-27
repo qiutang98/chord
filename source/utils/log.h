@@ -26,7 +26,6 @@ namespace chord
 
 	// Custom log cache sink.
 	template<typename Mutex> class LogCacheSink;
-	class EventHandle;
 
 	class LoggerSystem : NonCopyable
 	{
@@ -68,7 +67,7 @@ namespace chord
 	#define LOG_INFO(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->info(__VA_ARGS__); })
 	#define LOG_WARN(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->warn(__VA_ARGS__); })
 	#define LOG_ERROR(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->error(__VA_ARGS__); })
-	#define LOG_FATAL(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->critical(__VA_ARGS__); chord::applicationCrash(); })
+	#define LOG_FATAL(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->critical(__VA_ARGS__); CHORD_CRASH })
 }
 
 #define check(x) chord_macro_sup_checkPrintContent(x, LOG_FATAL)

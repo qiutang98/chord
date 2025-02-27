@@ -69,17 +69,18 @@ source_group(TREE "${PROJECT_SOURCE_DIR}/install/resource/shader" PREFIX "shader
 
 if(MSVC)
     ## Visual studio incremental build.
-    target_compile_options(chord PUBLIC "/ZI")
-    target_link_options(chord PUBLIC "/INCREMENTAL")   
-    target_compile_options(chord PRIVATE /bigobj)
+    target_compile_options(chord PRIVATE "/ZI")
+    target_link_options(chord PRIVATE "/INCREMENTAL")   
 
     ## Only include hlsl as text file.
     set_source_files_properties(${shaderHeaders} PROPERTIES HEADER_FILE_ONLY TRUE)
 
     add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
     add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+
+    target_compile_options(chord PRIVATE /bigobj)
 else()
-    target_compile_options(chord PRIVATE -Wa,-mbig-obj)
+    message(FATAL_ERROR "Current only test on MSVC.")
 endif()
 
 ## Our applications generate config.

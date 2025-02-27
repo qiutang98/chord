@@ -79,94 +79,92 @@ namespace chord
 		DelegateType m_lambda = nullptr;
 	};
 
-	class EventHandle
-	{
-	private:
-		template<typename, typename, typename...> friend class MultiDelegates;
-
-		static const uint32 kUnvalidId = ~0;
-		uint32 m_id = kUnvalidId;
-
-	public:
-		EventHandle() = default;
-		bool isValid() const { return m_id != kUnvalidId; }
-
-		bool operator==(const EventHandle&) const = default;
-
-	private:
-		static EventHandle requireUnique();
-		void reset() { m_id = kUnvalidId; }
-	};
-
+	// 
 	template<typename Friend, typename RetType, typename... Args>
 	class MultiDelegates : NonCopyable
 	{
 		friend Friend;
 	public:
+		//
 		using EventType = std::function<RetType(Args...)>;
-
-		struct Event
-		{
-			EventType   lambda = nullptr;
-			EventHandle handle = { };
-		};
 
 		CHORD_NODISCARD EventHandle add(EventType&& lambda)
 		{
-			std::unique_lock<std::shared_mutex> lock(m_lock);
+			// Input lambda can't be nullptr.
+			check(lambda != nullptr);
 
-			// Loop to found first free element and register.
-			for (auto index = 0; index < m_events.size(); index++)
-			{
-				if (!m_events[index].handle.isValid())
-				{
-					// Create a new event.
-					m_events[index] = createEvent(std::forward<EventType>(lambda));
-					return m_events[index].handle;
-				}
-			}
+			//
+			std::unique_lock lock(m_mutex);
 
 			// Add a new element.
-			m_events.push_back(createEvent(std::forward<EventType>(lambda)));
-			return m_events.back().handle;
+			m_events.push_back(std::make_unique<EventType>(lambda));
+			m_validHandleCount++;
+
+			// Return pointer as result.
+			return reinterpret_cast<EventHandle>(m_events.back().get());
 		}
 
 		// Remove event.
 		CHORD_NODISCARD bool remove(EventHandle& handle)
 		{
-			std::unique_lock<std::shared_mutex> lock(m_lock);
-
-			if (handle.isValid())
+			if (handle == nullptr)
 			{
-				for (auto index = 0; index < m_events.size(); index++)
-				{
-					if (m_events[index].handle == handle)
-					{
-						std::swap(m_events[index], m_events[m_events.size() - 1]);
-						m_events.pop_back();
+				return false;
+			}
 
-						handle.reset();
-						return true;
-					}
+			std::unique_lock lock(m_mutex);
+
+			bool bSuccess = false;
+			const EventType* ptr = reinterpret_cast<EventType*>(handle);
+			for (auto index = 0; index < m_events.size(); index++)
+			{
+				if (ptr == m_events[index].get())
+				{
+					// Reset handle.
+					handle = nullptr;
+					m_events[index] = nullptr;
+
+					// Update counter.
+					m_validHandleCount--;
+					m_invalidHandleCount++;
+
+					//
+					bSuccess = true;
+					break;
 				}
 			}
 
-			return false;
+			constexpr size_t kShrinkPercent = /* 1 / */ 4;
+			if (m_invalidHandleCount > (m_events.size() / kShrinkPercent))
+			{
+				m_events.erase(std::remove_if(m_events.begin(), m_events.end(), [&](const auto& x)
+				{
+					return x == nullptr;
+				}), m_events.end());
+
+				m_invalidHandleCount = 0;
+				check(m_validHandleCount == m_events.size());
+			}
+
+			return bSuccess;
 		}
 
 		// Check event handle is bound or not.
 		CHORD_NODISCARD bool isBound(const EventHandle& handle) const
 		{
-			std::shared_lock<std::shared_mutex> lock(m_lock);
-
-			if (handle.isValid())
+			if (handle == nullptr)
 			{
-				for (auto& event : m_events)
+				return false;
+			}
+
+			std::shared_lock lock(m_mutex);
+
+			const EventType* ptr = reinterpret_cast<EventType*>(handle);
+			for (const auto& event : m_events)
+			{
+				if (ptr == event.get())
 				{
-					if (event.handle == handle)
-					{
-						return true;
-					}
+					return true;
 				}
 			}
 			return false;
@@ -174,24 +172,28 @@ namespace chord
 
 		CHORD_NODISCARD const bool isEmpty() const
 		{
-			std::shared_lock<std::shared_mutex> lock(m_lock);
-			return m_events.empty();
+			return m_validHandleCount == 0;
 		}
 
 	protected:
 		template<typename OpType = size_t>
 		void broadcast(Args...args, std::function<void(const OpType&)>&& opResult = nullptr)
 		{
-			std::shared_lock<std::shared_mutex> lock(m_lock);
-			for (auto& event : m_events)
+			std::shared_lock<std::shared_mutex> lock(m_mutex);
+			for (const auto& event : m_events)
 			{
+				if (event == nullptr)
+				{
+					continue;
+				}
+
 				if constexpr (std::is_void_v<RetType>)
 				{
-					event.lambda(std::forward<Args>(args)...);
+					(*event)(std::forward<Args>(args)...);
 				}
 				else
 				{
-					RetType result = event.lambda(std::forward<Args>(args)...);
+					RetType result = (*event)(std::forward<Args>(args)...);
 					if (opResult != nullptr)
 					{
 						opResult(result);
@@ -201,17 +203,11 @@ namespace chord
 		}
 
 	protected:
-		Event createEvent(EventType&& lambda) const
-		{
-			Event event { };
-			event.handle = EventHandle::requireUnique();
-			event.lambda = lambda;
-			return event;
-		}
+		mutable std::shared_mutex m_mutex;
+		std::vector<std::unique_ptr<EventType>> m_events = { };
 
-	protected:
-		mutable std::shared_mutex m_lock;
-		std::vector<Event>  m_events = { };
+		uint32 m_invalidHandleCount = 0;
+		std::atomic<uint32> m_validHandleCount = 0;
 	};
 
 	template<typename Friend, typename...Args>

@@ -6,6 +6,7 @@
 #include <utils/cityhash.h>
 
 #include <shader/instance_culling.hlsl>
+#include <asset/mikktspace.h>
 
 using namespace chord;
 using namespace chord::nanite;

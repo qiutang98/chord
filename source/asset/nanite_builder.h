@@ -97,3 +97,4 @@ namespace chord::nanite
 		std::vector<Vertex> m_vertices;
 	};
 }
+
