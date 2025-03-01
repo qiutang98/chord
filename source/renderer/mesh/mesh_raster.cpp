@@ -486,12 +486,12 @@ CascadeShadowContext chord::renderShadow(
 
 
             static const auto depthStencilClear = VkClearDepthStencilValue{ 0.0f, 0 };
-            queue.clearDepthStencil(resultCtx.depths[cascadeId], &depthStencilClear, VK_IMAGE_ASPECT_DEPTH_BIT);
+            queue.clearDepthStencil(resultCtx.depths[cascadeId], &depthStencilClear);
 
             RenderTargets RTs{ };
             RTs.depthStencil = DepthStencilRT(
                 resultCtx.depths[cascadeId],
-                EDepthStencilOp::DepthWrite_StencilNop,
+                EDepthStencilOp::DepthWrite,
                 ERenderTargetLoadStoreOp::Load_Store);
             renderMeshDepth(
                 queue, 

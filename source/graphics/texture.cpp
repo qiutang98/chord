@@ -153,17 +153,6 @@ namespace chord::graphics
 		VkDependencyFlags dependencyFlags{ };
 		auto range = inRange;
 
-		// 
-		if (hasFlag(range.aspectMask, VK_IMAGE_ASPECT_DEPTH_BIT))
-		{
-			range.aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
-		}
-
-		if (hasFlag(range.aspectMask, VK_IMAGE_ASPECT_STENCIL_BIT))
-		{
-			range.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-		}
-
 		// Generic pipeline state, so don't call this in render pipe, just for queue transfer purpose.
 		VkPipelineStageFlags srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 		VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;

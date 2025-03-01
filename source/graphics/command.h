@@ -153,10 +153,7 @@ namespace chord::graphics
 		explicit GraphicsQueue(const std::string& name, const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
 		virtual ~GraphicsQueue() { }
 		
-		void clearDepthStencil(
-			PoolTextureRef image,
-			const VkClearDepthStencilValue* clear, 
-			VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+		void clearDepthStencil(PoolTextureRef image, const VkClearDepthStencilValue* clear);
 
 		void transitionPresent(PoolTextureRef image);
 

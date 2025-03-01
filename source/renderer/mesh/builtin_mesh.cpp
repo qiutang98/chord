@@ -48,7 +48,7 @@ void chord::debugDrawBuiltinMesh(
 		RTs.RTs[0] = RenderTargetRT(outImage, ERenderTargetLoadStoreOp::Load_Store);
 		RTs.depthStencil = DepthStencilRT(
 			depthImage,
-			EDepthStencilOp::DepthWrite_StencilNop,
+			EDepthStencilOp::DepthWrite_StnecilRead,
 			ERenderTargetLoadStoreOp::Load_Nope);
 	}
 

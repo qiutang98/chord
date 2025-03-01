@@ -164,10 +164,10 @@ namespace chord
 		pushConst.cameraViewId  = cameraViewId;
 		pushConst.sceneColorId  = asUAV(queue, gbuffers.color);
 
-		pushConst.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+		pushConst.linearSampler       = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
 		pushConst.irradianceTextureId = asSRV(queue, skyLuts.irradianceTexture);
-		pushConst.transmittanceId = asSRV(queue, skyLuts.transmittance);
-		pushConst.scatteringId = asSRV3DTexture(queue, skyLuts.scatteringTexture);
+		pushConst.transmittanceId     = asSRV(queue, skyLuts.transmittance);
+		pushConst.scatteringId        = asSRV3DTexture(queue, skyLuts.scatteringTexture);
 		if (skyLuts.optionalSingleMieScatteringTexture != nullptr)
 		{
 			pushConst.singleMieScatteringId = asSRV3DTexture(queue, skyLuts.optionalSingleMieScatteringTexture);

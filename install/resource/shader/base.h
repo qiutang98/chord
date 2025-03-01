@@ -246,28 +246,8 @@ struct SkyLightInfo
 };
 CHORD_CHECK_SIZE_GPU_SAFE(SkyLightInfo);
 
-struct GPUBlueNoise
-{
-    uint sobol;
-    uint rankingTile;
-    uint scramblingTile;
-    uint pad0;
-};
-
 struct GPUBlueNoiseContext
 {
-    GPUBlueNoise spp_1;
-    GPUBlueNoise spp_2;
-    GPUBlueNoise spp_4;
-    GPUBlueNoise spp_8;
-    GPUBlueNoise spp_16;
-#ifdef FULL_BLUE_NOISE_SPP
-    GPUBlueNoise spp_32;
-    GPUBlueNoise spp_64;
-    GPUBlueNoise spp_128;
-    GPUBlueNoise spp_256;
-#endif
-
     uint STBN_scalar;
     uint STBN_vec2;
     uint STBN_vec3;

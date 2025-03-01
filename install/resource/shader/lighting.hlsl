@@ -40,11 +40,7 @@ CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 #include "material.hlsli"
 #include "lighting.hlsli"
 
-#ifdef CHORD_DEBUG
-    #define DEBUG_CHECK_2x2_TILE 1
-#else 
-    #define DEBUG_CHECK_2x2_TILE 0
-#endif 
+#define DEBUG_CHECK_2x2_TILE 0
 
 #ifndef DRAW_SKY_BATCH_SIZE
     #define DRAW_SKY_BATCH_SIZE 1

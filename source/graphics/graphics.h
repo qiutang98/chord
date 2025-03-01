@@ -8,7 +8,7 @@
 #include <graphics/rendertargetpool.h>
 #include <graphics/uploader.h>
 #include <graphics/descriptor.h>
-#include <graphics/blue_noise/blue_noise.h>
+#include <graphics/blue_noise.h>
 
 namespace chord::graphics
 {

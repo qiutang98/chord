@@ -15,9 +15,9 @@ namespace chord
 
 namespace chord::graphics
 {
-	constexpr uint32 kMaxRenderTargets = 8;
+	constexpr uint32 kMaxRenderTargets =  8U;
 
-	enum class ERenderTargetLoadStoreOp
+	enum class ERenderTargetLoadStoreOp : uint8
 	{
 		Clear_Store,
 		Load_Store,
@@ -28,30 +28,45 @@ namespace chord::graphics
 		Nope_Nope,
 	};
 
-	inline VkAttachmentLoadOp getAttachmentLoadOp(ERenderTargetLoadStoreOp op)
+	static inline VkAttachmentLoadOp getAttachmentLoadOp(ERenderTargetLoadStoreOp op)
 	{
-		if (op == ERenderTargetLoadStoreOp::Clear_Store) return VK_ATTACHMENT_LOAD_OP_CLEAR;
-		if (op == ERenderTargetLoadStoreOp::Clear_Nope) return VK_ATTACHMENT_LOAD_OP_CLEAR;
+		if (op == ERenderTargetLoadStoreOp::Clear_Store ||
+			op == ERenderTargetLoadStoreOp::Clear_Nope)
+		{
+			return VK_ATTACHMENT_LOAD_OP_CLEAR;
+		}
 
-		if (op == ERenderTargetLoadStoreOp::Load_Store) return VK_ATTACHMENT_LOAD_OP_LOAD;
-		if (op == ERenderTargetLoadStoreOp::Load_Nope) return VK_ATTACHMENT_LOAD_OP_LOAD;
+		if (op == ERenderTargetLoadStoreOp::Load_Store ||
+			op == ERenderTargetLoadStoreOp::Load_Nope)
+		{
+			return VK_ATTACHMENT_LOAD_OP_LOAD;
+		}
 
-		if (op == ERenderTargetLoadStoreOp::Nope_Store) return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		if (op == ERenderTargetLoadStoreOp::Nope_Nope) return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		if (op == ERenderTargetLoadStoreOp::Nope_Store ||
+			op == ERenderTargetLoadStoreOp::Nope_Nope)
+		{
+			return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		}
 
 		checkEntry();
 		return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	}
 
-	inline VkAttachmentStoreOp getAttachmentStoreOp(ERenderTargetLoadStoreOp op)
+	static inline VkAttachmentStoreOp getAttachmentStoreOp(ERenderTargetLoadStoreOp op)
 	{
-		if (op == ERenderTargetLoadStoreOp::Clear_Store) return VK_ATTACHMENT_STORE_OP_STORE;
-		if (op == ERenderTargetLoadStoreOp::Load_Store) return VK_ATTACHMENT_STORE_OP_STORE;
-		if (op == ERenderTargetLoadStoreOp::Nope_Store) return VK_ATTACHMENT_STORE_OP_STORE;
+		if (op == ERenderTargetLoadStoreOp::Clear_Store ||
+			op == ERenderTargetLoadStoreOp::Load_Store  ||
+			op == ERenderTargetLoadStoreOp::Nope_Store)
+		{
+			return VK_ATTACHMENT_STORE_OP_STORE;
+		}
 
-		if (op == ERenderTargetLoadStoreOp::Clear_Nope) return VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		if (op == ERenderTargetLoadStoreOp::Load_Nope) return VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		if (op == ERenderTargetLoadStoreOp::Nope_Nope) return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		if (op == ERenderTargetLoadStoreOp::Clear_Nope ||
+			op == ERenderTargetLoadStoreOp::Load_Nope ||
+			op == ERenderTargetLoadStoreOp::Nope_Nope)
+		{
+			return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		}
 
 		checkEntry();
 		return VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -61,65 +76,47 @@ namespace chord::graphics
 	{
 		DepthWrite   = 0x01 << 0,
 		DepthRead    = 0x01 << 1,
-		DepthNop     = 0x01 << 2,
-		StencilWrite = 0x01 << 3,
-		StnecilRead  = 0x01 << 4,
-		StencilNop   = 0x01 << 5,
+		StencilWrite = 0x01 << 2,
+		StnecilRead  = 0x01 << 3,
 
 		DepthWrite_StencilWrite = DepthWrite | StencilWrite,
 		DepthWrite_StnecilRead  = DepthWrite | StnecilRead,
-		DepthWrite_StencilNop   = DepthWrite | StencilNop,
 
 		DepthRead_StencilWrite  = DepthRead | StencilWrite,
 		DepthRead_StnecilRead   = DepthRead | StnecilRead,
-		DepthRead_StencilNop    = DepthRead | StencilNop,
-
-		DepthNop_StencilWrite   = DepthNop | StencilWrite,
-		DepthNop_StnecilRead    = DepthNop | StnecilRead,
-		DepthNop_StencilNop     = DepthNop | StencilNop,
 	};
 	ENUM_CLASS_FLAG_OPERATORS(EDepthStencilOp);
 
-	inline VkImageLayout getLayoutFromDepthStencilOp(EDepthStencilOp op)
+	static inline VkImageLayout getLayoutFromDepthStencilOp(EDepthStencilOp op, bool bExistStencilComponent)
 	{
-	#if 1
-		if (op == EDepthStencilOp::DepthWrite_StnecilRead)  return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
-		if (op == EDepthStencilOp::DepthWrite_StencilNop)   return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
-		if (op == EDepthStencilOp::DepthWrite_StencilWrite) return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		if (op == EDepthStencilOp::DepthRead_StencilWrite)  return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
-		if (op == EDepthStencilOp::DepthNop_StencilWrite)   return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
-		if (op == EDepthStencilOp::DepthRead_StencilNop)    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-		if (op == EDepthStencilOp::DepthRead_StnecilRead)   return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-		if (op == EDepthStencilOp::DepthNop_StnecilRead)    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-	#else 
-
-		if (op == EDepthStencilOp::DepthWrite_StencilWrite) return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		if (op == EDepthStencilOp::DepthWrite_StnecilRead)  return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
-		if (op == EDepthStencilOp::DepthWrite_StencilNop)   return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		if (op == EDepthStencilOp::DepthRead_StencilWrite)  return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
-		if (op == EDepthStencilOp::DepthRead_StnecilRead)   return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-		if (op == EDepthStencilOp::DepthRead_StencilNop)    return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
-		if (op == EDepthStencilOp::DepthNop_StencilWrite)   return VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
-		if (op == EDepthStencilOp::DepthNop_StnecilRead)    return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
-	#endif
+		if (bExistStencilComponent)
+		{
+			if (op == EDepthStencilOp::DepthWrite_StencilWrite) return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			if (op == EDepthStencilOp::DepthWrite_StnecilRead)  return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
+			if (op == EDepthStencilOp::DepthRead_StencilWrite)  return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+			if (op == EDepthStencilOp::DepthRead_StnecilRead)   return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		}
+		else
+		{
+			if (op == EDepthStencilOp::DepthWrite) return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+			if (op == EDepthStencilOp::DepthRead)  return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
+		}
 
 		checkEntry();
 		return VK_IMAGE_LAYOUT_UNDEFINED;
 	}
 
-	inline VkAccessFlagBits getAccessFlagBits(EDepthStencilOp op)
+	static inline VkAccessFlagBits getAccessFlagBits(EDepthStencilOp op)
 	{
 		switch (op)
 		{
+		case EDepthStencilOp::DepthWrite:
 		case EDepthStencilOp::DepthWrite_StencilWrite:
 		case EDepthStencilOp::DepthWrite_StnecilRead:
-		case EDepthStencilOp::DepthWrite_StencilNop:
 		case EDepthStencilOp::DepthRead_StencilWrite:
-		case EDepthStencilOp::DepthNop_StencilWrite:
 			return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		case EDepthStencilOp::DepthRead:
 		case EDepthStencilOp::DepthRead_StnecilRead:
-		case EDepthStencilOp::DepthRead_StencilNop:
-		case EDepthStencilOp::DepthNop_StnecilRead:
 			return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
 		}
 
@@ -127,9 +124,11 @@ namespace chord::graphics
 		return VK_ACCESS_NONE;
 	}
 
-	inline bool isFormatExistStencilComponent(VkFormat format)
+	static inline bool isFormatExistStencilComponent(VkFormat format)
 	{
-		return format != VK_FORMAT_D16_UNORM && format != VK_FORMAT_D32_SFLOAT;
+		return format == VK_FORMAT_D32_SFLOAT_S8_UINT 
+			|| format == VK_FORMAT_D16_UNORM_S8_UINT
+			|| format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
 	class ImageView;

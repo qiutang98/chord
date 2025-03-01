@@ -129,7 +129,7 @@ namespace chord::graphics
 			auto validationCallback = [&]()
 			{
 				bool bHandle = false;
-				if (strcmp(callbackData->pMessageIdName, "WARNING-DEBUG-PRINTF") == 0)
+				if (strcmp(callbackData->pMessageIdName, "VVL-DEBUG-PRINTF") == 0)
 				{
 					std::string shaderMessage { callbackData->pMessage };
 

@@ -22,7 +22,7 @@ namespace chord
 		}
 
 		graphics::PoolTextureRef RT = nullptr;
-		graphics::EDepthStencilOp depthStencilOp = graphics::EDepthStencilOp::DepthNop_StencilNop;
+		graphics::EDepthStencilOp depthStencilOp = graphics::EDepthStencilOp::DepthRead_StnecilRead;
 		graphics::ERenderTargetLoadStoreOp Op = graphics::ERenderTargetLoadStoreOp::Nope_Nope;
 		VkClearValue clearValue;
 	};
@@ -65,10 +65,10 @@ namespace chord
 			// color.a = src.a;
 			result.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 			result.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-			result.colorBlendOp = VK_BLEND_OP_ADD;
+			result.colorBlendOp        = VK_BLEND_OP_ADD;
 			result.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 			result.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-			result.alphaBlendOp = VK_BLEND_OP_ADD;
+			result.alphaBlendOp        = VK_BLEND_OP_ADD;
 		}
 		break;
 		case chord::EBlendMode::Additive:

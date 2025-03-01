@@ -290,10 +290,16 @@ namespace chord::graphics
 		vkCmdCopyBuffer(cmd->commandBuffer, src->get(), dest->get(), 1, &copy);
 	}
 
-	void GraphicsQueue::clearDepthStencil(PoolTextureRef image, const VkClearDepthStencilValue* clear, VkImageAspectFlags flags)
+	void GraphicsQueue::clearDepthStencil(PoolTextureRef image, const VkClearDepthStencilValue* clear)
 	{
 		auto cmd = m_activeCmdCtx.command;
 		cmd->insertPendingResource(image);
+
+		VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
+		if (isFormatExistStencilComponent(image->get().getFormat()))
+		{
+			flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
+		}
 
 		const auto rangeClearDepth = helper::buildBasicImageSubresource(flags);
 
@@ -339,13 +345,15 @@ namespace chord::graphics
 		auto cmd = m_activeCmdCtx.command;
 		cmd->insertPendingResource(image);
 
+		const bool bExistStencilComponent = isFormatExistStencilComponent(image->get().getFormat());
+
 		GPUTextureSyncBarrierMasks mask;
-		mask.imageLayout = getLayoutFromDepthStencilOp(op);
+		mask.imageLayout = getLayoutFromDepthStencilOp(op, bExistStencilComponent);
 		mask.barrierMasks.accesMask = getAccessFlagBits(op);
 		mask.barrierMasks.queueFamilyIndex = getFamily();
 
 		VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
-		if (isFormatExistStencilComponent(image->get().getFormat()))
+		if (bExistStencilComponent)
 		{
 			flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		}
