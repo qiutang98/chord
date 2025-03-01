@@ -2,7 +2,6 @@
 #pragma once
 
 #include <utils/engine.h>
-#include <astrophysics/base.h>
 #include <shader/atmosphere.hlsli>
 #include <graphics/graphics.h>
 #include <renderer/compute_pass.h>

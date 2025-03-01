@@ -8,7 +8,7 @@
 #include <utils/camera.h>
 #include <graphics/bufferpool.h>
 #include <renderer/postprocessing/postprocessing.h>
-#include <astrophysics/atmosphere.h>
+#include <renderer/atmosphere.h>
 #include <scene/system/shadow.h>
 
 namespace chord

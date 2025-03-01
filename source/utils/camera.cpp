@@ -1,5 +1,5 @@
 #include <utils/camera.h>
-#include <astrophysics/atmosphere.h>
+#include <renderer/atmosphere.h>
 
 namespace chord
 {

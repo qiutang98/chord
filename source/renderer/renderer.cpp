@@ -10,7 +10,7 @@
 #include <application/application.h>
 #include <renderer/gpu_scene.h>
 #include <scene/scene_manager.h>
-#include <renderer/postprocessing/postprocessing.h>
+#include <renderer/atmosphere.h>
 #include <renderer/visibility_tile.h>
 #include <scene/component/sky.h>
 #include <scene/scene.h>

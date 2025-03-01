@@ -17,6 +17,7 @@ namespace chord::graphics
 		VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 		VkCommandPool   commandPool   = VK_NULL_HANDLE;
 
+		//
 		uint64 signalValue = 0;
 
 		template<typename T>
@@ -105,8 +106,6 @@ namespace chord::graphics
 
 	private:
 		CommandBufferRef getOrCreateCommandBuffer();
-
-
 
 	protected:
 		const std::string m_name;

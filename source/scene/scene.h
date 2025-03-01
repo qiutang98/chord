@@ -4,7 +4,7 @@
 #include <scene/scene_node.h>
 #include <shader/base.h>
 
-#include <astrophysics/atmosphere.h>
+#include <renderer/atmosphere.h>
 #include <scene/system/shadow.h>
 #include <scene/system/ddgi.h>
 #include <scene/system/postprocessing.h>

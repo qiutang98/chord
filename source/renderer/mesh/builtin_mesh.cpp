@@ -41,7 +41,7 @@ void chord::debugDrawBuiltinMesh(
 	pushConsts.cameraViewId = cameraViewId;
 
 	auto vertexShader = getContext().getShaderLibrary().getShader<BuiltinMeshDrawVS>();
-	auto pixelShader = getContext().getShaderLibrary().getShader<BuiltinMeshDrawPS>();
+	auto pixelShader  = getContext().getShaderLibrary().getShader<BuiltinMeshDrawPS>();
 
 	RenderTargets RTs{ };
 	{
@@ -64,7 +64,6 @@ void chord::debugDrawBuiltinMesh(
 	addDrawPass(queue, "BuiltinMeshDraw", pipeline, RTs,
 		[&](graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)
 		{
-
 			const auto binding = helper::vertexInputBindingDescription2EXT(sizeof(BuiltinMesh::BuiltinVertex));
 			const VkVertexInputAttributeDescription2EXT attributes[3] =
 			{

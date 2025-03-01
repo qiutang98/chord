@@ -1,4 +1,4 @@
-#include <astrophysics/atmosphere.h>
+#include <renderer/atmosphere.h>
 #include <renderer/renderer.h>
 #include <shader/atmosphere.hlsl>
 #include <renderer/compute_pass.h>
@@ -842,7 +842,6 @@ void AtmosphereManager::computeLuts(graphics::CommandList& cmd, GraphicsQueue& q
     // Already compute, so reset state.
     m_dirty = false;
 }
-
 
 
 

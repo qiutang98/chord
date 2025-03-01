@@ -11,7 +11,7 @@
 #include <scene/component/gltf_material.h>
 #include <scene/component/sky.h>
 #include <shader/base.h>
-#include <astrophysics/atmosphere.h>
+#include <renderer/atmosphere.h>
 
 registerPODClassMember(AtmosphereConfig)
 {
