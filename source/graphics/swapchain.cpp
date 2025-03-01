@@ -44,20 +44,28 @@ namespace chord::graphics
 
 		if (type == 1)
 		{
-			if (isModeSupport(VK_PRESENT_MODE_IMMEDIATE_KHR)) return VK_PRESENT_MODE_IMMEDIATE_KHR;
+			if (isModeSupport(VK_PRESENT_MODE_IMMEDIATE_KHR)) 
+				return VK_PRESENT_MODE_IMMEDIATE_KHR;
 		}
 		else if (type == 2)
 		{
-			if (isModeSupport(VK_PRESENT_MODE_MAILBOX_KHR)) return VK_PRESENT_MODE_MAILBOX_KHR;
+			if (isModeSupport(VK_PRESENT_MODE_MAILBOX_KHR)) 
+				return VK_PRESENT_MODE_MAILBOX_KHR;
 		}
 		else if (type == 4)
 		{
-			if (isModeSupport(VK_PRESENT_MODE_MAILBOX_KHR)) return VK_PRESENT_MODE_MAILBOX_KHR;
+			if (isModeSupport(VK_PRESENT_MODE_MAILBOX_KHR)) 
+				return VK_PRESENT_MODE_MAILBOX_KHR;
 		}
 
-		if (isModeSupport(VK_PRESENT_MODE_MAILBOX_KHR)) return VK_PRESENT_MODE_MAILBOX_KHR;
-		if (isModeSupport(VK_PRESENT_MODE_FIFO_RELAXED_KHR)) return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-		if (isModeSupport(VK_PRESENT_MODE_IMMEDIATE_KHR)) return VK_PRESENT_MODE_IMMEDIATE_KHR;
+		if (isModeSupport(VK_PRESENT_MODE_MAILBOX_KHR)) 
+			return VK_PRESENT_MODE_MAILBOX_KHR;
+
+		if (isModeSupport(VK_PRESENT_MODE_FIFO_RELAXED_KHR)) 
+			return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+
+		if (isModeSupport(VK_PRESENT_MODE_IMMEDIATE_KHR)) 
+			return VK_PRESENT_MODE_IMMEDIATE_KHR;
 
 		checkVkResult(isModeSupport(VK_PRESENT_MODE_FIFO_KHR));
 		return VK_PRESENT_MODE_FIFO_KHR;
@@ -326,8 +334,8 @@ namespace chord::graphics
 			m_inFlightFences.resize(m_backbufferCount);
 			for (auto i = 0; i < m_backbufferCount; i++)
 			{
-				m_semaphoresImageAvailable[i] = helper::createSemaphore();
-				m_semaphoresRenderFinished[i] = helper::createSemaphore();
+				m_semaphoresImageAvailable[i] = helper::createSemaphore("Swapchain-Semaphore-Available");
+				m_semaphoresRenderFinished[i] = helper::createSemaphore("Swapchain-Semaphore-Finished");
 
 				m_inFlightFences[i] = helper::createFence(VK_FENCE_CREATE_SIGNALED_BIT);
 			}
@@ -337,13 +345,14 @@ namespace chord::graphics
 	void Swapchain::releaseContext()
 	{
 		// Ensure all in flight images ready.
-		for(auto fence : m_imagesInFlight)
+		for(auto fence : m_inFlightFences)
 		{
 			if (fence != VK_NULL_HANDLE)
 			{
 				vkWaitForFences(getContext().getDevice(), 1, &fence, VK_TRUE, UINT64_MAX);
 			}
 		}
+		vkQueueWaitIdle(m_queue);
 
 		// Release all pending resources.
 		m_pendingResources.clear();

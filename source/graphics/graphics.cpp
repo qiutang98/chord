@@ -17,6 +17,8 @@
 
 namespace chord::graphics
 {
+
+
 	static bool bGraphicsQueueMajorPriority = false;
 	static AutoCVarRef<bool> cVarGraphicsQueueMajorPriority(
 		"r.graphics.queue.majorPriority",
@@ -104,6 +106,8 @@ namespace chord::graphics
 			"Debug utils exit application when meet error or not."
 		);
 	#endif 
+
+		constexpr const char* kValidationLayerName = "VK_LAYER_KHRONOS_validation";
 
 		static auto& getValidationLogger()
 		{
@@ -194,6 +198,7 @@ namespace chord::graphics
 			// Config message type.
 			if (config.bValidation) ci.messageType |= VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
 
+			// ci.messageType |= VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 			return ci;
 		}
 	}
@@ -396,7 +401,7 @@ namespace chord::graphics
 				std::vector<VkLayerProperties> supportedInstanceLayers(instanceLayerCount);
 				checkVkResult(vkEnumerateInstanceLayerProperties(&instanceLayerCount, supportedInstanceLayers.data()));
 
-				enableIfExist(&m_initConfig.bValidation, "VK_LAYER_KHRONOS_validation", "Validation", &VkLayerProperties::layerName, supportedInstanceLayers, layers);
+				enableIfExist(&m_initConfig.bValidation, debugUtils::kValidationLayerName, "Validation", &VkLayerProperties::layerName, supportedInstanceLayers, layers);
 			}
 
 			std::vector<const char*> extensions{ };
@@ -437,17 +442,57 @@ namespace chord::graphics
 			VkInstanceCreateInfo instanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
 			auto pNext = getNextPtr(instanceInfo);
 
-			instanceInfo.pApplicationInfo = &appInfo;
-			instanceInfo.enabledExtensionCount = static_cast<uint32>(extensions.size());
+			instanceInfo.pApplicationInfo        = &appInfo;
+			instanceInfo.enabledExtensionCount   = static_cast<uint32>(extensions.size());
 			instanceInfo.ppEnabledExtensionNames = extensions.data();
-			instanceInfo.enabledLayerCount = static_cast<uint32>(layers.size());
-			instanceInfo.ppEnabledLayerNames = layers.data();
+			instanceInfo.enabledLayerCount       = static_cast<uint32>(layers.size());
+			instanceInfo.ppEnabledLayerNames     = layers.data();
 
 			std::vector<VkValidationFeatureEnableEXT> enabledValidationLayers = {};
+			std::vector<VkLayerSettingEXT> enabledValidationLayerSettings = {};
 			if (m_initConfig.bDebugUtils && m_initConfig.bValidation)
 			{
 				enabledValidationLayers.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
+
+				// https://vulkan.lunarg.com/doc/view/1.3.296.0/windows/khronos_validation_layer.html
+				static const std::array<const char*, 4> settingDebugAction = { "info", "warn", "perf", "error" };
+				enabledValidationLayerSettings.push_back(VkLayerSettingEXT{
+					.pLayerName = debugUtils::kValidationLayerName,
+					.pSettingName = "report_flags",
+					.type = VK_LAYER_SETTING_TYPE_STRING_EXT,
+					.valueCount = (uint32)settingDebugAction.size(),
+					.pValues = settingDebugAction.data(),
+				});
+				
+				
+				
+				static const VkBool32 kbEnableMessageLimit = false;
+				enabledValidationLayerSettings.push_back(VkLayerSettingEXT{
+					.pLayerName = debugUtils::kValidationLayerName,
+					.pSettingName = "enable_message_limit",
+					.type = VK_LAYER_SETTING_TYPE_BOOL32_EXT,
+					.valueCount = 1,
+					.pValues = &kbEnableMessageLimit,
+				});
+
+				static const uint32 kMaxDuplicateMessage = 10U;
+				enabledValidationLayerSettings.push_back(VkLayerSettingEXT{
+					.pLayerName = debugUtils::kValidationLayerName,
+					.pSettingName = "duplicate_message_limit",
+					.type = VK_LAYER_SETTING_TYPE_UINT32_EXT,
+					.valueCount = 1,
+					.pValues = &kMaxDuplicateMessage,
+				});
 			};
+
+			VkLayerSettingsCreateInfoEXT layerSettingsCI = 
+			{
+				.sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
+				.pNext = nullptr,
+				.settingCount = static_cast<uint32>(enabledValidationLayerSettings.size()),
+				.pSettings = enabledValidationLayerSettings.data(),
+			};
+			stepNextPtr(pNext, layerSettingsCI);
 
 			VkValidationFeaturesEXT validationFeatures{};
 			stepNextPtr(pNext, validationFeatures);
@@ -457,6 +502,8 @@ namespace chord::graphics
 			validationFeatures.enabledValidationFeatureCount  = (uint32)enabledValidationLayers.size();
 			validationFeatures.pDisabledValidationFeatures    = nullptr;
 			validationFeatures.disabledValidationFeatureCount = 0;
+
+
 
 			VkDebugUtilsMessengerCreateInfoEXT debugUtilsCreateInfo{ };
 			if (m_initConfig.bDebugUtils)
@@ -714,6 +761,7 @@ namespace chord::graphics
 					FORCE_ENABLE(core10Features.shaderFloat64);
 					FORCE_ENABLE(core10Features.depthBounds);
 					FORCE_ENABLE(core10Features.shaderImageGatherExtended);
+					FORCE_ENABLE(core10Features.vertexPipelineStoresAndAtomics);
 
 					// Vulkan 1.1 core.
 					FORCE_ENABLE(core11Features.shaderDrawParameters);
@@ -737,7 +785,8 @@ namespace chord::graphics
 					FORCE_ENABLE(core12Features.shaderUniformBufferArrayNonUniformIndexing);
 					FORCE_ENABLE(core12Features.descriptorBindingUniformBufferUpdateAfterBind);
 					FORCE_ENABLE(core12Features.descriptorBindingStorageImageUpdateAfterBind);
-					
+					FORCE_ENABLE(core12Features.vulkanMemoryModel);
+					FORCE_ENABLE(core12Features.vulkanMemoryModelDeviceScope);
 					FORCE_ENABLE(core12Features.timelineSemaphore);
 					FORCE_ENABLE(core12Features.bufferDeviceAddress);
 					FORCE_ENABLE(core12Features.shaderFloat16);
@@ -893,19 +942,20 @@ namespace chord::graphics
 			// Queue udpate.
 			{
 				// Get queue id and create a command pool.
-				auto updateQueue = [&](auto& queues, const auto& family)
+				auto updateQueue = [&](auto& queues, const auto& family, std::string_view name)
 				{
 					for (auto id = 0; id < queues.size(); id++)
 					{
 						vkGetDeviceQueue(m_device, family.get(), id, &queues[id].queue);
+						graphics::setResourceName(VK_OBJECT_TYPE_QUEUE, uint64(queues[id].queue), std::format("{0}-{1}", name, id).c_str());
 					}
 				};
-				updateQueue(m_gpuQueuesInfo.graphcisQueues, m_gpuQueuesInfo.graphicsFamily);
-				updateQueue(m_gpuQueuesInfo.computeQueues, m_gpuQueuesInfo.computeFamily);
-				updateQueue(m_gpuQueuesInfo.copyQueues, m_gpuQueuesInfo.copyFamily);
-				updateQueue(m_gpuQueuesInfo.spatialBindingQueues, m_gpuQueuesInfo.sparseBindingFamily);
-				updateQueue(m_gpuQueuesInfo.videoDecodeQueues, m_gpuQueuesInfo.videoDecodeFamily);
-				updateQueue(m_gpuQueuesInfo.videoEncodeQueues, m_gpuQueuesInfo.videoEncodeFamily);
+				updateQueue(m_gpuQueuesInfo.graphcisQueues, m_gpuQueuesInfo.graphicsFamily, "GraphicsQueue");
+				updateQueue(m_gpuQueuesInfo.computeQueues, m_gpuQueuesInfo.computeFamily, "ComputeQueue");
+				updateQueue(m_gpuQueuesInfo.copyQueues, m_gpuQueuesInfo.copyFamily, "CopyQueue");
+				updateQueue(m_gpuQueuesInfo.spatialBindingQueues, m_gpuQueuesInfo.sparseBindingFamily, "SparseBindingQueue");
+				updateQueue(m_gpuQueuesInfo.videoDecodeQueues, m_gpuQueuesInfo.videoDecodeFamily, "VideoDecodeQueue");
+				updateQueue(m_gpuQueuesInfo.videoEncodeQueues, m_gpuQueuesInfo.videoEncodeFamily, "VideoEncodeQueue");
 			}
 
 			// Create graphics command pool.

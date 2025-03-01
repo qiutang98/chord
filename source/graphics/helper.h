@@ -72,7 +72,7 @@ namespace chord::graphics::helper
 		return layout;
 	}
 
-	static inline auto createTimelineSemaphore(uint32 initialValue = 0)
+	static inline auto createTimelineSemaphore(std::string_view name, uint32 initialValue = 0)
 	{
 		VkSemaphoreTypeCreateInfo timelineCI{ };
 		timelineCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
@@ -87,6 +87,9 @@ namespace chord::graphics::helper
 
 		VkSemaphore timelineSemaphore;
 		checkVkResult(vkCreateSemaphore(getDevice(), &CI, getAllocationCallbacks(), &timelineSemaphore));
+
+		graphics::setResourceName(VK_OBJECT_TYPE_SEMAPHORE, (uint64)timelineSemaphore, name.data());
+
 		return timelineSemaphore;
 	}
 
@@ -163,7 +166,7 @@ namespace chord::graphics::helper
 		return swapchain;
 	}
 
-	static inline auto createSemaphore(VkSemaphoreCreateFlags flags = 0)
+	static inline auto createSemaphore(std::string_view name, VkSemaphoreCreateFlags flags = 0)
 	{
 		VkSemaphoreCreateInfo semaphoreInfo{};
 		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -171,6 +174,8 @@ namespace chord::graphics::helper
 
 		VkSemaphore semaphore;
 		checkVkResult(vkCreateSemaphore(getDevice(), &semaphoreInfo, getAllocationCallbacks(), &semaphore));
+
+		graphics::setResourceName(VK_OBJECT_TYPE_SEMAPHORE, uint64(semaphore), name.data());
 
 		return semaphore;
 	}

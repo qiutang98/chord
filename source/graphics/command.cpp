@@ -12,15 +12,17 @@ namespace chord::graphics
 		helper::destroyCommandPool(commandPool);
 	}
 
-	Queue::Queue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
-		: m_swapchain(swapchain)
+	Queue::Queue(const std::string& name, const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
+		: m_name(name)
+		, m_swapchain(swapchain)
 		, m_queue(queue)
 		, m_queueType(type)
 		, m_queueFamily(family)
 	{
 		m_timelineValue = 0;
-		m_timelineSemaphore = helper::createTimelineSemaphore(m_timelineValue);
 
+		const std::string kSemaphoreName = std::format("{} TimelineSemaphore", name);
+		m_timelineSemaphore = helper::createTimelineSemaphore(kSemaphoreName, m_timelineValue);
 	}
 
 	Queue::~Queue()
@@ -186,9 +188,9 @@ namespace chord::graphics
 		: m_swapchain(swapchain)
 	{
 		const auto& queueInfos = getContext().getQueuesInfo();
-		m_graphicsQueue = std::make_unique<GraphicsQueue>(m_swapchain, EQueueType::Graphics, queueInfos.graphcisQueues[0].queue, queueInfos.graphicsFamily.get());
-		m_asyncComputeQueue = std::make_unique<GraphicsOrComputeQueue>(m_swapchain, EQueueType::Compute, queueInfos.computeQueues[0].queue, queueInfos.computeFamily.get());
-		m_asyncCopyQueue = std::make_unique<Queue>(m_swapchain, EQueueType::Copy, queueInfos.copyQueues[0].queue, queueInfos.copyFamily.get());
+		m_graphicsQueue = std::make_unique<GraphicsQueue>("Graphics Queue", m_swapchain, EQueueType::Graphics, queueInfos.graphcisQueues[0].queue, queueInfos.graphicsFamily.get());
+		m_asyncComputeQueue = std::make_unique<GraphicsOrComputeQueue>("Async Compute Queue", m_swapchain, EQueueType::Compute, queueInfos.computeQueues[0].queue, queueInfos.computeFamily.get());
+		m_asyncCopyQueue = std::make_unique<Queue>("Async Copy Queue", m_swapchain, EQueueType::Copy, queueInfos.copyQueues[0].queue, queueInfos.copyFamily.get());
 	}
 
 	CommandList::~CommandList()
@@ -208,8 +210,8 @@ namespace chord::graphics
 		m_asyncCopyQueue->sync(freeFrameCount);
 	}
 
-	GraphicsQueue::GraphicsQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
-		: GraphicsOrComputeQueue(swapchain, type, queue, family)
+	GraphicsQueue::GraphicsQueue(const std::string& name, const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
+		: GraphicsOrComputeQueue(name, swapchain, type, queue, family)
 	{
 	}
 
@@ -372,8 +374,8 @@ namespace chord::graphics
 		vkCmdBindVertexBuffers(cmd->commandBuffer, 0, 1, &vB, &vBOffset);
 	}
 
-	GraphicsOrComputeQueue::GraphicsOrComputeQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
-		: Queue(swapchain, type, queue, family)
+	GraphicsOrComputeQueue::GraphicsOrComputeQueue(const std::string& name, const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family)
+		: Queue(name, swapchain, type, queue, family)
 	{
 	}
 

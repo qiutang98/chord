@@ -71,7 +71,7 @@ namespace chord::graphics
 	class Queue : NonCopyable
 	{
 	public:
-		explicit Queue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
+		explicit Queue(const std::string& name, const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
 		virtual ~Queue();
 
 		void checkRecording() const;
@@ -109,6 +109,7 @@ namespace chord::graphics
 
 
 	protected:
+		const std::string m_name;
 		const Swapchain& m_swapchain;
 
 		VkQueue    m_queue;
@@ -131,7 +132,7 @@ namespace chord::graphics
 	class GraphicsOrComputeQueue : public Queue
 	{
 	public:
-		explicit GraphicsOrComputeQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
+		explicit GraphicsOrComputeQueue(const std::string& name, const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
 		virtual ~GraphicsOrComputeQueue() { }
 
 		void transitionSRV(PoolTextureRef image, VkImageSubresourceRange range);
@@ -149,7 +150,7 @@ namespace chord::graphics
 	class GraphicsQueue : public GraphicsOrComputeQueue
 	{
 	public:
-		explicit GraphicsQueue(const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
+		explicit GraphicsQueue(const std::string& name, const Swapchain& swapchain, EQueueType type, VkQueue queue, uint32 family);
 		virtual ~GraphicsQueue() { }
 		
 		void clearDepthStencil(

@@ -160,7 +160,7 @@ int Flower::run(int argc, const char** argv)
 	config.graphicsConfig.bDebugUtils = true;
 	config.graphicsConfig.bValidation = true;
 	config.graphicsConfig.bRaytracing = true;
-	config.graphicsConfig.bHDR = false;
+	config.graphicsConfig.bHDR        = false;
 
 	if (Application::get().init(config))
 	{
