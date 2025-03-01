@@ -128,26 +128,7 @@ namespace chord::graphics
 			updateShaderFileHash();
 		}
 
-		void updateShaderFileHash()
-		{
-			// File last edit time and stage.
-			auto ftime = std::format("{}", std::filesystem::last_write_time(shaderFilePath));
-			m_shaderFileHash = cityhash::ctyhash64WithSeed(ftime.data(), ftime.size(), uint64(stage));
-
-		#if CHORD_DEBUG
-			// Debug hash no same with release hash.
-			m_shaderFileHash = hashCombine(0x47F6c39, m_shaderFileHash);
-		#endif
-
-			// Shader file name.
-			m_shaderFileHash = cityhash::ctyhash64WithSeed(shaderFilePath.data(), shaderFilePath.size(), m_shaderFileHash);
-
-			// Entry
-			m_shaderFileHash = cityhash::ctyhash64WithSeed(entry.data(), entry.size(), m_shaderFileHash);
-
-			// Shader name.
-			m_shaderFileHash = cityhash::ctyhash64WithSeed(shaderName.data(), shaderName.size(), m_shaderFileHash);
-		}
+		void updateShaderFileHash(); 
 
 		uint64 getHash() const
 		{

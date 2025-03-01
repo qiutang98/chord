@@ -2,7 +2,7 @@
 #include <renderer/renderer.h>
 
 #include <shader/gltf.h>
-#include <shader/shader.h>
+#include <shader_compiler/shader.h>
 #include <shader/gpuscene.hlsl>
 #include <graphics/helper.h>
 #include <renderer/render_helper.h>

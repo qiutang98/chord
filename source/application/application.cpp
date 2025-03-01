@@ -3,8 +3,8 @@
 #include <filesystem>
 #include <utils/thread.h>
 #include <graphics/graphics.h>
-#include <shader/shader.h>
-#include <shader/compiler.h>
+#include <shader_compiler/shader.h>
+#include <shader_compiler/compiler.h>
 #include <ui/ui.h>
 #include <graphics/bufferpool.h>
 #include <graphics/rendertargetpool.h>

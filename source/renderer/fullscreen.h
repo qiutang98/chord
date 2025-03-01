@@ -1,7 +1,7 @@
 #pragma once
 
-#include <shader/shader.h>
-#include <shader/compiler.h>
+#include <shader_compiler/shader.h>
+#include <shader_compiler/compiler.h>
 
 #include <graphics/resource.h>
 #include <graphics/graphics.h>

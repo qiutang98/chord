@@ -1,8 +1,8 @@
-#include <shader/shader.h>
+#include <shader_compiler/shader.h>
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
 #include <utils/threadpool.h>
-#include <shader/compiler.h>
+#include <shader_compiler/compiler.h>
 #include <utils/thread.h>
 
 #ifdef _WIN32

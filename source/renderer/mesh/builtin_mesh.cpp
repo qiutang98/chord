@@ -5,14 +5,14 @@
 #include <graphics/helper.h>
 #include <renderer/fullscreen.h>
 #include <renderer/mesh/gltf_rendering.h>
-#include <shader/shader.h>
+#include <shader_compiler/shader.h>
 #include <shader/mesh_raster.hlsl>
 #include <shader/instance_culling.hlsl>
 #include <renderer/compute_pass.h>
 #include <renderer/graphics_pass.h>
 #include <shader/base.h>
 #include <renderer/postprocessing/postprocessing.h>
-#include <scene/system/shadow.h>
+#include <scene/system/shadow.h> 
 #include <renderer/renderer.h>
 #include <shader/builtin_mesh_draw.hlsl>
 

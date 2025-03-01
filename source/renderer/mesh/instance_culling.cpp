@@ -5,7 +5,7 @@
 #include <graphics/helper.h>
 #include <renderer/fullscreen.h>
 #include <renderer/mesh/gltf_rendering.h>
-#include <shader/shader.h>
+#include <shader_compiler/shader.h>
 #include <shader/instance_culling.hlsl>
 #include <shader/pipeline_filter.hlsl>
 #include <shader/hzb_mainview_culling.hlsl>

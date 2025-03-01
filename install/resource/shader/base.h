@@ -2,7 +2,6 @@
 #define SHADER_BASE_H
 
 #ifdef __cplusplus /////////////////////////////////////////
-    
     #include <utils/utils.h>
 
     // using namespace chord;

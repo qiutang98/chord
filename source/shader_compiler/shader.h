@@ -4,7 +4,7 @@
 #include <utils/noncopyable.h>
 #include <utils/optional.h>
 #include <graphics/graphics.h>
-#include <shader/permutation.h>
+#include <shader_compiler/permutation.h>
 #include <utils/threadpool.h>
 
 #include <regex>

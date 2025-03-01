@@ -5,14 +5,12 @@
 #include <graphics/swapchain.h>
 #include <graphics/bindless.h>
 #include <graphics/resource.h>
-#include <shader/compiler.h>
-#include <shader/shader.h>
+#include <shader_compiler/compiler.h>
+#include <shader_compiler/shader.h>
 #include <ui/ui.h>
 #include <graphics/rendertargetpool.h>
 #include <graphics/bufferpool.h>
 #include <graphics/uploader.h>
-
-#include <shader/shader.h>
 #include <asset/gltf/gltf_helper.h>
 
 namespace chord::graphics

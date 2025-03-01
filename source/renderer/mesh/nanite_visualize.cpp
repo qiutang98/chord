@@ -1,5 +1,5 @@
-#include <shader/shader.h>
-#include <shader/compiler.h>
+#include <shader_compiler/shader.h>
+#include <shader_compiler/compiler.h>
 #include <renderer/postprocessing/postprocessing.h>
 #include <renderer/compute_pass.h>
 #include <renderer/graphics_pass.h>

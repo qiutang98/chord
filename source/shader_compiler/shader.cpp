@@ -1,8 +1,9 @@
-#include <shader/shader.h>
+#include <shader_compiler/shader.h>
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
-#include <shader/compiler.h>
-#include <shader/spirv_reflect.h>
+#include <shader_compiler/compiler.h>
+#include <shader_compiler/spirv_reflect.h>
+#include <shader/shader_version.h>
 
 namespace chord::graphics
 {
@@ -15,11 +16,38 @@ namespace chord::graphics
 
 	static u16str sRecompileShaderFile = u16str("");
 	static AutoCVarRef<u16str> cVarRecompileShaderFile(
-		"r.shader.recompile",
+		"recompileshaders",
 		sRecompileShaderFile,
 		"Recompile shader file in the fly, if param equal 'all', will recompile all shaders."
 		"If you want to recompile single shader file, just fill it path like 'resource/shader/gltf.hlsl'."
 	);
+
+	constexpr const char* kShaderVersionFilePath = "resource/shader/shader_version.h";
+
+	void GlobalShaderRegisteredInfo::updateShaderFileHash()
+	{
+		// File last edit time and stage.
+		auto ftime = std::format("{}", std::filesystem::last_write_time(shaderFilePath));
+		m_shaderFileHash = cityhash::ctyhash64WithSeed(ftime.data(), ftime.size(), uint64(stage));
+
+		// Add shader version.
+		ftime = std::format("{}", std::filesystem::last_write_time(kShaderVersionFilePath));
+		m_shaderFileHash = cityhash::ctyhash64WithSeed(ftime.data(), ftime.size(), m_shaderFileHash);
+
+		#if CHORD_DEBUG
+			// Debug hash no same with release hash.
+			m_shaderFileHash = hashCombine(0x47F6c39, m_shaderFileHash);
+		#endif
+
+		// Shader file name.
+		m_shaderFileHash = cityhash::ctyhash64WithSeed(shaderFilePath.data(), shaderFilePath.size(), m_shaderFileHash);
+
+		// Entry
+		m_shaderFileHash = cityhash::ctyhash64WithSeed(entry.data(), entry.size(), m_shaderFileHash);
+
+		// Shader name.
+		m_shaderFileHash = cityhash::ctyhash64WithSeed(shaderName.data(), shaderName.size(), m_shaderFileHash);
+	}
 
 	// Generate shader module hash by permutation id and meta info id.
 	uint64 graphics::getShaderModuleHash(int32 permutationId, const GlobalShaderRegisteredInfo& info)
@@ -248,6 +276,15 @@ namespace chord::graphics
 			if (bAllRecompile)
 			{
 				LOG_TRACE("Recompiling all shaders used in the application...");
+				std::ofstream shaderVersionFile(kShaderVersionFilePath);
+
+				// open file and write text and override orignal content.
+				if (shaderVersionFile.is_open())
+				{
+					shaderVersionFile << std::format("// Change this file toggle all shader recompile, UUID: {}.", generateUUID());
+					shaderVersionFile.close();
+				}
+
 			}
 			else
 			{
@@ -285,9 +322,10 @@ namespace chord::graphics
 			for (const auto& batch : batchCompile)
 			{
 				const auto& registerInfo = batch.getRegisteredInfo();
-				if (bAllRecompile || targetShaderFile == getShaderFile(registerInfo.shaderFilePath))
+				auto shaderFilePtr = getShaderFile(registerInfo.shaderFilePath);
+				if (bAllRecompile || targetShaderFile == shaderFilePtr)
 				{
-					futures.combine(std::move(targetShaderFile->prepareBatchCompile(batch)));
+					futures.combine(std::move(shaderFilePtr->prepareBatchCompile(batch)));
 				}
 			}
 			futures.wait();

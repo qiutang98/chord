@@ -7,8 +7,8 @@
 #include <graphics/swapchain.h>
 #include <graphics/helper.h>
 #include <shader/imgui.hlsl>
-#include <shader/shader.h>
-#include <shader/compiler.h>
+#include <shader_compiler/shader.h>
+#include <shader_compiler/compiler.h>
 #include <graphics/pipeline.h>
 #include <ui/imgui/imgui_internal.h>
 #include <project.h>

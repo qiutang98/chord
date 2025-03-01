@@ -2,7 +2,7 @@
 #include <graphics/pipeline.h>
 #include <graphics/helper.h>
 #include <utils/cityhash.h>
-#include <shader/shader.h>
+#include <shader_compiler/shader.h>
 
 #define COMMON_GRAPHICS_PIPELINE_DYNAMIC_STATES \
 	VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT, \

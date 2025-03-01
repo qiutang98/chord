@@ -8,7 +8,7 @@
 #include <utils/cvar.h>
 #include <utils/log.h>
 #include <graphics/graphics.h>
-#include <shader/shader.h>
+#include <shader_compiler/shader.h>
 #include <ui/widget.h>
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
