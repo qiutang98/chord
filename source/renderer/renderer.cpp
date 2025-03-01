@@ -352,10 +352,13 @@ void DeferredRenderer::render(
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
 			visibilityCtx = visibilityMark(graphics, viewGPUId, mainViewCulledCmdBuffer, gbuffers.visibility);
-			insertTimer("Visibility Tile Marker", graphics);
+			insertTimer("VisibilityTileMarker", graphics);
 
 			lighting(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, atmosphereLuts, visibilityCtx);
-			insertTimer("lighting Tile", graphics);
+			insertTimer("lightingTile", graphics);
+
+			computeHalfResolutionGBuffer(graphics, gbuffers);
+			insertTimer("HalfResolutionGbufferExport", graphics);
 
 			if (m_rendererHistory.depth_Half != nullptr && m_rendererHistory.vertexNormalRS_Half != nullptr)
 			{
@@ -370,6 +373,12 @@ void DeferredRenderer::render(
 				m_rendererHistory.cascadeCtx.softShadowMask, disocclusionPassCtx.disocclusionMask);
 			cascadeShadowCurrentFrame.softShadowMask = cascadeResult.softShadowMask;
 			insertTimer("PCSS", graphics);
+		}
+		else
+		{
+			// Draw sky.
+			drawFullScreenSky(graphics, gbuffers, viewGPUId, atmosphereLuts);
+			insertTimer("DrawFullScreenSky", graphics);
 		}
 
 		if (shouldRenderGLTF(gltfRenderCtx))

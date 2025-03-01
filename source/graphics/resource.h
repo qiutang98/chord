@@ -132,6 +132,11 @@ namespace chord::graphics
 			return m_createInfo.extent; 
 		}
 
+		math::uvec2 getExtent2D() const
+		{
+			return { m_createInfo.extent.width, m_createInfo.extent.height };
+		}
+
 		const VkImageCreateInfo& getInfo() const 
 		{ 
 			return m_createInfo; 

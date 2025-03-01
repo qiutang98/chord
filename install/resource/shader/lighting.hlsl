@@ -40,18 +40,29 @@ CHORD_PUSHCONST(LightingPushConsts, pushConsts);
 #include "material.hlsli"
 #include "lighting.hlsli"
 
-#define DEBUG_CHECK_2x2_TILE 0
+#ifdef CHORD_DEBUG
+    #define DEBUG_CHECK_2x2_TILE 1
+#else 
+    #define DEBUG_CHECK_2x2_TILE 0
+#endif 
+
+#ifndef DRAW_SKY_BATCH_SIZE
+    #define DRAW_SKY_BATCH_SIZE 1
+#endif
+
+float3 finalColorRemoveNan(float3 color)
+{
+    if (any(isnan(color)))
+    {
+        color = 0.0;
+    }
+
+    return color;
+}
 
 void exportGbuffer(in const TinyGBufferContext g, uint2 id)
 {
-    float3 finalColor = g.color;
-    if (any(isnan(finalColor)))
-    {
-        finalColor = 0.0;
-    }
-
-    // 
-    storeRWTexture2D_float3(pushConsts.sceneColorId,          id, finalColor);
+    storeRWTexture2D_float3(pushConsts.sceneColorId,          id, finalColorRemoveNan(g.color));
 
 #if LIGHTING_TYPE != kLightingType_None
     storeRWTexture2D_float3(pushConsts.baseColorId,           id, float3(g.baseColor.xyz));
@@ -153,6 +164,41 @@ float3 skyColorEvaluate(float2 uv, in const PerframeCameraView perView, in const
 
     //   
     return finalRadianceExposureModify(scene, radiance);
+}
+
+void drawSky(int2 tid, in const PerframeCameraView perView, in const GPUBasicData scene)
+{
+    if (any(tid >= pushConsts.visibilityDim))
+    {
+        return;
+    }
+ 
+    const float2 uv = (tid + 0.5) * pushConsts.visibilityTexelSize;
+    const float3 skyColor = skyColorEvaluate(uv, perView, scene);
+
+    storeRWTexture2D_float3(pushConsts.sceneColorId, tid, finalColorRemoveNan(skyColor));
+}
+
+[numthreads(64, 1, 1)]
+void drawSkyCS(
+    uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupIndex)
+{
+    PerframeCameraView perView = LoadCameraView(pushConsts.cameraViewId);
+    const GPUBasicData scene = perView.basicData;
+
+    const int2 gid = remap8x8(localThreadIndex); 
+    const int2 tid_base = workGroupId * 8 * DRAW_SKY_BATCH_SIZE + gid;
+
+    [unroll(DRAW_SKY_BATCH_SIZE)]
+    for (int y = 0; y < DRAW_SKY_BATCH_SIZE; y ++)
+    {
+        [unroll(DRAW_SKY_BATCH_SIZE)]
+        for (int x = 0; x < DRAW_SKY_BATCH_SIZE; x ++)
+        {
+            const int2 tid = tid_base + int2(x, y) * 8;
+            drawSky(tid, perView, scene);
+        }
+    }
 }
 
 void gltfMetallicRoughnessPBR_Lighting(

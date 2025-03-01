@@ -28,6 +28,12 @@ namespace chord
 		graphics::PoolTextureRef softShadowMask,
 		graphics::PoolTextureRef disocclusionMask);
 
+	extern void drawFullScreenSky(
+		graphics::GraphicsQueue& queue,
+		GBufferTextures& gbuffers,
+		uint32 cameraViewId, 
+		const AtmosphereLut& skyLuts);
+
 	extern void lighting(
 		graphics::GraphicsQueue& queue,
 		GBufferTextures& gbuffers,
@@ -35,6 +41,10 @@ namespace chord
 		graphics::PoolBufferGPUOnlyRef drawMeshletCmdBuffer,
 		const AtmosphereLut& skyLuts,
 		const VisibilityTileMarkerContext& marker);
+
+	extern void computeHalfResolutionGBuffer(
+		graphics::GraphicsQueue& queue,
+		GBufferTextures& gbuffers);
 
 	struct DisocclusionPassResult
 	{

@@ -16,6 +16,22 @@ namespace chord
 {
 	using namespace graphics;
 
+	static uint32 sDrawFullScreenSkyBatchSize = 2;
+	static AutoCVarRef cVarDrawFullScreenSkyBatchSize(
+		"r.sky.drawFullScreenBatchSize",
+		sDrawFullScreenSkyBatchSize,
+		"Draw full screen sky batch size.");
+
+	class DrawSkyCS : public GlobalShader
+	{
+	public:
+		DECLARE_GLOBAL_SHADER(GlobalShader);
+
+		class SV_BatchSize : SHADER_VARIANT_RANGE_INT("DRAW_SKY_BATCH_SIZE", 1, 2);
+		using Permutation = TShaderVariantVector<SV_BatchSize>;
+	};
+	IMPLEMENT_GLOBAL_SHADER(DrawSkyCS, "resource/shader/lighting.hlsl", "drawSkyCS", EShaderStage::Compute);
+
 	class LightingCS : public GlobalShader
 	{
 	public:
@@ -136,6 +152,41 @@ namespace chord
 		return result;
 	}
 
+	void chord::drawFullScreenSky(
+		graphics::GraphicsQueue& queue,
+		GBufferTextures& gbuffers, 
+		uint32 cameraViewId, 
+		const AtmosphereLut& skyLuts)
+	{
+		LightingPushConsts pushConst{};
+		pushConst.visibilityTexelSize = math::vec2(1.0f) / math::vec2(gbuffers.dimension);
+		pushConst.visibilityDim = gbuffers.dimension;
+		pushConst.cameraViewId  = cameraViewId;
+		pushConst.sceneColorId  = asUAV(queue, gbuffers.color);
+
+		pushConst.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
+		pushConst.irradianceTextureId = asSRV(queue, skyLuts.irradianceTexture);
+		pushConst.transmittanceId = asSRV(queue, skyLuts.transmittance);
+		pushConst.scatteringId = asSRV3DTexture(queue, skyLuts.scatteringTexture);
+		if (skyLuts.optionalSingleMieScatteringTexture != nullptr)
+		{
+			pushConst.singleMieScatteringId = asSRV3DTexture(queue, skyLuts.optionalSingleMieScatteringTexture);
+		}
+
+		const uint32 kBatchSize = math::clamp(sDrawFullScreenSkyBatchSize, 1U, 2U);
+		const uint2 dispatchSize = divideRoundingUp(gbuffers.dimension, uint2(8 * kBatchSize));
+
+		DrawSkyCS::Permutation CSPermutation;
+		CSPermutation.set<DrawSkyCS::SV_BatchSize>(kBatchSize);
+		auto computeShader = getContext().getShaderLibrary().getShader<DrawSkyCS>(CSPermutation);
+		addComputePass2(
+			queue,
+			"DrawFullScreenSky CS",
+			getContext().computePipe(computeShader, "DrawFullScreenSkyPipe"),
+			pushConst,
+			{ dispatchSize, 1U });
+	}
+
 	void chord::lighting(
 		GraphicsQueue& queue, 
 		GBufferTextures& gbuffers, 
@@ -144,7 +195,6 @@ namespace chord
 		const AtmosphereLut& skyLuts,
 		const VisibilityTileMarkerContext& marker)
 	{
-
 		uint sceneColorUAV          = asUAV(queue, gbuffers.color);
 		uint vertexNormalUAV        = asUAV(queue, gbuffers.vertexRSNormal);
 		uint pixelNormalUAV         = asUAV(queue, gbuffers.pixelRSNormal);
@@ -171,8 +221,8 @@ namespace chord
 			pushConst.linearSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
 
 			pushConst.irradianceTextureId = asSRV(queue, skyLuts.irradianceTexture);
-			pushConst.transmittanceId = asSRV(queue, skyLuts.transmittance);
-			pushConst.scatteringId = asSRV3DTexture(queue, skyLuts.scatteringTexture);
+			pushConst.transmittanceId     = asSRV(queue, skyLuts.transmittance);
+			pushConst.scatteringId        = asSRV3DTexture(queue, skyLuts.scatteringTexture);
 			if (skyLuts.optionalSingleMieScatteringTexture != nullptr)
 			{
 				pushConst.singleMieScatteringId = asSRV3DTexture(queue, skyLuts.optionalSingleMieScatteringTexture);
@@ -188,7 +238,12 @@ namespace chord
 				pushConst,
 				lightingTileCtx.dispatchIndirectBuffer);
 		}
+	}
 
+	void chord::computeHalfResolutionGBuffer(
+		graphics::GraphicsQueue& queue,
+		GBufferTextures& gbuffers)
+	{
 		// Now generate half resolution buffer.
 		gbuffers.generateHalfGbuffer();
 		{
@@ -196,24 +251,24 @@ namespace chord
 
 			const uint2 dispatchDim = divideRoundingUp(gbuffers.dimension / 2U, uint2(8));
 
-			pushConsts.depthTextureId = asSRV(queue, gbuffers.depthStencil, helper::buildDepthImageSubresource());
-			pushConsts.pixelNormalTextureId = asSRV(queue, gbuffers.pixelRSNormal);
+			pushConsts.depthTextureId               = asSRV(queue, gbuffers.depthStencil, helper::buildDepthImageSubresource());
+			pushConsts.pixelNormalTextureId         = asSRV(queue, gbuffers.pixelRSNormal);
 			pushConsts.aoRoughnessMetallicTextureId = asSRV(queue, gbuffers.aoRoughnessMetallic);
-			pushConsts.motionVectorTextureId = asSRV(queue, gbuffers.motionVector);
-			pushConsts.vertexNormalTextureId = asSRV(queue, gbuffers.vertexRSNormal);
+			pushConsts.motionVectorTextureId        = asSRV(queue, gbuffers.motionVector);
+			pushConsts.vertexNormalTextureId        = asSRV(queue, gbuffers.vertexRSNormal);
 
 
 			pushConsts.halfPixelNormalRSId = asUAV(queue, gbuffers.pixelRSNormal_Half);
-			pushConsts.halfDeviceZId = asUAV(queue, gbuffers.depth_Half);
-			pushConsts.halfMotionVectorId = asUAV(queue, gbuffers.motionVector_Half);
-			pushConsts.halfRoughnessId = asUAV(queue, gbuffers.roughness_Half);
-			pushConsts.halfVertexNormalId = asUAV(queue, gbuffers.vertexRSNormal_Half);
+			pushConsts.halfDeviceZId       = asUAV(queue, gbuffers.depth_Half);
+			pushConsts.halfMotionVectorId  = asUAV(queue, gbuffers.motionVector_Half);
+			pushConsts.halfRoughnessId     = asUAV(queue, gbuffers.roughness_Half);
+			pushConsts.halfVertexNormalId  = asUAV(queue, gbuffers.vertexRSNormal_Half);
 
-			pushConsts.workDim = gbuffers.dimension / 2U;
-			pushConsts.workTexelSize = 1.0f / float2(pushConsts.workDim);
-			pushConsts.pointClampedEdgeSampler = getContext().getSamplerManager().pointClampEdge().index.get();
+			pushConsts.workDim                  = gbuffers.dimension / 2U;
+			pushConsts.workTexelSize            = 1.0f / float2(pushConsts.workDim);
+			pushConsts.pointClampedEdgeSampler  = getContext().getSamplerManager().pointClampEdge().index.get();
 			pushConsts.linearClampedEdgeSampler = getContext().getSamplerManager().linearClampEdgeMipPoint().index.get();
-			pushConsts.srcTexelSize = 1.0f / float2(gbuffers.dimension);
+			pushConsts.srcTexelSize             = 1.0f / float2(gbuffers.dimension);
 
 			auto computeShader = getContext().getShaderLibrary().getShader<HalfGbufferDownsample_CS>();
 			addComputePass2(queue, "GBufferHalfDownSample_CS", getContext().computePipe(computeShader, "GBufferHalfDownSample_Pipe"), pushConsts, { dispatchDim.x, dispatchDim.y, 1 });
