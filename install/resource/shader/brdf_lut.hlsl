@@ -5,7 +5,7 @@ struct BRDFLutPushConsts
     float2 texelSize;
     uint UAV;
 };
-CHORD_PUSHCONST(BRDFLutPushConsts, pushConsts);
+CHORD_PUSHCONST(BRDFLutPushConsts, pushConsts); 
 
 #ifndef __cplusplus // HLSL only area.
 
@@ -16,21 +16,20 @@ CHORD_PUSHCONST(BRDFLutPushConsts, pushConsts);
 
 static const uint kNumSample = 1024;
 
-[numthreads(8, 8, 1)]
-void mainCS(uint2 tid : SV_DispatchThreadID)
+[numthreads(1, 1, 32)]
+void mainCS(uint3 tid : SV_DispatchThreadID)
 {
-    const float2 uv = pushConsts.texelSize * (tid + 0.5);
+    const float2 uv = pushConsts.texelSize * (tid.xy + 0.5);
 
     float NoV = uv.x;
     float roughness = uv.y;
 
     const float3 N  = float3(0.0, 0.0, 1.0); // Z up. 
     const float3 Up = float3(1.0, 0.0, 0.0);
-
-    const float3 V = float3(sqrt(1.0 - NoV * NoV), 0.0, NoV); // 
+    const float3 V  = float3(sqrt(1.0 - NoV * NoV), 0.0, NoV); // 
 
     float2 lut = 0.0;
-    for (uint i = 0; i < kNumSample; i ++)
+    for (uint i = tid.z; i < kNumSample; i += 32)
     {
         float2 xi = hammersley2d(i, kNumSample);
 
@@ -62,6 +61,10 @@ void mainCS(uint2 tid : SV_DispatchThreadID)
 		}
     }
 
-    storeRWTexture2D_float2(pushConsts.UAV, tid, lut / kNumSample);
+    lut = WaveActiveSum(lut);
+    if (WaveIsFirstLane())
+    {
+        storeRWTexture2D_float2(pushConsts.UAV, tid.xy, lut / kNumSample);
+    }
 }
 #endif

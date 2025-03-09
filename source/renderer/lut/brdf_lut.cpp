@@ -27,7 +27,7 @@ graphics::PoolTextureRef chord::computeBRDFLut(graphics::GraphicsOrComputeQueue&
 		"BRDF-LUT",
 		getContext().computePipe(computeShader, "BRDF-LUT"),
 		push,
-		{ lutDim / 8, lutDim / 8, 1 });
+		{ lutDim, lutDim, 1 });
 	asSRV(queue, lut);
 
 	return lut;
