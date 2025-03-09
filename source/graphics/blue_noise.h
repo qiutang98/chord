@@ -1,6 +1,6 @@
 #pragma once
 
-#include <graphics/bufferpool.h>
+#include <graphics/buffer_pool.h>
 
 #define SHADER_DISABLE_NAMESPACE_USING
 #include <shader/base.h>

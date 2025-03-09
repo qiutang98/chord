@@ -18,9 +18,10 @@ namespace chord
 
 		}
 
+		// 
 		const uint8* getData() const { return &R; }
 
-
+		// 
 		static const RGBA kBlack;
 		static const RGBA kWhite;
 		static const RGBA kTransparent;

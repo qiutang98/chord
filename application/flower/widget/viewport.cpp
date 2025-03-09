@@ -159,7 +159,7 @@ void WidgetViewport::drawProfileViewer(uint32_t width, uint32_t height)
 
 		auto profileUI = [&]()
 		{
-			ui::beginGroupPanel("Profiler");
+			ui::drawGroupPannel("Profiler", [&]()
 			{
 				ImGui::Text("Resolution : %ix%i", (int32_t)width, (int32_t)height);
 				ImGui::Text("FPS : %d (%.2f ms)", fps, frameTime_ms);
@@ -170,9 +170,9 @@ void WidgetViewport::drawProfileViewer(uint32_t width, uint32_t height)
 					const char* pStrUnit = m_profileViewer.bShowMilliseconds ? "ms" : "us";
 					ImGui::Text(textFormat, timeStamps[i].label.c_str(), value, pStrUnit);
 				}
-			}
-			ImGui::Spacing();
-			ui::endGroupPanel();
+
+				ImGui::Spacing();
+			});
 		};
 
 		const auto srcPos = ImGui::GetCursorPos();
@@ -202,7 +202,7 @@ void WidgetViewport::drawProfileViewer(uint32_t width, uint32_t height)
 
 		auto frameGraphView = [&]()
 		{
-			ui::beginGroupPanel("GPU frame time (us)");
+			ui::drawGroupPannel("GPU frame time (us)", [&]()
 			{
 				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, { 0,0,0,0 });
@@ -216,8 +216,7 @@ void WidgetViewport::drawProfileViewer(uint32_t width, uint32_t height)
 					ImVec2(200, 80));
 				ImGui::PopStyleColor();
 				ImGui::PopStyleVar();
-			}
-			ui::endGroupPanel();
+			});
 		};
 
 		const auto srcPos = ImGui::GetCursorPos();

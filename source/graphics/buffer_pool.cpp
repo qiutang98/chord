@@ -1,4 +1,4 @@
-#include <graphics/bufferpool.h>
+#include <graphics/buffer_pool.h>
 #include <graphics/graphics.h>
 #include <graphics/resource.h>
 #include <utils/cityhash.h>

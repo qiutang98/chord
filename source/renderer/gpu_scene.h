@@ -2,7 +2,7 @@
 
 #include <utils/allocator.h>
 #include <graphics/graphics.h>
-#include <graphics/bufferpool.h>
+#include <graphics/buffer_pool.h>
 
 #include <shader/gltf.h>
 #include <asset/gltf/gltf.h>

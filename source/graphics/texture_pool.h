@@ -21,15 +21,15 @@ namespace chord::graphics
 	class GPUTexturePool : NonCopyable
 	{
 	public:
-		class PoolTexture : public IResource
+		class PoolTexture : public IPoolResource
 		{
 			friend GPUTexturePool;
 		public:
 			explicit PoolTexture(GPUTextureRef inTexture, uint64 hashId, GPUTexturePool& pool, bool bSameFrameReuse)
-				: m_texture(inTexture)
+				: IPoolResource(bSameFrameReuse)
+				, m_texture(inTexture)
 				, m_hashId(hashId)
 				, m_pool(pool)
-				, m_bSameFrameReuse(bSameFrameReuse)
 			{
 			}
 
@@ -38,18 +38,14 @@ namespace chord::graphics
 
 			virtual ~PoolTexture();
 
-			bool shouldSameFrameReuse() const
-			{
-				return m_bSameFrameReuse;
-			}
-
-			GPUTextureRef getGPUResource() const
+			virtual GPUResourceRef getGPUResourceRef() const override
 			{
 				return m_texture;
 			}
 
+			GPUTextureRef getGPUTextureRef() const { return m_texture; }
+
 		protected:
-			const bool m_bSameFrameReuse;
 			const uint64 m_hashId;
 			GPUTexturePool& m_pool;
 			GPUTextureRef m_texture = nullptr;

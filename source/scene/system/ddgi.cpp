@@ -32,31 +32,22 @@ static inline bool drawDDGIConfig(DDGIConfigCPU& inout)
 			ImGui::TextDisabled(titleName.c_str());
 			ImGui::Spacing();
 
-			ui::beginGroupPanel("Raytrace Config");
-			ImGui::PushItemWidth(100.0f);
+			ui::drawGroupPannel("Raytrace Config", [&]()
 			{
 				ImGui::DragInt("Rayhit sample texture LOD", &copyValue.rayHitSampleTextureLod, 1.0f, 2, 10);
-			}
-			ImGui::PopItemWidth();
-			ui::endGroupPanel();
+			}, 100.0f);
 
-			ui::beginGroupPanel("Blend Config");
-			ImGui::PushItemWidth(100.0f);
+			ui::drawGroupPannel("Blend Config", [&]()
 			{
 				ImGui::DragFloat("Hysteresis", &copyValue.hysteresis, 0.01f, 0.00f, 1.00f);
 				ImGui::InputFloat("Distance Exponent", &copyValue.probeDistanceExponent);
-			}
-			ImGui::PopItemWidth();
-			ui::endGroupPanel();
+			}, 100.0f);
 
-			ui::beginGroupPanel("Sample Config");
-			ImGui::PushItemWidth(100.0f);
+			ui::drawGroupPannel("Sample Config", [&]()
 			{
 				ImGui::InputFloat("Normal Bias Offset", &copyValue.probeNormalBias);
 				ImGui::InputFloat("View Bias Offset", &copyValue.probeViewBias);
-			}
-			ImGui::PopItemWidth();
-			ui::endGroupPanel();
+			}, 100.0f);
 
 			copyValue.probeDistanceExponent = math::max(copyValue.probeDistanceExponent, 1.0f);
 			copyValue.probeNormalBias = math::max(copyValue.probeNormalBias, 0.0f);

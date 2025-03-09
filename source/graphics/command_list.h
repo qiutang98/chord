@@ -2,8 +2,8 @@
 #include <graphics/common.h>
 #include <list>
 #include <graphics/resource.h>
-#include <graphics/bufferpool.h>
-#include <graphics/rendertargetpool.h>
+#include <graphics/buffer_pool.h>
+#include <graphics/texture_pool.h>
 
 namespace chord::graphics
 {
@@ -21,52 +21,47 @@ namespace chord::graphics
 		uint64 signalValue = 0;
 
 		template<typename T>
-		void insertPendingResource(std::shared_ptr<T> resource)
+		void addReferenceResource(std::shared_ptr<T> resource)
 		{
 			static_assert(std::is_base_of_v<IResource, T>);
-			if constexpr (std::is_base_of_v<GPUTexturePool::PoolTexture, T>)
+			if constexpr (std::is_base_of_v<IPoolResource, T>)
 			{
-				auto ptr = std::dynamic_pointer_cast<GPUTexturePool::PoolTexture>(resource);
+				auto ptr = std::dynamic_pointer_cast<IPoolResource>(resource);
 				if (ptr->shouldSameFrameReuse())
 				{
-					m_pendingResources.insert(ptr->getGPUResource());
+					m_referenceResources.push_back(ptr->getGPUResourceRef());
 					return;
 				}
 			}
 
-			if constexpr (std::is_base_of_v<GPUBufferPool::PoolBuffer, T>)
-			{
-				auto ptr = std::dynamic_pointer_cast<GPUBufferPool::PoolBuffer>(resource);
-				if (ptr->shouldSameFrameReuse())
-				{
-					m_pendingResources.insert(ptr->getGPUResource());
-					return;
-				}
-			}
-
-			m_pendingResources.insert(resource);
+			m_referenceResources.push_back(resource);
 		}
 
-		void clearPendingResource()
+		void clearReferenceResources()
 		{
-			m_pendingResources.clear();
+			m_referenceResources.clear();
 		}
 
-		bool isPendingResourceEmpty() const
+		bool isReferenceResourcesEmpty() const
 		{
-			return m_pendingResources.empty();
+			return m_referenceResources.empty();
 		}
 
 	private:
 		// All pending resources.
-		std::set<ResourceRef> m_pendingResources;
+		std::vector<ResourceRef> m_referenceResources;
 	};
 	using CommandBufferRef = std::shared_ptr<CommandBuffer>;
 
-	struct TimelineWait
+	struct QueueTimeline
 	{
-		VkSemaphore timeline;
-		uint64 waitValue;
+		VkSemaphore semaphore;
+
+		// Last time submit command signal value.
+		uint64 waitValue = 0U;
+
+		// Last time submit command required wait flags.
+		VkPipelineStageFlags waitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	};
 
 	class Queue : NonCopyable
@@ -77,20 +72,21 @@ namespace chord::graphics
 
 		void checkRecording() const;
 
-		void beginCommand(const std::vector<TimelineWait>& waitValue);
-		TimelineWait endCommand();
+		void beginCommand(const std::vector<QueueTimeline>& waitValue);
+		QueueTimeline endCommand(VkPipelineStageFlags waitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
 
 		// Sync when a global fence finish.
 		void sync(uint32 freeFrameCount);
 
-		TimelineWait getCurrentTimeline() const
+		QueueTimeline getCurrentTimeline() const
 		{
-			return TimelineWait{.timeline = m_timelineSemaphore, .waitValue = m_timelineValue };
+			return m_timeline;
 		}
 
-		TimelineWait stepTimeline()
+		QueueTimeline stepTimeline(VkPipelineStageFlags waitFlags)
 		{
-			m_timelineValue ++;
+			m_timeline.waitValue ++;
+			m_timeline.waitFlags = waitFlags;
 			return getCurrentTimeline();
 		}
 
@@ -118,13 +114,12 @@ namespace chord::graphics
 		std::list<CommandBufferRef> m_usingCommands;
 		std::list<CommandBufferRef> m_commandsPool;
 
-		uint64 m_timelineValue = 0;
-		VkSemaphore m_timelineSemaphore = VK_NULL_HANDLE;
+		QueueTimeline m_timeline { };
 
 		struct ActiveCmd
 		{
 			CommandBufferRef command = nullptr;
-			std::vector<TimelineWait> waitValue;
+			std::vector<QueueTimeline> waitValue;
 		} m_activeCmdCtx;
 	};
 
@@ -189,7 +184,7 @@ namespace chord::graphics
 			return *m_graphicsQueue;
 		}
 
-		void insertPendingResource(ResourceRef resource);
+		void addReferenceResource(ResourceRef resource);
 
 	private:
 		Swapchain& m_swapchain;

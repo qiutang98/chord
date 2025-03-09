@@ -17,35 +17,31 @@ namespace chord::graphics
 	{
 	public:
 
-		class PoolBuffer : public IResource
+		class PoolBuffer : public IPoolResource
 		{
 			friend GPUBufferPool;
 		public:
 			virtual ~PoolBuffer();
 
 			explicit PoolBuffer(GPUBufferRef inBuffer, uint64 hashId, GPUBufferPool& pool, bool bSameFrameReuse = true)
-				: m_buffer(inBuffer)
+				: IPoolResource(bSameFrameReuse)
+				, m_buffer(inBuffer)
 				, m_hashId(hashId)
 				, m_pool(pool)
-				, m_bSameFrameReuse(bSameFrameReuse)
 			{
 			}
 
 			const GPUBuffer& get() const { return *m_buffer; }
 			GPUBuffer& get() { return *m_buffer; }
 
-			bool shouldSameFrameReuse() const
-			{
-				return m_bSameFrameReuse;
-			}
-
-			GPUBufferRef getGPUResource() const
+			virtual GPUResourceRef getGPUResourceRef() const override
 			{
 				return m_buffer;
 			}
 
+			GPUBufferRef getGPUBufferRef() const { return m_buffer; }
+
 		protected:
-			const bool m_bSameFrameReuse;
 			const uint64 m_hashId;
 			GPUBufferPool& m_pool;
 			GPUBufferRef m_buffer = nullptr;

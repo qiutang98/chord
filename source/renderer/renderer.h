@@ -3,10 +3,10 @@
 #include <utils/utils.h>
 #include <utils/noncopyable.h>
 #include <graphics/graphics.h>
-#include <graphics/rendertargetpool.h>
+#include <graphics/texture_pool.h>
 #include <shader/base.h>
 #include <utils/camera.h>
-#include <graphics/bufferpool.h>
+#include <graphics/buffer_pool.h>
 #include <renderer/postprocessing/postprocessing.h>
 #include <renderer/atmosphere.h>
 #include <scene/system/shadow.h>
@@ -28,7 +28,7 @@ namespace chord
 			SizedBuffer(sizeof(T) * count, (void*)data));
 
 		// Insert perframe lazy destroy.
-		cmd.insertPendingResource(newGPUBuffer);
+		cmd.addReferenceResource(newGPUBuffer);
 		const auto& viewC = newGPUBuffer->get().requireView(true, false);
 		return { newGPUBuffer, viewC.storage.get() };
 	}

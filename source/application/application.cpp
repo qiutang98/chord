@@ -6,8 +6,8 @@
 #include <shader_compiler/shader.h>
 #include <shader_compiler/compiler.h>
 #include <ui/ui.h>
-#include <graphics/bufferpool.h>
-#include <graphics/rendertargetpool.h>
+#include <graphics/buffer_pool.h>
+#include <graphics/texture_pool.h>
 #include <asset/asset.h>
 #include <graphics/uploader.h>
 #include <renderer/gpu_scene.h>

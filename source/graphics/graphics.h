@@ -5,7 +5,7 @@
 #include <graphics/swapchain.h>
 #include <graphics/bindless.h>
 #include <graphics/pipeline.h>
-#include <graphics/rendertargetpool.h>
+#include <graphics/texture_pool.h>
 #include <graphics/uploader.h>
 #include <graphics/descriptor.h>
 #include <graphics/blue_noise.h>

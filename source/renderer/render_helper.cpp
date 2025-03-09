@@ -47,7 +47,7 @@ namespace chord
 
     PushSetBuilder& PushSetBuilder::addAccelerateStructure(graphics::helper::AccelKHRRef as)
     {
-        m_queue.getActiveCmd()->insertPendingResource(as);
+        m_queue.getActiveCmd()->addReferenceResource(as);
 
         CacheBindingBuilder builder;
         builder.type = CacheBindingBuilder::EType::AccelerateStructure;

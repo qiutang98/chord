@@ -153,10 +153,14 @@ void DeferredRenderer::render(
 
 	// Graphics start timeline.
 	auto& graphics = cmd.getGraphicsQueue();
-	auto frameStartTimeline = graphics.getCurrentTimeline();
+	auto& asyncCompute = cmd.getAsyncComputeQueue();
+
+	auto graphicsTimeline = graphics.getCurrentTimeline();
+	auto asyncComputeTimeline = asyncCompute.getCurrentTimeline();
 
 	// Render 
-	graphics.beginCommand({ frameStartTimeline });
+	graphics.beginCommand({ graphicsTimeline });
+	
 
 	// GPU timer start.
 	m_rendererTimer.onBeginFrame(graphics.getActiveCmd()->commandBuffer, &m_timeStamps);
@@ -165,9 +169,6 @@ void DeferredRenderer::render(
 	{
 		auto lastFrame = m_perframeCameraView;
 		auto& currentFrame = m_perframeCameraView;
-
-
-
 		currentFrame.basicData = getGPUBasicData(atmosphereParam);
 
 		{
@@ -177,8 +178,6 @@ void DeferredRenderer::render(
 
 			currentFrame.jitterData.x = halton((frameCounter % jitterPeriod) + 1, 2) - 0.5f;
 			currentFrame.jitterData.y = halton((frameCounter % jitterPeriod) + 1, 3) - 0.5f;
-
-
 		}
 
 		camera->fillViewUniformParameter(currentFrame);
@@ -288,25 +287,34 @@ void DeferredRenderer::render(
 	TSRHistory tsrHistory { };
 	CascadeShadowHistory cascadeShadowCurrentFrame{ };
 	PoolBufferGPUOnlyRef exposureBuffer = nullptr;
+
+	// Async TLAS build.
 	{
-		insertTimer("FrameBegin", graphics);
-
-
-
 		m_bTLASValidCurrentFrame = perframe.asInstances.isExistInstance();
 		if (m_bTLASValidCurrentFrame)
 		{
-			m_tlas.buildTlas(graphics, perframe.asInstances.asInstances, false, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+			asyncCompute.beginCommand({ asyncComputeTimeline, graphicsTimeline });
+
+			m_tlas.buildTlas(asyncCompute, perframe.asInstances.asInstances, false, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+
+			asyncComputeTimeline = asyncCompute.endCommand(VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
 			insertTimer("TLAS", graphics);
 		}
+	}
 
-		const AtmosphereLut& atmosphereLuts = scene->getAtmosphereManager().render(tickData, cmd, graphics);
+	CascadeShadowContext cascadeContext{ };
+	DisocclusionPassResult disocclusionPassCtx = {};
+	CountAndCmdBuffer postInstanceCullingBuffer = {};
+	VisibilityTileMarkerContext visibilityCtx;
 
+	insertTimer("FrameBegin", graphics);
+	const AtmosphereLut& atmosphereLuts = scene->getAtmosphereManager().render(tickData, cmd, graphics);
+	{
 		// Clear all gbuffer textures.
 		addClearGbufferPass(graphics, gbuffers);
 		insertTimer("Clear GBuffers", graphics);
 
-		CountAndCmdBuffer postInstanceCullingBuffer = {};
+		
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
 			postInstanceCullingBuffer = instanceCulling(graphics, gltfRenderCtx, mainViewInstanceCullingInfoId, 0);
@@ -336,19 +344,16 @@ void DeferredRenderer::render(
 		}
 
 		// Shadow depth rendering.
-		CascadeShadowContext cascadeContext { };
+
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
 			cascadeContext = chord::renderShadow(cmd, graphics, gltfRenderCtx, m_perframeCameraView, m_rendererHistory.cascadeCtx, sunShadowConfig, tickData, *camera, sunDirection, hzbCtx);
 			cascadeShadowCurrentFrame = chord::extractCascadeShadowHistory(graphics, sunDirection, cascadeContext, tickData);
 		}
 
-		auto mainViewCulledCmdBuffer = postInstanceCullingBuffer.second;
-
-		DisocclusionPassResult disocclusionPassCtx = {};
+		auto& mainViewCulledCmdBuffer = postInstanceCullingBuffer.second;
 
 
-		VisibilityTileMarkerContext visibilityCtx;
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
 			visibilityCtx = visibilityMark(graphics, viewGPUId, mainViewCulledCmdBuffer, gbuffers.visibility);
@@ -362,14 +367,14 @@ void DeferredRenderer::render(
 
 			if (m_rendererHistory.depth_Half != nullptr && m_rendererHistory.vertexNormalRS_Half != nullptr)
 			{
-				disocclusionPassCtx = computeDisocclusionMask(graphics, gbuffers, viewGPUId, 
-					m_rendererHistory.depth_Half, 
+				disocclusionPassCtx = computeDisocclusionMask(graphics, gbuffers, viewGPUId,
+					m_rendererHistory.depth_Half,
 					m_rendererHistory.vertexNormalRS_Half);
 
 				insertTimer("DisocclusionMask", graphics);
 			}
 
-			auto cascadeResult = cascadeShadowEvaluate(graphics, gbuffers, viewGPUId, cascadeContext, 
+			auto cascadeResult = cascadeShadowEvaluate(graphics, gbuffers, viewGPUId, cascadeContext,
 				m_rendererHistory.cascadeCtx.softShadowMask, disocclusionPassCtx.disocclusionMask);
 			cascadeShadowCurrentFrame.softShadowMask = cascadeResult.softShadowMask;
 			insertTimer("PCSS", graphics);
@@ -380,17 +385,26 @@ void DeferredRenderer::render(
 			drawFullScreenSky(graphics, gbuffers, viewGPUId, atmosphereLuts);
 			insertTimer("DrawFullScreenSky", graphics);
 		}
+	}
+
+	if (m_bTLASValidCurrentFrame)
+	{
+		graphicsTimeline = graphics.endCommand();
+		graphics.beginCommand({ graphicsTimeline, asyncComputeTimeline });
+	}
+
+	{
 
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
 			if (sGIMethod == 0)
 			{
-				giUpdate(cmd, 
-					graphics, 
-					atmosphereLuts, 
-					cascadeContext, 
+				giUpdate(cmd,
+					graphics,
+					atmosphereLuts,
+					cascadeContext,
 					m_giCtx, gbuffers, viewGPUId, m_tlas.getTLAS(), disocclusionPassCtx,
-					camera, 
+					camera,
 					hzbCtx.maxHZB,
 					m_perframeCameraView,
 					m_rendererHistory.depth_Half, m_rendererHistory.vertexNormalRS_Half, m_bCameraCut, gltfRenderCtx.timerLambda);
@@ -399,10 +413,10 @@ void DeferredRenderer::render(
 			{
 				m_giCtx = {};
 			}
-			
+
 			if (sGIMethod == 1)
 			{
-				ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext, 
+				ddgiUpdate(cmd, graphics, atmosphereLuts, ddgiConfig, cascadeContext,
 					gbuffers, m_ddgiCtx, viewGPUId, m_tlas.getTLAS(), camera, hzbCtx.minHZB);
 				insertTimer("DDGI Update", graphics);
 			}
@@ -411,13 +425,19 @@ void DeferredRenderer::render(
 				m_ddgiCtx = {};
 			}
 
-			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
-			insertTimer("Nanite visualize", graphics);
-
 			if (m_bTLASValidCurrentFrame)
 			{
 				visualizeAccelerateStructure(graphics, atmosphereLuts, cascadeContext, gbuffers, viewGPUId, m_tlas.getTLAS());
 			}
+		}
+	}
+
+	{
+		{
+			auto& mainViewCulledCmdBuffer = postInstanceCullingBuffer.second;
+
+			visualizeNanite(graphics, gbuffers, viewGPUId, mainViewCulledCmdBuffer, visibilityCtx);
+			insertTimer("Nanite visualize", graphics);
 		}
 
 		if (!perframe.builtinMeshInstances.empty())

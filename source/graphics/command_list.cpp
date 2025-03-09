@@ -1,6 +1,6 @@
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
-#include <graphics/command.h>
+#include <graphics/command_list.h>
 
 
 namespace chord::graphics
@@ -19,15 +19,16 @@ namespace chord::graphics
 		, m_queueType(type)
 		, m_queueFamily(family)
 	{
-		m_timelineValue = 0;
+		m_timeline.waitValue = 0U;
+		m_timeline.waitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
 		const std::string kSemaphoreName = std::format("{} TimelineSemaphore", name);
-		m_timelineSemaphore = helper::createTimelineSemaphore(kSemaphoreName, m_timelineValue);
+		m_timeline.semaphore = helper::createTimelineSemaphore(kSemaphoreName, m_timeline.waitValue);
 	}
 
 	Queue::~Queue()
 	{
-		helper::destroySemaphore(m_timelineSemaphore);
+		helper::destroySemaphore(m_timeline.semaphore);
 	}
 
 	void Queue::checkRecording() const
@@ -38,8 +39,8 @@ namespace chord::graphics
 	void Queue::copyBuffer(PoolBufferRef src, PoolBufferRef dest, size_t size, size_t srcOffset, size_t destOffset)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(src);
-		cmd->insertPendingResource(dest);
+		cmd->addReferenceResource(src);
+		cmd->addReferenceResource(dest);
 
 		{
 			GPUSyncBarrierMasks srcMask  = { .queueFamilyIndex = m_queueFamily, .accesMask = VK_ACCESS_TRANSFER_READ_BIT };
@@ -90,62 +91,63 @@ namespace chord::graphics
 		return cmdBuf;
 	}
 
-	void Queue::beginCommand(const std::vector<TimelineWait>& waitValue)
+	void Queue::beginCommand(const std::vector<QueueTimeline>& waitValue)
 	{
 		check(m_activeCmdCtx.command == nullptr);
 
 		m_activeCmdCtx.command = getOrCreateCommandBuffer();
-		check(m_activeCmdCtx.command->isPendingResourceEmpty());
+		check(m_activeCmdCtx.command->isReferenceResourcesEmpty());
 		m_activeCmdCtx.waitValue = waitValue;
 
 		helper::beginCommandBuffer(m_activeCmdCtx.command->commandBuffer);
 	}
 
-	TimelineWait Queue::endCommand()
+	QueueTimeline Queue::endCommand(VkPipelineStageFlags waitFlags)
 	{
 		check(m_activeCmdCtx.command != nullptr);
 
 		helper::endCommandBuffer(m_activeCmdCtx.command->commandBuffer);
 
 		// Signal value increment.
-		m_timelineValue++;
-		m_activeCmdCtx.command->signalValue = m_timelineValue;
+		stepTimeline(waitFlags);
+		m_activeCmdCtx.command->signalValue = m_timeline.waitValue;
 
 		std::vector<uint64> waitValues{};
 		std::vector<VkSemaphore> waitSemaphores{};
+		std::vector<VkPipelineStageFlags> kWaitFlags{};
 		for (auto& wait : m_activeCmdCtx.waitValue)
 		{
 			waitValues.push_back(wait.waitValue);
-			waitSemaphores.push_back(wait.timeline);
+			waitSemaphores.push_back(wait.semaphore);
+			kWaitFlags.push_back(wait.waitFlags);
 		}
 
 		VkTimelineSemaphoreSubmitInfo timelineInfo;
-		timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-		timelineInfo.pNext = NULL;
-		timelineInfo.waitSemaphoreValueCount = waitValues.size();
-		timelineInfo.pWaitSemaphoreValues = waitValues.data();
+		timelineInfo.sType                     = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+		timelineInfo.pNext                     = NULL;
+		timelineInfo.waitSemaphoreValueCount   = waitValues.size();
+		timelineInfo.pWaitSemaphoreValues      = waitValues.data();
 		timelineInfo.signalSemaphoreValueCount = 1;
-		timelineInfo.pSignalSemaphoreValues = &m_activeCmdCtx.command->signalValue;
-
-		VkPipelineStageFlags kUiWaitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+		timelineInfo.pSignalSemaphoreValues    = &m_activeCmdCtx.command->signalValue;
 
 		VkSubmitInfo submitInfo;
-		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submitInfo.pNext = &timelineInfo;
-		submitInfo.waitSemaphoreCount = waitSemaphores.size();
-		submitInfo.pWaitSemaphores = waitSemaphores.data();
+		submitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.pNext                = &timelineInfo;
+		submitInfo.waitSemaphoreCount   = waitSemaphores.size();
+		submitInfo.pWaitSemaphores      = waitSemaphores.data();
 		submitInfo.signalSemaphoreCount = 1;
-		submitInfo.pSignalSemaphores = &m_timelineSemaphore;
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &m_activeCmdCtx.command->commandBuffer;
-		submitInfo.pWaitDstStageMask = &kUiWaitFlags;
+		submitInfo.pSignalSemaphores    = &m_timeline.semaphore;
+		submitInfo.commandBufferCount   = 1;
+		submitInfo.pCommandBuffers      = &m_activeCmdCtx.command->commandBuffer;
+		submitInfo.pWaitDstStageMask    = kWaitFlags.data();
 
+		//
 		vkQueueSubmit(m_queue, 1, &submitInfo, NULL);
 
 		m_usingCommands.push_back(m_activeCmdCtx.command);
 		m_activeCmdCtx = {};
 
-		return TimelineWait{ .timeline = m_timelineSemaphore, .waitValue = m_timelineValue };
+		return m_timeline;
 	}
 
 	void Queue::sync(uint32 freeFrameCount)
@@ -160,7 +162,7 @@ namespace chord::graphics
 		if (!m_usingCommands.empty())
 		{
 			uint64 currentValue;
-			vkGetSemaphoreCounterValue(getDevice(), m_timelineSemaphore, &currentValue);
+			vkGetSemaphoreCounterValue(getDevice(), m_timeline.semaphore, &currentValue);
 
 			auto usingCmd = m_usingCommands.begin();
 
@@ -171,7 +173,7 @@ namespace chord::graphics
 				if ((usingTimelineValue + freeFrameCount) <= currentValue)
 				{
 					// Empty unused resources.
-					(*usingCmd)->clearPendingResource();
+					(*usingCmd)->clearReferenceResources();
 
 					m_commandsPool.push_back(*usingCmd);
 					usingCmd = m_usingCommands.erase(usingCmd);
@@ -198,9 +200,9 @@ namespace chord::graphics
 
 	}
 
-	void CommandList::insertPendingResource(ResourceRef resource)
+	void CommandList::addReferenceResource(ResourceRef resource)
 	{
-		m_swapchain.insertPendingResource(resource);
+		m_swapchain.addReferenceResource(resource);
 	}
 
 	void CommandList::sync(uint32 freeFrameCount)
@@ -218,7 +220,7 @@ namespace chord::graphics
 	void GraphicsOrComputeQueue::clearImage(PoolTextureRef image, const VkClearColorValue* clear, uint32 rangeCount, const VkImageSubresourceRange* ranges)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(image);
+		cmd->addReferenceResource(image);
 
 		// Target state.
 		GPUTextureSyncBarrierMasks mask;
@@ -239,7 +241,7 @@ namespace chord::graphics
 	void GraphicsOrComputeQueue::clearUAV(PoolBufferRef buffer, uint32 data)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(buffer);
+		cmd->addReferenceResource(buffer);
 
 		transition(buffer, VK_ACCESS_TRANSFER_WRITE_BIT);
 		vkCmdFillBuffer(cmd->commandBuffer, buffer->get(), 0, buffer->get().getSize(), data);
@@ -250,7 +252,7 @@ namespace chord::graphics
 		check(offset + size <= buffer->get().getSize());
 
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(buffer);
+		cmd->addReferenceResource(buffer);
 
 		transition(buffer, VK_ACCESS_TRANSFER_WRITE_BIT);
 
@@ -262,7 +264,7 @@ namespace chord::graphics
 		check(offset + size <= buffer->get().getSize());
 
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(buffer);
+		cmd->addReferenceResource(buffer);
 
 		transition(buffer, VK_ACCESS_TRANSFER_WRITE_BIT);
 
@@ -272,8 +274,8 @@ namespace chord::graphics
 	void GraphicsOrComputeQueue::copyUAV(PoolBufferRef src, PoolBufferRef dest, uint srcOffset, uint destOffset, uint size)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(src);
-		cmd->insertPendingResource(dest);
+		cmd->addReferenceResource(src);
+		cmd->addReferenceResource(dest);
 
 		transition(src, VK_ACCESS_TRANSFER_READ_BIT);
 		transition(dest, VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -293,7 +295,7 @@ namespace chord::graphics
 	void GraphicsQueue::clearDepthStencil(PoolTextureRef image, const VkClearDepthStencilValue* clear)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(image);
+		cmd->addReferenceResource(image);
 
 		VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT;
 		if (isFormatExistStencilComponent(image->get().getFormat()))
@@ -317,7 +319,7 @@ namespace chord::graphics
 	void GraphicsQueue::transitionPresent(PoolTextureRef image)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(image);
+		cmd->addReferenceResource(image);
 
 		GPUTextureSyncBarrierMasks mask;
 		mask.imageLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -330,7 +332,7 @@ namespace chord::graphics
 	void GraphicsQueue::transitionColorAttachment(PoolTextureRef image)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(image);
+		cmd->addReferenceResource(image);
 
 		GPUTextureSyncBarrierMasks mask;
 		mask.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -343,7 +345,7 @@ namespace chord::graphics
 	void GraphicsQueue::transitionDepthStencilAttachment(PoolTextureRef image, EDepthStencilOp op)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(image);
+		cmd->addReferenceResource(image);
 
 		const bool bExistStencilComponent = isFormatExistStencilComponent(image->get().getFormat());
 
@@ -364,7 +366,7 @@ namespace chord::graphics
 	void GraphicsQueue::bindIndexBuffer(PoolBufferRef buffer, VkDeviceSize offset, VkIndexType indexType)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(buffer);
+		cmd->addReferenceResource(buffer);
 
 		// transition(buffer, VK_ACCESS_INDEX_READ_BIT);
 
@@ -390,7 +392,7 @@ namespace chord::graphics
 	void GraphicsOrComputeQueue::transitionSRV(PoolTextureRef image, VkImageSubresourceRange range)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(image);
+		cmd->addReferenceResource(image);
 
 		GPUTextureSyncBarrierMasks mask;
 		mask.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -403,7 +405,7 @@ namespace chord::graphics
 	void GraphicsOrComputeQueue::transitionUAV(PoolTextureRef image, VkImageSubresourceRange range)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(image);
+		cmd->addReferenceResource(image);
 
 		GPUTextureSyncBarrierMasks mask;
 		mask.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -427,7 +429,7 @@ namespace chord::graphics
 	void GraphicsOrComputeQueue::transition(PoolBufferRef buffer, VkAccessFlags flag)
 	{
 		auto cmd = m_activeCmdCtx.command;
-		cmd->insertPendingResource(buffer);
+		cmd->addReferenceResource(buffer);
 
 		GPUSyncBarrierMasks mask;
 		mask.accesMask = flag;

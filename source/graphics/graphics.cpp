@@ -8,8 +8,8 @@
 #include <shader_compiler/compiler.h>
 #include <shader_compiler/shader.h>
 #include <ui/ui.h>
-#include <graphics/rendertargetpool.h>
-#include <graphics/bufferpool.h>
+#include <graphics/texture_pool.h>
+#include <graphics/buffer_pool.h>
 #include <graphics/uploader.h>
 #include <asset/gltf/gltf_helper.h>
 

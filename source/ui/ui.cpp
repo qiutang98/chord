@@ -374,7 +374,7 @@ namespace chord
 			std::vector<VkSemaphore> imguiWaitSemaphores =
 			{
 				frameStartSemaphore,
-				graphicsTimeline.timeline,
+				graphicsTimeline.semaphore,
 			};
 
 			std::vector<uint64> waitSemaphoreValues =
@@ -383,12 +383,12 @@ namespace chord
 				graphicsTimeline.waitValue,
 			};
 
-			auto graphicsEndTimeline = swapchain.getCommandList().getGraphicsQueue().stepTimeline();
+			auto graphicsEndTimeline = swapchain.getCommandList().getGraphicsQueue().stepTimeline(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
 
 			std::vector<VkSemaphore> imguiSignalSemaphores =
 			{
 				swapchain.getCurrentFrameFinishSemaphore(),
-				graphicsEndTimeline.timeline,
+				graphicsEndTimeline.semaphore,
 			};
 
 			std::vector<uint64> signalSemaphoreValues =

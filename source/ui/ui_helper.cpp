@@ -185,15 +185,16 @@ namespace chord::ui
 		{
 			ImGui::TextDisabled(utf8::utf16to8(info.relativeAssetStorePath().u16string()).c_str());
 		}
-
 	}
-
-
 
 	void ui::drawImage(
 		graphics::GPUTextureRef image, 
 		const VkImageSubresourceRange& subRange, 
-		const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
+		const ImVec2& size, 
+		const ImVec2& uv0, 
+		const ImVec2& uv1, 
+		const ImVec4& tint_col, 
+		const ImVec4& border_col)
 	{
 		if (ImGui::GetCurrentWindow()->Viewport == nullptr)
 		{
@@ -208,38 +209,29 @@ namespace chord::ui
 		}
 
 		graphics::Swapchain& swapchain = vrd->swapchain();
-		swapchain.insertPendingResource(image);
+		swapchain.addReferenceResource(image);
 
 		// Require image view.
 		ImGui::Image(image->requireView(subRange, VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get(), size, uv0, uv1, tint_col, border_col);
 	}
 
-	void drawImage(graphics::PoolTextureRef image, const VkImageSubresourceRange& subRange, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
+	void ui::drawImage(
+		graphics::PoolTextureRef image, 
+		const VkImageSubresourceRange& subRange, 
+		const ImVec2& size, 
+		const ImVec2& uv0, 
+		const ImVec2& uv1, 
+		const ImVec4& tint_col, 
+		const ImVec4& border_col)
 	{
-		if (ImGui::GetCurrentWindow()->Viewport == nullptr)
-		{
-			return;
-		}
-
-		// Insert pending resource avoid release.
-		auto* vrd = (ImGuiViewportData*)ImGui::GetCurrentWindow()->Viewport->RendererUserData;
-		if (vrd == nullptr)
-		{
-			return;
-		}
-
-		graphics::Swapchain& swapchain = vrd->swapchain();
-
-		// When draw image, we need to keep pool content unchange until frame end.
-		// So should not reuse it.
-		swapchain.insertPendingResource<graphics::GPUTexturePool::PoolTexture, false>(image);
-
-		// Require image view.
-		ImGui::Image(image->get().requireView(subRange, VK_IMAGE_VIEW_TYPE_2D, true, false).SRV.get(), size, uv0, uv1, tint_col, border_col);
+		ui::drawImage(image->getGPUTextureRef(), subRange, size, uv0, uv1, tint_col, border_col);
 	}
 
-	static ImVector<ImRect> sGroupPanelLabelStack;
-	void chord::ui::beginGroupPanel(const char* name, const ImVec2& size)
+	void chord::ui::drawGroupPannel(
+		const char* name,
+		std::function<void()>&& lambda, 
+		float pushItemWidth, 
+		const ImVec2& size)
 	{
 		ImGui::BeginGroup();
 
@@ -252,12 +244,9 @@ namespace chord::ui
 		ImGui::BeginGroup();
 
 		ImVec2 effectiveSize = size;
-		if (size.x < 0.0f)
-			effectiveSize.x = ImGui::GetContentRegionAvail().x;
-		else
-			effectiveSize.x = size.x;
-		ImGui::Dummy(ImVec2(effectiveSize.x, 0.0f));
+		effectiveSize.x = size.x < 0.0f ? ImGui::GetContentRegionAvail().x : size.x;
 
+		ImGui::Dummy(ImVec2(effectiveSize.x, 0.0f));
 		ImGui::Dummy(ImVec2(frameHeight * 0.5f, 0.0f));
 		ImGui::SameLine(0.0f, 0.0f);
 		ImGui::BeginGroup();
@@ -280,22 +269,26 @@ namespace chord::ui
 		auto itemWidth = ImGui::CalcItemWidth();
 		ImGui::PushItemWidth(ImMax(0.0f, itemWidth - frameHeight));
 
-		sGroupPanelLabelStack.push_back(ImRect(labelMin, labelMax));
-	}
+		auto labelRect = ImRect(labelMin, labelMax);
 
-	void chord::ui::endGroupPanel()
-	{
+		if (pushItemWidth > 0.0)
+		{
+			ImGui::PushItemWidth(pushItemWidth);
+		}
+
+		lambda();
+
+		if (pushItemWidth > 0.0)
+		{
+			ImGui::PopItemWidth();
+		}
+
 		ImGui::PopItemWidth();
-
-		auto itemSpacing = ImGui::GetStyle().ItemSpacing;
 
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
-		auto frameHeight = ImGui::GetFrameHeight();
-
 		ImGui::EndGroup();
-
 		ImGui::EndGroup();
 
 		ImGui::SameLine(0.0f, 0.0f);
@@ -306,9 +299,6 @@ namespace chord::ui
 
 		auto itemMin = ImGui::GetItemRectMin();
 		auto itemMax = ImGui::GetItemRectMax();
-
-		auto labelRect = sGroupPanelLabelStack.back();
-		sGroupPanelLabelStack.pop_back();
 
 		ImVec2 halfFrame = ImVec2(frameHeight * 0.25f * 0.5f, frameHeight * 0.5f);
 		ImRect frameRect = ImRect(

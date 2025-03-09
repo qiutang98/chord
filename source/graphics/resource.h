@@ -69,6 +69,25 @@ namespace chord::graphics
 	};
 	using GPUResourceRef = std::shared_ptr<GPUResource>;
 
+	class IPoolResource : public IResource
+	{
+	public:
+		explicit IPoolResource(bool bSameFrameReuse)
+			: m_bSameFrameReuse(bSameFrameReuse)
+		{
+		}
+
+		bool shouldSameFrameReuse() const
+		{
+			return m_bSameFrameReuse;
+		}
+
+		virtual GPUResourceRef getGPUResourceRef() const = 0;
+
+	private:
+		const bool m_bSameFrameReuse;
+	};
+
 	class ImageView
 	{
 	public:

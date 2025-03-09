@@ -1,6 +1,6 @@
 #pragma once
 #include <graphics/common.h>
-#include <graphics/command.h>
+#include <graphics/command_list.h>
 
 namespace chord::graphics
 {
@@ -91,17 +91,28 @@ namespace chord::graphics
 
 		
 		template<typename T, bool bCheckPoolType = true>
-		void insertPendingResource(std::shared_ptr<T> resource)
+		void addReferenceResource(std::shared_ptr<T> resource)
 		{
 			static_assert( std::is_base_of_v<IResource, T>);
 			if constexpr (bCheckPoolType)
 			{
-				// Warning: insert pending resource will keep resource alive until current frame end all command execution.
-				static_assert(!std::is_base_of_v<GPUTexturePool::PoolTexture, T>);
-				static_assert(!std::is_base_of_v<GPUBufferPool::PoolBuffer, T>);
+				// Warning: insert reference resource will keep resource alive until current frame end all command execution.
+				static_assert(!std::is_base_of_v<IPoolResource, T>);
+			}
+			else
+			{
+				if constexpr (std::is_base_of_v<IPoolResource, T>)
+				{
+					auto ptr = std::dynamic_pointer_cast<IPoolResource>(resource);
+					if (ptr->shouldSameFrameReuse())
+					{
+						m_pendingResources.at(m_currentFrame).push_back(ptr->getGPUResourceRef());
+						return;
+					}
+				}
 			}
 
-			m_pendingResources.at(m_currentFrame).insert(resource);
+			m_pendingResources.at(m_currentFrame).push_back(resource);
 		}
 
 		auto& getCommandList() { return *m_commandList; }
@@ -160,7 +171,7 @@ namespace chord::graphics
 		std::vector<VkFence> m_imagesInFlight;
 
 		// Pending resources.
-		std::vector<std::unordered_set<ResourceRef>> m_pendingResources;
+		std::vector<std::vector<ResourceRef>> m_pendingResources;
 		std::unique_ptr<CommandList> m_commandList;
 
 		// Swapchain dirty need rebuild context.

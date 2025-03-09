@@ -21,8 +21,7 @@ static inline bool drawCascadeConfig(CascadeShadowMapConfig& inout)
 
 	if (ImGui::CollapsingHeader("Cascade Shadow Setting"))
 	{
-		ui::beginGroupPanel("Cascade Config");
-		ImGui::PushItemWidth(100.0f);
+		ui::drawGroupPannel("Cascade Config", [&]()
 		{
 			ImGui::DragInt("Count", &copyValue.cascadeCount, 1.0f, 1, (int)kMaxCascadeCount);
 			ImGui::DragInt("Realtime Count", &copyValue.realtimeCascadeCount, 1.0f, 1, copyValue.cascadeCount);
@@ -38,14 +37,11 @@ static inline bool drawCascadeConfig(CascadeShadowMapConfig& inout)
 			ImGui::DragFloat("Near End Distance", &copyValue.cascadeEndDistance, 10.0f, copyValue.cascadeStartDistance + 1.0f, 2000.0f);
 
 			ImGui::DragFloat("Far End Distance", &copyValue.farCascadeEndDistance, 10.0f, copyValue.cascadeEndDistance + 200.0f, 2000.0f);
-		}
-		ImGui::PopItemWidth();
-		ui::endGroupPanel();
+		}, 100.0f);
 
 		ImGui::Separator();
 
-		ui::beginGroupPanel("Filtered Config");
-		ImGui::PushItemWidth(100.0f);
+		ui::drawGroupPannel("Filtered Config", [&]()
 		{
 			ImGui::Checkbox("CoD PCF", &copyValue.bContactHardenPCF);
 
@@ -58,14 +54,10 @@ static inline bool drawCascadeConfig(CascadeShadowMapConfig& inout)
 			ImGui::DragFloat("Blocker Range Scale", &copyValue.blockerSearchMaxRangeScale, 0.01f, 0.01f, 1.0f);
 
 			copyValue.blockerSearchMaxRangeScale = math::clamp(copyValue.blockerSearchMaxRangeScale, 0.01f, 1.0f);
-		}
-		ImGui::PopItemWidth();
-		ui::endGroupPanel();
-
+		}, 100.0f);
 		ImGui::Separator();
 
-		ui::beginGroupPanel("Bias Config");
-		ImGui::PushItemWidth(100.0f);
+		ui::drawGroupPannel("Bias Config", [&]()
 		{
 			ImGui::DragFloat("Cascade Border Jitter", &copyValue.cascadeBorderJitterCount, 0.01f, 1.0, 4.0f);
 
@@ -78,9 +70,7 @@ static inline bool drawCascadeConfig(CascadeShadowMapConfig& inout)
 			ImGui::DragFloat("Bias Slope", &copyValue.shadowBiasSlope, 0.01f, -5.0f, 5.0f);
 
 			ImGui::DragInt("ShadowMask Blur Pass Count", &copyValue.shadowMaskFilterCount, 0, 5);
-		}
-		ImGui::PopItemWidth();
-		ui::endGroupPanel();
+		}, 100.0f);
 	}
 
 	copyValue.minPCFSampleCount = math::min(copyValue.minPCFSampleCount, 127);

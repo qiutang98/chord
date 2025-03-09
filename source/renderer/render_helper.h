@@ -3,7 +3,7 @@
 #include <graphics/resource.h>
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
-#include <graphics/bufferpool.h>
+#include <graphics/buffer_pool.h>
 #include <graphics/common.h>
 
 namespace chord

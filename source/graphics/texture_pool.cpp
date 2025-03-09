@@ -1,4 +1,4 @@
-#include <graphics/rendertargetpool.h>
+#include <graphics/texture_pool.h>
 #include <graphics/graphics.h>
 #include <graphics/resource.h>
 #include <utils/cityhash.h>

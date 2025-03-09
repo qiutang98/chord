@@ -58,11 +58,11 @@ namespace chord::ui
 		graphics::PoolTextureRef  image,
 		const VkImageSubresourceRange& subRange,
 		const ImVec2& size, const ImVec2& uv0 = ImVec2(0, 0), const ImVec2& uv1 = ImVec2(1, 1), const ImVec4& tint_col = ImVec4(1, 1, 1, 1), const ImVec4& border_col = ImVec4(0, 0, 0, 0));
-
-	// No thread safe.
-	extern void beginGroupPanel(const char* name, const ImVec2& size = ImVec2(0.0f, 0.0f));
-	// No thread safe.
-	extern void endGroupPanel();
+	 
+	extern void drawGroupPannel( 
+		const char* name,
+		std::function<void()>&& lambda,
+		float pushItemWidth = 0.0f, const ImVec2& size = ImVec2(0.0f, 0.0f));
 }
 
 
