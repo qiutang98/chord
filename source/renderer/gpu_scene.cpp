@@ -35,12 +35,12 @@ namespace chord
 		std::vector<math::uvec4> collectedData = inCollectedData;
 		std::vector<math::uvec4> indexingData = inIndexingData;
 
-		auto indexingDataBuffer = getContext().getBufferPool().createHostVisible(
+		auto indexingDataBuffer = getContext().getBufferPool().createHostVisibleCopyUpload(
 			"indexingDataBuffer", 
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
 			SizedBuffer(sizeof(math::uvec4) * indexingData.size(), (void*)indexingData.data()));
 
-		auto collectedDataBuffer = getContext().getBufferPool().createHostVisible(
+		auto collectedDataBuffer = getContext().getBufferPool().createHostVisibleCopyUpload(
 			"collectedDataBuffer",
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			SizedBuffer(sizeof(math::uvec4) * collectedData.size(), (void*)collectedData.data()));
@@ -69,7 +69,7 @@ namespace chord
 			return;
 		}
 
-		CallOnceInOneFrameEvent::functions.add([](const ApplicationTickData& tickData, graphics::GraphicsQueue& graphics)
+		CallOnceInOneFrameEvent::add([](const ApplicationTickData& tickData, graphics::GraphicsQueue& graphics)
 		{
 			auto& GPUScene = Application::get().getGPUScene();
 			GPUScene.update(tickData.tickCount, graphics);

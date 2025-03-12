@@ -72,7 +72,7 @@ namespace chord
         // Render cpu require debug line.
         if (!ctx.vertices.empty())
         {
-            auto verticesBuffer = getContext().getBufferPool().createHostVisible(
+            auto verticesBuffer = getContext().getBufferPool().createHostVisibleCopyUpload(
                 "CPUDebugLineVerticesBuffer",
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 SizedBuffer(sizeof(LineDrawVertex) * ctx.vertices.size(), (void*)ctx.vertices.data()));

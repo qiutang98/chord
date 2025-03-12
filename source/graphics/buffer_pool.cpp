@@ -136,19 +136,18 @@ namespace chord::graphics
 		return std::make_shared<GPUBufferPool::GPUOnlyPoolBuffer>(buffer, hashId, *this, bSameFrameReuse);
 	}
 
-
-
 	PoolBufferHostVisible GPUBufferPool::createHostVisible(
 		const std::string& name,
 		VkBufferUsageFlags usage,
 		SizedBuffer data,
+		VmaAllocationCreateInfo vmaAllocationInfo,
 		VkBufferCreateFlags flags)
 	{
 		PoolBufferCreateInfo poolInfo{};
 		poolInfo.flags = flags;
-		poolInfo.size  = divideRoundingUp(data.size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
+		poolInfo.size = divideRoundingUp(data.size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
 		poolInfo.usage = usage;
-		poolInfo.vmaCreateFlag = getHostVisibleGPUBufferVMACI().flags;
+		poolInfo.vmaCreateFlag = vmaAllocationInfo.flags;
 
 		const uint64 hashId = cityhash::cityhash64((const char*)&poolInfo, sizeof(poolInfo));
 		auto& freeBuffers = m_buffers[hashId];
@@ -158,12 +157,12 @@ namespace chord::graphics
 		{
 			VkBufferCreateInfo ci{};
 			ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			ci.size  = poolInfo.size;
+			ci.size = poolInfo.size;
 			ci.usage = poolInfo.usage;
 			ci.flags = poolInfo.flags;
 			ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-			buffer = std::make_shared<HostVisibleGPUBuffer>(name, ci, data);
+			buffer = std::make_shared<HostVisibleGPUBuffer>(name, ci, vmaAllocationInfo, data);
 		}
 		else
 		{
@@ -183,6 +182,24 @@ namespace chord::graphics
 		}
 
 		return std::make_shared<GPUBufferPool::HostVisiblePoolBuffer>(buffer, hashId, *this);
+	}
+
+	PoolBufferHostVisible GPUBufferPool::createHostVisibleCopyUpload(
+		const std::string& name,
+		VkBufferUsageFlags usage,
+		SizedBuffer data,
+		VkBufferCreateFlags flags)
+	{
+		return createHostVisible(name, usage, data, getHostVisibleCopyUploadGPUBufferVMACI(), flags);
+	}
+
+	PoolBufferHostVisible GPUBufferPool::createHostVisibleReadBack(
+		const std::string& name, 
+		VkDeviceSize size,
+		VkBufferUsageFlags usage, 
+		VkBufferCreateFlags flags)
+	{
+		return createHostVisible(name, usage, SizedBuffer(size, nullptr), getHostVisibleReadBackGPUBufferVMACI(), flags);
 	}
 
 	GPUBufferPool::PoolBuffer::~PoolBuffer()

@@ -287,11 +287,20 @@ namespace chord::graphics
 	};
 	using GPUOnlyBufferRef = std::shared_ptr<GPUOnlyBuffer>;
 
-	static inline VmaAllocationCreateInfo getHostVisibleGPUBufferVMACI()
+	static inline VmaAllocationCreateInfo getHostVisibleCopyUploadGPUBufferVMACI()
 	{
 		VmaAllocationCreateInfo vmaAllocInfo = {};
 		vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
 		vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+		return vmaAllocInfo;
+	}
+
+	static inline VmaAllocationCreateInfo getHostVisibleReadBackGPUBufferVMACI()
+	{
+		VmaAllocationCreateInfo vmaAllocInfo = {};
+		vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+		vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
 		return vmaAllocInfo;
 	}
@@ -305,6 +314,7 @@ namespace chord::graphics
 		explicit HostVisibleGPUBuffer(
 			const std::string& name, 
 			const VkBufferCreateInfo& createInfo,
+			const VmaAllocationCreateInfo& vmaCreateInfo,
 			SizedBuffer data = { });
 
 		virtual ~HostVisibleGPUBuffer();
@@ -328,7 +338,5 @@ namespace chord::graphics
 		void* m_mapped = nullptr;
 	};
 	using HostVisibleGPUBufferRef = std::shared_ptr<HostVisibleGPUBuffer>;
-
-
 
 }

@@ -276,8 +276,8 @@ namespace chord::graphics
 		ci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 		ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		return std::make_shared<HostVisibleGPUBuffer>(name, ci, data);
-	}
+		return std::make_shared<HostVisibleGPUBuffer>(name, ci, getHostVisibleCopyUploadGPUBufferVMACI(), data);
+	} 
 
 	void Context::waitDeviceIdle() const
 	{
@@ -1098,6 +1098,8 @@ namespace chord::graphics
 
 	void Context::release()
 	{
+		CallOnceInOneFrameEvent::clean();
+
 		m_asyncUploader.reset();
 		m_imguiManager.reset();
 

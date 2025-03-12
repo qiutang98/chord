@@ -23,6 +23,23 @@ namespace chord::graphics::helper
 		return range;
 	}
 
+	static uint32 getPixelSize(VkFormat format)
+	{
+		switch (format)
+		{
+		case VK_FORMAT_R32G32B32A32_SFLOAT:
+			return sizeof(float) * 4;
+		case VK_FORMAT_R32G32_SFLOAT:
+			return sizeof(float) * 2;
+		case VK_FORMAT_R16G16_SFLOAT:
+			return sizeof(float);
+		default:
+			checkEntry();
+			break;
+		}
+		return 0;
+	}
+
 	static inline VkImageSubresourceRange buildDepthImageSubresource(bool bStencil = false)
 	{
 		return buildBasicImageSubresource(bStencil ? VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT);

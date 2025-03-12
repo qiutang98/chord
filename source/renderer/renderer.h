@@ -22,7 +22,7 @@ namespace chord
 
 		VkBufferUsageFlags usageFlag = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-		auto newGPUBuffer = getContext().getBufferPool().createHostVisible(
+		auto newGPUBuffer = getContext().getBufferPool().createHostVisibleCopyUpload(
 			name,
 			usageFlag,
 			SizedBuffer(sizeof(T) * count, (void*)data));

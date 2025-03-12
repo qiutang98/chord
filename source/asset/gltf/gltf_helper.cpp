@@ -767,12 +767,12 @@ namespace chord
 			vertices[i].normal   = rawVertices[i].normal;
 		}
 
-		result->indices = getContext().getBufferPool().createHostVisible(
+		result->indices = getContext().getBufferPool().createHostVisibleCopyUpload(
 			loadPath + "_indices",
 			VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 			SizedBuffer(sizeof(rawIndices[0]) * rawIndices.size(), (void*)rawIndices.data()));
 
-		result->vertices = getContext().getBufferPool().createHostVisible(
+		result->vertices = getContext().getBufferPool().createHostVisibleCopyUpload(
 			loadPath + "_vertices",
 			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 			SizedBuffer(sizeof(vertices[0]) * vertices.size(), (void*)vertices.data()));

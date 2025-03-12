@@ -130,3 +130,7 @@ namespace glm
 #define TINYGLTF_NO_INCLUDE_JSON 
 #define TINYGLTF_NO_INCLUDE_STB_IMAGE
 #include <tinygltf/tiny_gltf.h>
+
+#define TINYEXR_USE_MINIZ 0
+#define TINYEXR_USE_STB_ZLIB 1
+#include <tinyexr/tinyexr.h>

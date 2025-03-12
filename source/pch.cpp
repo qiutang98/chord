@@ -18,3 +18,6 @@
 
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
+
+#define TINYEXR_IMPLEMENTATION
+#include <tinyexr/tinyexr.h>

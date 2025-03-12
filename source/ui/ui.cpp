@@ -145,7 +145,7 @@ namespace chord
 				{
 					bufferCI.size = vertexSize;
 					bufferCI.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-					rb.verticesBuffer = std::make_shared<HostVisibleGPUBuffer>("ImGuiVertices", bufferCI);
+					rb.verticesBuffer = std::make_shared<HostVisibleGPUBuffer>("ImGuiVertices", bufferCI, getHostVisibleCopyUploadGPUBufferVMACI());
 				}
 
 				if (!rb.indicesBuffer || rb.indicesBuffer->getSize() < indexSize)
@@ -153,7 +153,7 @@ namespace chord
 					bufferCI.size = indexSize;
 					bufferCI.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 
-					rb.indicesBuffer = std::make_shared<HostVisibleGPUBuffer>("ImGuiIndices", bufferCI);
+					rb.indicesBuffer = std::make_shared<HostVisibleGPUBuffer>("ImGuiIndices", bufferCI, getHostVisibleCopyUploadGPUBufferVMACI());
 				}
 			}
 

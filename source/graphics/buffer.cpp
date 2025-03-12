@@ -157,8 +157,9 @@ namespace chord::graphics
 	HostVisibleGPUBuffer::HostVisibleGPUBuffer(
 		const std::string& name,
 		const VkBufferCreateInfo& createInfo,
+		const VmaAllocationCreateInfo& vmaCreateInfo,
 		SizedBuffer data)
-		: GPUBuffer(name, createInfo, getHostVisibleGPUBufferVMACI())
+		: GPUBuffer(name, createInfo, vmaCreateInfo)
 	{
 		if (data.isValid())
 		{

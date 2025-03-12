@@ -62,6 +62,8 @@ namespace chord::graphics
 
 		// Last time submit command required wait flags.
 		VkPipelineStageFlags waitFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+		void waitFinish() const;
 	};
 
 	class Queue : NonCopyable
@@ -99,6 +101,7 @@ namespace chord::graphics
 
 	public:
 		void copyBuffer(PoolBufferRef src, PoolBufferRef dest, size_t size, size_t srcOffset = 0, size_t destOffset = 0);
+		PoolBufferHostVisible copyImageToReadBackBuffer(PoolTextureRef src);
 
 	private:
 		CommandBufferRef getOrCreateCommandBuffer();
@@ -198,9 +201,12 @@ namespace chord::graphics
 	{
 	private:
 		static uint64 m_frameCounter;
+		static uint32 m_usingIndex;
+		static std::vector<std::function<void(const ApplicationTickData&, graphics::GraphicsQueue&)>> m_functions[2];
 
 	public:
-		static CallOnceEvents<CallOnceInOneFrameEvent, const ApplicationTickData&, graphics::GraphicsQueue&> functions;
+		static void add(std::function<void(const ApplicationTickData&, graphics::GraphicsQueue&)>&& func);
 		static void flush(const ApplicationTickData& tickData, graphics::GraphicsQueue& queue);
+		static void clean();
 	};
 }

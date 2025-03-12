@@ -38,7 +38,7 @@ namespace chord::graphics
 
 	void Queue::copyBuffer(PoolBufferRef src, PoolBufferRef dest, size_t size, size_t srcOffset, size_t destOffset)
 	{
-		auto cmd = m_activeCmdCtx.command;
+		auto& cmd = m_activeCmdCtx.command;
 		cmd->addReferenceResource(src);
 		cmd->addReferenceResource(dest);
 
@@ -69,6 +69,8 @@ namespace chord::graphics
 
 		vkCmdCopyBuffer2(cmd->commandBuffer, &copyInfo);
 	}
+
+
 
 	CommandBufferRef Queue::getOrCreateCommandBuffer()
 	{
@@ -316,9 +318,49 @@ namespace chord::graphics
 		vkCmdClearDepthStencilImage(cmd->commandBuffer, image->get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, clear, 1, &rangeClearDepth);
 	}
 
+	PoolBufferHostVisible Queue::copyImageToReadBackBuffer(PoolTextureRef src)
+	{
+		PoolBufferHostVisible dest = getContext().getBufferPool().createHostVisibleReadBack(
+			"ReadBackBuffer",
+			src->getGPUTextureRef()->getExtent().width *
+			src->getGPUTextureRef()->getExtent().height *
+			graphics::helper::getPixelSize(src->getGPUTextureRef()->getFormat()));
+
+		auto& cmd = m_activeCmdCtx.command;
+		cmd->addReferenceResource(src);
+		cmd->addReferenceResource(dest);
+
+		VkBufferImageCopy copyRegion{};
+
+		copyRegion.bufferOffset = 0;
+		copyRegion.bufferRowLength = 0;
+		copyRegion.bufferImageHeight = 0;
+
+		copyRegion.imageOffset = { 0, 0, 0 };
+		copyRegion.imageExtent = src->getGPUTextureRef()->getExtent();
+
+
+		copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		copyRegion.imageSubresource.baseArrayLayer = 0;
+		copyRegion.imageSubresource.layerCount = 1;
+		copyRegion.imageSubresource.mipLevel = 0;
+
+		GPUTextureSyncBarrierMasks mask;
+		mask.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		mask.barrierMasks.accesMask = VK_ACCESS_TRANSFER_READ_BIT;
+		mask.barrierMasks.queueFamilyIndex = getFamily();
+
+		// 
+		src->get().transition(cmd->commandBuffer, mask, helper::buildBasicImageSubresource());
+		// 
+		vkCmdCopyImageToBuffer(cmd->commandBuffer, src->get(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dest->get(), 1, &copyRegion);
+
+		return dest;
+	}
+
 	void GraphicsQueue::transitionPresent(PoolTextureRef image)
 	{
-		auto cmd = m_activeCmdCtx.command;
+		auto& cmd = m_activeCmdCtx.command;
 		cmd->addReferenceResource(image);
 
 		GPUTextureSyncBarrierMasks mask;
@@ -440,7 +482,14 @@ namespace chord::graphics
 	}
 
 	uint64 CallOnceInOneFrameEvent::m_frameCounter = -1;
-	CallOnceEvents<CallOnceInOneFrameEvent, const ApplicationTickData&, graphics::GraphicsQueue&> CallOnceInOneFrameEvent::functions = {};
+	uint32 CallOnceInOneFrameEvent::m_usingIndex = 0;
+	std::vector<std::function<void(const ApplicationTickData&, graphics::GraphicsQueue&)>> CallOnceInOneFrameEvent::m_functions[2] = {};
+
+	void CallOnceInOneFrameEvent::add(std::function<void(const ApplicationTickData&, graphics::GraphicsQueue&)>&& func)
+	{
+		m_functions[m_usingIndex].push_back(func);
+	}
+
 	void CallOnceInOneFrameEvent::flush(const ApplicationTickData& tickData, graphics::GraphicsQueue& queue)
 	{
 		if (m_frameCounter == tickData.tickCount)
@@ -449,7 +498,32 @@ namespace chord::graphics
 		}
 
 		m_frameCounter = tickData.tickCount;
-		functions.brocast(tickData, queue);
+		auto loopingIndex = m_usingIndex;
+		m_usingIndex = (m_usingIndex == 0) ? 1 : 0;
+
+		//
+		for (auto& func : m_functions[loopingIndex])
+		{
+			func(tickData, queue);
+		}
+		m_functions[loopingIndex].clear();
+	}
+
+	void CallOnceInOneFrameEvent::clean()
+	{
+		m_functions[0].clear();
+		m_functions[1].clear();
+	}
+
+	void QueueTimeline::waitFinish() const
+	{
+		VkSemaphoreWaitInfo waitInfo{};
+		waitInfo.sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+		waitInfo.pSemaphores    = &semaphore;
+		waitInfo.semaphoreCount = 1;
+		waitInfo.pValues        = &waitValue;
+
+		vkWaitSemaphores(getDevice(), &waitInfo, UINT64_MAX);
 	}
 }
 

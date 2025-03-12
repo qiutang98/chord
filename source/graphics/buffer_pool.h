@@ -87,7 +87,7 @@ namespace chord::graphics
 			friend GPUBufferPool;
 		public:
 			explicit HostVisiblePoolBuffer(HostVisibleGPUBufferRef inBuffer, uint64 hashId, GPUBufferPool& pool)
-				: PoolBuffer(inBuffer, hashId, pool, false)
+				: PoolBuffer(inBuffer, hashId, pool, false) // Host visible buffer can't be reused in same frame.
 			{
 			}
 
@@ -103,6 +103,19 @@ namespace chord::graphics
 			const std::string& name,
 			VkBufferUsageFlags usage,
 			SizedBuffer data,
+			VmaAllocationCreateInfo vmaAllocationInfo,
+			VkBufferCreateFlags flags = 0);
+
+		std::shared_ptr<HostVisiblePoolBuffer> createHostVisibleCopyUpload(
+			const std::string& name,
+			VkBufferUsageFlags usage,
+			SizedBuffer data,
+			VkBufferCreateFlags flags = 0);
+
+		std::shared_ptr<HostVisiblePoolBuffer> createHostVisibleReadBack(
+			const std::string& name,
+			VkDeviceSize size,
+			VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VkBufferCreateFlags flags = 0);
 
 	private:

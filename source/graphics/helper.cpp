@@ -73,7 +73,7 @@ namespace chord::graphics::helper
 		// Copy instance matrix to buffer.
 		VkDeviceAddress instBufferAddr;
 		{
-			auto instanceGPU = getContext().getBufferPool().createHostVisible(
+			auto instanceGPU = getContext().getBufferPool().createHostVisibleCopyUpload(
 				getRuntimeUniqueGPUASName("TLAS_Instances"),
 				VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 				SizedBuffer(sizeof(instances[0]) * instances.size(), (void*)instances.data()));
