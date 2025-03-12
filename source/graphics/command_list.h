@@ -102,6 +102,7 @@ namespace chord::graphics
 	public:
 		void copyBuffer(PoolBufferRef src, PoolBufferRef dest, size_t size, size_t srcOffset = 0, size_t destOffset = 0);
 		PoolBufferHostVisible copyImageToReadBackBuffer(PoolTextureRef src);
+		void uploadTexture(PoolTextureRef dest, SizedBuffer buffer);
 
 	private:
 		CommandBufferRef getOrCreateCommandBuffer();

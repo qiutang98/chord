@@ -358,6 +358,35 @@ namespace chord::graphics
 		return dest;
 	}
 
+	void Queue::uploadTexture(PoolTextureRef dest, SizedBuffer buffer)
+	{
+		auto stageBuffer = getContext().getBufferPool().createHostVisibleCopyUpload("UploadTexture", VK_BUFFER_USAGE_TRANSFER_SRC_BIT, buffer);
+
+		auto& cmd = m_activeCmdCtx.command;
+		cmd->addReferenceResource(stageBuffer);
+		cmd->addReferenceResource(dest);
+
+		const auto range = helper::buildBasicImageSubresource();
+
+		GPUTextureSyncBarrierMasks copyState{};
+		copyState.barrierMasks.queueFamilyIndex = getFamily();
+		copyState.barrierMasks.accesMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		copyState.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		dest->get().transition(cmd->commandBuffer, copyState, range);
+
+		VkBufferImageCopy region{};
+		region.bufferOffset = 0;
+		region.bufferRowLength = 0;
+		region.bufferImageHeight = 0;
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		region.imageSubresource.mipLevel = 0;
+		region.imageSubresource.baseArrayLayer = 0;
+		region.imageSubresource.layerCount = 1;
+		region.imageOffset = { 0, 0, 0 };
+		region.imageExtent = dest->get().getExtent();
+		vkCmdCopyBufferToImage(cmd->commandBuffer, stageBuffer->get(), dest->get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+	}
+
 	void GraphicsQueue::transitionPresent(PoolTextureRef image)
 	{
 		auto& cmd = m_activeCmdCtx.command;
