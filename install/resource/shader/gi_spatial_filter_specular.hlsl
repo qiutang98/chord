@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_SPATIAL_FILTER_SPECULAR_HLSL
+#define SHADER_GI_SPATIAL_FILTER_SPECULAR_HLSL
+
 #include "gi.h"
 
 struct GISpecularSpatialFilterPushConsts
@@ -156,3 +159,5 @@ void mainCS(
     storeRWTexture2D_float4(pushConsts.UAV, tid, specularAccumulate);
 }
 #endif 
+
+#endif // SHADER_GI_SPATIAL_FILTER_SPECULAR_HLSL

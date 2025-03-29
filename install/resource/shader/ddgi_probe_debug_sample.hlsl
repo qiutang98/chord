@@ -1,3 +1,6 @@
+#ifndef SHADER_DDGI_PROBE_DEBUG_SAMPLE_HLSL
+#define SHADER_DDGI_PROBE_DEBUG_SAMPLE_HLSL
+
 #include "ddgi.h"
 
 struct DDGIDebugSamplePushConsts
@@ -89,3 +92,5 @@ void mainCS(
 }
 
 #endif //!__cplusplus
+
+#endif // SHADER_DDGI_PROBE_DEBUG_SAMPLE_HLSL

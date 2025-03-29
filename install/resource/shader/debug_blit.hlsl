@@ -1,3 +1,6 @@
+#ifndef SHADER_DEBUG_BLIT_HLSL
+#define SHADER_DEBUG_BLIT_HLSL
+
 #include "base.h"
 
 struct DebugBlitPushConsts
@@ -44,3 +47,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_DEBUG_BLIT_HLSL

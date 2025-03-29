@@ -1,3 +1,6 @@
+#ifndef SHADER_HZB_HLSL
+#define SHADER_HZB_HLSL
+
 // One pass hzb. 
 #include "base.h"
 
@@ -386,3 +389,5 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
 }
 
 #endif // !__cplusplus
+
+#endif // SHADER_HZB_HLSL

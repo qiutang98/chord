@@ -1,3 +1,6 @@
+#ifndef SHADER_HZB_CULLING_GENERIC_HLSL
+#define SHADER_HZB_CULLING_GENERIC_HLSL
+
 #include "gltf.h"
 
 // One pass culling for shadow view.
@@ -169,3 +172,5 @@ void mainCS(uint threadId : SV_DispatchThreadID)
 }
 
 #endif // !__cplusplus
+
+#endif // SHADER_HZB_CULLING_GENERIC_HLSL

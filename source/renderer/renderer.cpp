@@ -16,8 +16,8 @@
 #include <scene/scene.h>
 #include <renderer/lighting.h>
 
-using namespace chord;
-using namespace chord::graphics;
+namespace chord
+{
 
 static uint32 sGIMethod = 0;
 static AutoCVarRef cVarEnableDDGI(
@@ -54,8 +54,9 @@ DeferredRenderer::~DeferredRenderer()
 	m_rendererTimer.release();
 }
 
-PoolTextureRef DeferredRenderer::getOutput()
+graphics::PoolTextureRef DeferredRenderer::getOutput()
 {
+	using namespace graphics;
 	if (!m_outputTexture)
 	{
 		const std::string name = std::format("{}-Output", m_name);
@@ -142,6 +143,8 @@ void DeferredRenderer::render(
 	graphics::CommandList& cmd,
 	ICamera* camera)
 {
+	using namespace graphics;
+
 	const uint32 currentRenderWidth = m_dimensionConfig.getRenderWidth();
 	const uint32 currentRenderHeight = m_dimensionConfig.getRenderHeight();
 
@@ -344,7 +347,6 @@ void DeferredRenderer::render(
 		}
 
 		// Shadow depth rendering.
-
 		if (shouldRenderGLTF(gltfRenderCtx))
 		{
 			cascadeContext = chord::renderShadow(cmd, graphics, gltfRenderCtx, m_perframeCameraView, m_rendererHistory.cascadeCtx, sunShadowConfig, tickData, *camera, sunDirection, hzbCtx);
@@ -500,6 +502,8 @@ void DeferredRenderer::render(
 
 GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
 {
+	using namespace graphics;
+
 	GPUBasicData result { };
 
 	result.blueNoiseCtx = getContext().getBlueNoise().getGPUBlueNoiseCtx();
@@ -539,3 +543,7 @@ GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
 	result.linearClampEdgeSampler = getContext().getSamplerManager().linearClampEdge().index.get();
 	return result;
 }
+
+
+}
+

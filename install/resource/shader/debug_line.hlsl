@@ -1,3 +1,6 @@
+#ifndef SHADER_DEBUG_LINE_HLSL
+#define SHADER_DEBUG_LINE_HLSL
+
 // Debug draw line index.
 // 
 
@@ -60,3 +63,5 @@ void mainPS(in VS2PS input, out float4 outSceneColor : SV_Target0)
 }
 
 #endif // !__cplusplus
+
+#endif // SHADER_DEBUG_LINE_HLSL

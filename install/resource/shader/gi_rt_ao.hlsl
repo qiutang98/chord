@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_RT_AO_HLSL
+#define SHADER_GI_RT_AO_HLSL
+
 #include "gi.h"
 
 struct GIRTAOPushConsts
@@ -77,3 +80,5 @@ void mainCS(uint2 tid : SV_DispatchThreadID)
 }
 
 #endif 
+
+#endif // SHADER_GI_RT_AO_HLSL

@@ -1,3 +1,6 @@
+#ifndef SHADER_BUILTIN_MESH_DRAW_HLSL
+#define SHADER_BUILTIN_MESH_DRAW_HLSL
+
 #include "base.h"
 
 struct BuiltinMeshDrawPushConst
@@ -56,3 +59,5 @@ void builtinMeshPS(in VS2PS input, out float4 outColor : SV_Target0)
 }
 
 #endif 
+
+#endif // SHADER_BUILTIN_MESH_DRAW_HLSL

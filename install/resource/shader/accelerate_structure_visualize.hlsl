@@ -1,3 +1,6 @@
+#ifndef SHADER_ACCELERATE_STRUCTURE_VISUALIZE_HLSL
+#define SHADER_ACCELERATE_STRUCTURE_VISUALIZE_HLSL
+
 // Visualize pass for accelerate structure. 
 
 #include "base.h"
@@ -119,4 +122,6 @@ void mainCS(uint2 workPos : SV_DispatchThreadID)
     storeRWTexture2D_float3(pushConsts.uav, workPos, resultColor);
 }
 
-#endif 
+#endif // !__cplusplus
+
+#endif // SHADER_ACCELERATE_STRUCTURE_VISUALIZE_HLSL

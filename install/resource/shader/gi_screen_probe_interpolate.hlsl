@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_SCREEN_PROBE_INTERPOLATE_HLSL
+#define SHADER_GI_SCREEN_PROBE_INTERPOLATE_HLSL
+
 #include "gi.h"
 
 struct GIScreenProbeInterpolatePushConsts
@@ -546,3 +549,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_GI_SCREEN_PROBE_INTERPOLATE_HLSL

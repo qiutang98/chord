@@ -6,8 +6,6 @@
 
 namespace chord
 {
-	using namespace graphics;
-
 	Events<IAsset, AssetRef> chord::onAssetMarkDirtyEvents;
 	Events<IAsset, AssetRef> chord::onAssetSavedEvents;
 	Events<IAsset, AssetRef> chord::onAssetNewlySaveToDiskEvents;

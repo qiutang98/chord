@@ -12,10 +12,20 @@ namespace chord
 	{
 		if (CVarStorage* storage = getCVarIfExistGeneric(name))
 		{
+			// Lock now.
+			std::lock_guard lock(m_lock);
+
 			if (storage->isValueTypeMatch(getTypeName<float>()))
 			{
-				((CVarStorageInterface<float>*)storage)->set(std::stof(value));
-				return true;
+				try
+				{
+					((CVarStorageInterface<float>*)storage)->set(std::stof(value));
+					return true;
+				}
+				catch (...)
+				{
+					LOG_ERROR("Can't convert input param '{}' to float.", value);
+				}
 			}
 			else if (storage->isValueTypeMatch(getTypeName<u16str>()))
 			{
@@ -25,18 +35,39 @@ namespace chord
 			}
 			else if (storage->isValueTypeMatch(getTypeName<double>()))
 			{
-				((CVarStorageInterface<double>*)storage)->set(std::stod(value));
-				return true;
+				try
+				{
+					((CVarStorageInterface<double>*)storage)->set(std::stod(value));
+					return true;
+				}
+				catch (...)
+				{
+					LOG_ERROR("Can't convert input param '{}' to double.", value);
+				}
 			}
 			else if (storage->isValueTypeMatch(getTypeName<int32>()))
 			{
-				((CVarStorageInterface<int32>*)storage)->set(std::stoi(value));
-				return true;
+				if (isDigitString(value))
+				{
+					((CVarStorageInterface<int32>*)storage)->set(std::stoi(value));
+					return true;
+				}
+				else
+				{
+					LOG_ERROR("Input param '{}' can't convert to digit format.", value);
+				}
 			}
 			else if (storage->isValueTypeMatch(getTypeName<uint32>()))
 			{
-				((CVarStorageInterface<uint32>*)storage)->set(std::stoi(value));
-				return true;
+				if (isDigitString(value))
+				{
+					((CVarStorageInterface<uint32>*)storage)->set(std::stoi(value));
+					return true;
+				}
+				else
+				{
+					LOG_ERROR("Input param '{}' can't convert to digit format.", value);
+				}
 			}
 			else if (storage->isValueTypeMatch(getTypeName<bool>()))
 			{
@@ -47,6 +78,14 @@ namespace chord
 					((CVarStorageInterface<bool>*)storage)->set(bTrue);
 					return true;
 				}
+				else
+				{
+					LOG_ERROR("Input param '{}' can't convert to bool format.", value);
+				}
+			}
+			else
+			{
+				checkEntry();
 			}
 		}
 
@@ -81,6 +120,10 @@ namespace chord
 			else if (storage->isValueTypeMatch(getTypeName<bool>()))
 			{
 				return std::to_string(((CVarStorageInterface<bool>*)storage)->get());
+			}
+			else
+			{
+				checkEntry();
 			}
 		}
 

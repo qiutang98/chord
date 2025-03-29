@@ -4,7 +4,7 @@
 #include <scene/scene_node.h>
 #include <scene/component/sky.h>
 
-using namespace chord;
+namespace chord { 
 
 const UIComponentDrawDetails SkyComponent::kComponentUIDrawDetails = SkyComponent::createComponentUIDrawDetails();
 
@@ -72,4 +72,6 @@ float3 chord::SkyComponent::getSunDirection() const
 	}
 
 	return math::normalize(kDefaultSunDirection);
+}
+
 }

@@ -201,7 +201,7 @@ namespace chord::graphics
 		}
 	}
 
-	spdlog::logger& log::get()
+	spdlog::logger& logger::get()
 	{
 		static auto logger = chord::LoggerSystem::get().registerLogger("Graphics");
 		return *logger;

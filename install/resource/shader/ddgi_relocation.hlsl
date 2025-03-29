@@ -1,3 +1,6 @@
+#ifndef SHADER_DDGI_RELOCATION_HLSL
+#define SHADER_DDGI_RELOCATION_HLSL
+
 #include "ddgi.h"
 
 struct DDGIRelocationPushConsts
@@ -177,3 +180,5 @@ void mainCS(uint dispatchId : SV_DispatchThreadID)
 }
 
 #endif // 
+
+#endif // SHADER_DDGI_RELOCATION_HLSL

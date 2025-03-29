@@ -1,3 +1,6 @@
+#ifndef SHADER_VISIBILITY_TILE_HLSL
+#define SHADER_VISIBILITY_TILE_HLSL
+
 #include "gltf.h"
 
 struct VisibilityTilePushConsts
@@ -216,3 +219,5 @@ void prepareTileParamCS()
 }
 
 #endif // !__cplusplus
+
+#endif // SHADER_VISIBILITY_TILE_HLSL

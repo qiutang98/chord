@@ -1,3 +1,6 @@
+#ifndef SHADER_HISTOGRAM_HLSL
+#define SHADER_HISTOGRAM_HLSL
+
 #include "base.h"
 
 struct HistogramPassPushConsts
@@ -60,3 +63,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_HISTOGRAM_HLSL

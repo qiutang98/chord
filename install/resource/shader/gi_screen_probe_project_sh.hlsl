@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_SCREEN_PROBE_PROJECT_SH_HLSL
+#define SHADER_GI_SCREEN_PROBE_PROJECT_SH_HLSL
+
 // Screen probe project to screen SH. 
 
 #include "gi.h"
@@ -99,9 +102,9 @@ void mainCS(
     float4 radianceHitT = loadTexture2D_float4(pushConsts.radianceSRV, tid);
 
     // 
-    float3 radiance  = radianceHitT.xyz * max(0.0, dot(probeNormalRS, rayDirection));
+    float3 radiance  = radianceHitT.xyz * max(0.0f, dot(probeNormalRS, rayDirection));
 
-    // Dark area fallback.
+    // Dark area fallback. 
     {
         float3 statRadiance = 0.0;
         if (WaveIsFirstLane()) 
@@ -149,3 +152,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_GI_SCREEN_PROBE_PROJECT_SH_HLSL

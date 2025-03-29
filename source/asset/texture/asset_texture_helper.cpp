@@ -18,11 +18,7 @@
 
 namespace chord
 {
-	using namespace graphics;
-
 	// block compression functions.
-
-
 	namespace dxt
 	{
 		constexpr uint32 kBCBlockDim = 4U;
@@ -813,8 +809,10 @@ namespace chord
 		return false;
 	}
 
-	GPUTextureAssetRef IAsset::getSnapshotImage()
+	graphics::GPUTextureAssetRef IAsset::getSnapshotImage()
 	{
+		using namespace chord::graphics;
+
 		if (auto cacheTexture = m_snapshotWeakPtr.lock())
 		{
 			return cacheTexture;

@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_SPATIAL_FILTER_DIFFUSE_HLSL
+#define SHADER_GI_SPATIAL_FILTER_DIFFUSE_HLSL
+
 #include "gi.h"
 
 struct GISpatialFilterPushConsts
@@ -102,3 +105,5 @@ void mainCS(
     }
 }
 #endif 
+
+#endif // SHADER_GI_SPATIAL_FILTER_DIFFUSE_HLSL

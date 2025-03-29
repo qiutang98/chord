@@ -5,6 +5,7 @@ set(editorIconPath "${PROJECT_SOURCE_DIR}/application/flower/icon.rc")
 
 add_executable(flower ${editorHeader} ${editorSource} ${editorIconPath})
 set_property(TARGET flower PROPERTY COMPILE_WARNING_AS_ERROR ON)
+set_property(TARGET flower PROPERTY UNITY_BUILD ON)
 
 target_link_libraries(flower PRIVATE Chord::Chord)
 

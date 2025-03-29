@@ -1,3 +1,6 @@
+#ifndef SHADER_TSR_RECITFY_HLSL
+#define SHADER_TSR_RECITFY_HLSL
+
 #include "base.h"
 #include "colorspace.h"
 
@@ -222,3 +225,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_TSR_RECITFY_HLSL

@@ -1,3 +1,6 @@
+#ifndef SHADER_LIGHTING_HLSL
+#define SHADER_LIGHTING_HLSL
+
 #include "gltf.h"
 
 struct LightingPushConsts
@@ -379,3 +382,5 @@ void mainCS(
 
 
 #endif // !__cplusplus
+
+#endif // SHADER_LIGHTING_HLSL

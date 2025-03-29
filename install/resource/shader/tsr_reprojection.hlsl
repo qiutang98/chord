@@ -1,3 +1,6 @@
+#ifndef SHADER_TSR_REPROJECTION_HLSL
+#define SHADER_TSR_REPROJECTION_HLSL
+
 #include "base.h"
 
 // Reprojection history to current frame. 
@@ -159,3 +162,5 @@ void mainCS(
 }
 
 #endif
+
+#endif // SHADER_TSR_REPROJECTION_HLSL

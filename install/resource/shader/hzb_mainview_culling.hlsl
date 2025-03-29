@@ -1,3 +1,6 @@
+#ifndef SHADER_HZB_MAINVIEW_CULLING_HLSL
+#define SHADER_HZB_MAINVIEW_CULLING_HLSL
+
 #include "gltf.h"
 
 // Two phase stage for main view culling.
@@ -210,3 +213,5 @@ void hzbMainViewCullingCS(uint threadId : SV_DispatchThreadID)
 }
 
 #endif // !__cplusplus
+
+#endif // SHADER_HZB_MAINVIEW_CULLING_HLSL

@@ -7,10 +7,8 @@
 #include <shader/base.h>
 #include <shader/hzb_one.hlsl>
 
-namespace chord
+namespace chord::graphics
 {
-	using namespace graphics;
-
     class SV_MipCount : SHADER_VARIANT_RANGE_INT("MIP_COUNT", 1, 12);
 
     class HZBCS : public GlobalShader
@@ -32,9 +30,15 @@ namespace chord
         using Permutation = TShaderVariantVector<SV_MipCount, SV_ReductionType>;
     };
     IMPLEMENT_GLOBAL_SHADER(HZBOneCS, "resource/shader/hzb_one.hlsl", "mainCS", EShaderStage::Compute);
-    
-    HZBContext chord::buildHZB(GraphicsQueue& queue, PoolTextureRef depthImage, bool bBuildMin, bool bBuildMax, bool bBuildValidRange)
+
+}
+
+namespace chord
+{
+    HZBContext chord::buildHZB(graphics::GraphicsQueue& queue, graphics::PoolTextureRef depthImage, bool bBuildMin, bool bBuildMax, bool bBuildValidRange)
     {
+        using namespace graphics;
+
         // At least need to build one type.
         check(bBuildMin || bBuildMax);
 

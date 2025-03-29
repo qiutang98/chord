@@ -12,19 +12,20 @@
 #include <renderer/compute_pass.h>
 namespace chord
 {
-	using namespace graphics;
-
-	class GPUSceneScatterUploadCS : public GlobalShader
+	namespace graphics
 	{
-	public:
-		DECLARE_SUPER_TYPE(GlobalShader);
-
-		static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId)
+		class GPUSceneScatterUploadCS : public GlobalShader
 		{
-			o.setDefine("GPUSCENE_SCATTER_UPLOAD", true);
-		}
-	};
-	IMPLEMENT_GLOBAL_SHADER(GPUSceneScatterUploadCS, "resource/shader/gpuscene.hlsl", "mainCS", EShaderStage::Compute);
+		public:
+			DECLARE_SUPER_TYPE(GlobalShader);
+
+			static void modifyCompileEnvironment(ShaderCompileEnvironment& o, int32 PermutationId)
+			{
+				o.setDefine("GPUSCENE_SCATTER_UPLOAD", true);
+			}
+		};
+		IMPLEMENT_GLOBAL_SHADER(GPUSceneScatterUploadCS, "resource/shader/gpuscene.hlsl", "mainCS", EShaderStage::Compute);
+	}
 
 	void chord::GPUSceneScatterUpload(
 		graphics::GraphicsOrComputeQueue& computeQueue,
@@ -32,6 +33,8 @@ namespace chord
 		std::vector<math::uvec4>&& inIndexingData,
 		std::vector<math::uvec4>&& inCollectedData)
 	{
+		using namespace graphics;
+
 		std::vector<math::uvec4> collectedData = inCollectedData;
 		std::vector<math::uvec4> indexingData = inIndexingData;
 
@@ -62,6 +65,8 @@ namespace chord
 
 	void chord::enqueueGPUSceneUpdate()
 	{
+		using namespace graphics;
+
 		// Only update once in once frame.
 		auto& GPUScene = Application::get().getGPUScene();
 		if (GPUScene.m_frameCounter == getFrameCounter())
@@ -91,6 +96,8 @@ namespace chord
 
 	uint32 GPUScene::getBRDFLutSRV() const
 	{
+		using namespace graphics;
+
 		auto range = graphics::helper::buildBasicImageSubresource();
 		auto viewType = VK_IMAGE_VIEW_TYPE_2D;
 

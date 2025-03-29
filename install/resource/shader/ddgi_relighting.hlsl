@@ -1,3 +1,6 @@
+#ifndef SHADER_DDGI_RELIGHTING_HLSL
+#define SHADER_DDGI_RELIGHTING_HLSL
+
 #include "ddgi.h"
 
 struct DDGIRelightingPushConsts
@@ -235,3 +238,5 @@ void mainCS(
 }
 
 #endif //!__cplusplus
+
+#endif // SHADER_DDGI_RELIGHTING_HLSL

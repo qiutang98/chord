@@ -8,8 +8,8 @@
 #include <shader/instance_culling.hlsl>
 #include <asset/mikktspace.h>
 
-using namespace chord;
-using namespace chord::nanite;
+namespace chord::nanite
+{ 
 
 // Group-merge-simplify-split parameters.
 constexpr uint32 kMinNumMeshletPerGroup = 2;
@@ -1060,4 +1060,5 @@ void MeshletContainer::merge(MeshletContainer&& inRhs)
 	triangles.insert(triangles.end(), rhs.triangles.begin(), rhs.triangles.end());
 	 vertices.insert(vertices.end(),  rhs.vertices.begin(),  rhs.vertices.end());
 	 meshlets.insert(meshlets.end(),  rhs.meshlets.begin(),  rhs.meshlets.end());
+}
 }

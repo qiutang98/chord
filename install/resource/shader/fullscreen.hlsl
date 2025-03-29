@@ -1,3 +1,6 @@
+#ifndef SHADER_FULLSCREEN_HLSL
+#define SHADER_FULLSCREEN_HLSL
+
 // Full screen triangle vertex shader.  
 // 
 // NOTE: Full screen triangle can reduce num of pixel shader invoked helper lane.
@@ -29,3 +32,5 @@ void fullScreenVS(uint vertexId : SV_VertexID, out FullScreenVS2PS output)
     output.pos = float4(output.uv * float2(2, -2) + float2(-1, 1), 0, 1);
 #endif
 }
+
+#endif // SHADER_FULLSCREEN_HLSL

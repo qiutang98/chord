@@ -410,7 +410,7 @@ namespace chord
 	};
 
 	// CPU cache line size, set 64 bytes here.
-	constexpr uint32 kCpuCachelineSize = 64;
+	constexpr uint32 kCpuCachelineSize = std::hardware_destructive_interference_size;
 
     // Zero object memory.
     template<typename T> static inline void zeroMemory(T& data)
@@ -562,4 +562,9 @@ namespace chord
 	extern uint64 requireUniqueId();
 
 	extern math::mat4 infiniteInvertZPerspectiveRH_ZO(float aspect, float fovy, float zNear);
+
+	static inline bool isDigitString(const std::string& s)
+	{
+		return std::all_of(std::begin(s), std::end(s), [](unsigned char c) { return std::isdigit(c); });
+	}
 }

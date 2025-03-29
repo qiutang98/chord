@@ -8,6 +8,3 @@
 #include <scene/component/transform.h>
 
 size_t chord::kRelfectionCompilePlayHolder = ~0;
-
-using namespace rttr;
-using namespace chord;

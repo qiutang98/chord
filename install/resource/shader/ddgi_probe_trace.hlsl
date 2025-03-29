@@ -1,3 +1,6 @@
+#ifndef SHADER_DDGI_PROBE_TRACE_HLSL
+#define SHADER_DDGI_PROBE_TRACE_HLSL
+
 #include "ddgi.h"
 
 struct DDGITracePushConsts
@@ -185,3 +188,5 @@ void mainCS(
 }
 
 #endif //!__cplusplus
+
+#endif // SHADER_DDGI_PROBE_TRACE_HLSL

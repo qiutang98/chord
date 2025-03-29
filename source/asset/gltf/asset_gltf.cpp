@@ -6,8 +6,6 @@
 
 namespace chord
 {
-	using namespace graphics;
-
 	const AssetTypeMeta GLTFAsset::kAssetTypeMeta = GLTFAsset::createTypeMeta();
 	const AssetTypeMeta GLTFMaterialAsset::kAssetTypeMeta = GLTFMaterialAsset::createTypeMeta();
 
@@ -28,6 +26,8 @@ namespace chord
 
 	GPUGLTFPrimitiveAssetRef GLTFAsset::getGPUPrimitives()
 	{
+		using namespace graphics;
+
 		if (auto cache = m_gpuPrimitives.lock())
 		{
 			return cache;
@@ -281,6 +281,8 @@ namespace chord
 
 	void GLTFMaterialProxy::init(std::shared_ptr<GLTFMaterialProxy> proxy)
 	{
+		using namespace graphics;
+
 		auto whiteTex = getContext().getBuiltinResources().white;
 		auto transparentTex = getContext().getBuiltinResources().transparent;
 		auto normalTex = getContext().getBuiltinResources().normal;
@@ -354,7 +356,7 @@ namespace chord
 		uploadData.emissiveSampler          = reference->emissiveTexture.sampler.getSampler();
 		uploadData.materialType             = (uint)reference->shadingType;
 
-
+		using namespace graphics;
 
 		std::array<math::uvec4, GLTFMaterialProxy::kGPUSceneDataFloat4Count> uploadDatas{};
 		memcpy(uploadDatas.data(), &uploadData, sizeof(uploadData));
@@ -382,6 +384,8 @@ namespace chord
 
 	uint32 GLTFSampler::getSampler() const
 	{
+		using namespace graphics;
+
 		SamplerCreateInfo ci = buildBasicSamplerCreateInfo();
 		ci.anisotropyEnable = VK_TRUE;
 		ci.maxAnisotropy    = 8.0f;
@@ -478,14 +482,11 @@ namespace chord
 		return m_gpuSceneGLTFPrimitiveDetailAssetId.at(meshId).at(primitiveId);
 	}
 
-	static inline uint32 getGLTFPrimitiveBLASIndex(uint meshIndex, uint primitiveId, uint meshCount)
-	{
-
-	}
-
 	// Current BVH from LOD0, maybe we can reduce lod level.
 	void GPUGLTFPrimitiveAsset::buildBLAS()
 	{
+		using namespace graphics;
+
 		if (!getContext().isRaytraceSupport())
 		{
 			return;
@@ -559,6 +560,8 @@ namespace chord
 
 	const VkDeviceAddress GPUGLTFPrimitiveAsset::getBLASDeviceAddress(uint32 meshId, uint32 primitiveId) const
 	{
+		using namespace graphics;
+
 		check(getContext().isRaytraceSupport());
 
 		GLTFPrimitiveIndexing indexing{ .meshId = meshId, .primitiveId = primitiveId };

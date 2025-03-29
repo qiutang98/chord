@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_SCREEN_PROBE_SH_REPROJECTION_HLSL
+#define SHADER_GI_SCREEN_PROBE_SH_REPROJECTION_HLSL
+
 #include "gi.h"
 
 // History screen probe SH reprojection. 
@@ -328,3 +331,5 @@ void mainCS(
     }
 }
 #endif   
+
+#endif 

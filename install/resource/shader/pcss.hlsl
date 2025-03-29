@@ -1,3 +1,6 @@
+#ifndef SHADER_PCSS_HLSL
+#define SHADER_PCSS_HLSL
+
 #include "base.h"
 
 struct ShadowProjectionPushConsts
@@ -524,3 +527,5 @@ void percentageCloserSoftShadowCS(
 
 
 #endif // __cplusplus
+
+#endif // SHADER_PCSS_HLSL

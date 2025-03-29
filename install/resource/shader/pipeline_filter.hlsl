@@ -1,3 +1,6 @@
+#ifndef SHADER_PIPELINE_FILTER_HLSL
+#define SHADER_PIPELINE_FILTER_HLSL
+
 #include "gltf.h"
 
 struct PipelineFilterPushConst
@@ -127,3 +130,5 @@ void fillPipelineDrawParamCS(uint threadId : SV_DispatchThreadID)
 }
 
 #endif
+
+#endif // SHADER_PIPELINE_FILTER_HLSL

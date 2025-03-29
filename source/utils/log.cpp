@@ -11,45 +11,52 @@
 
 namespace chord
 {
-	static AutoCVar<u16str> cVarLogPrintFormat(
+	static u16str GLogPrintFormat = u16str("%^[%H:%M:%S][%l] %n: %v%$");
+	static AutoCVarRef cVarLogPrintFormat(
 		"r.log.printFormat", 
-		u16str("%^[%H:%M:%S][%l] %n: %v%$"), 
+		GLogPrintFormat,
 		"Print format of log in app.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static AutoCVar<bool> cVarLogFile(
+	static bool bGLogFile = true;
+	static AutoCVarRef cVarLogFile(
 		"r.log.file", 
-		true, 
+		bGLogFile,
 		"Enable log file save in disk.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static AutoCVar<bool> cVarLogFileDelete(
+	static bool bGLogFileDelete = true;
+	static AutoCVarRef cVarLogFileDelete(
 		"r.log.file.delete", 
-		true, 
+		bGLogFileDelete,
 		"Enable delete old log file save in disk.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static AutoCVar<int32> cVarLogFileDeleteDay(
+	static int32 GLogFileDeleteDay = 2;
+	static AutoCVarRef cVarLogFileDeleteDay(
 		"r.log.file.deleteDay", 
-		2, 
+		GLogFileDeleteDay,
 		"Delete days for old logs.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static AutoCVar<u16str> cVarLogFileFormat(
+	static u16str GLogFileFormat = u16str("[%H:%M:%S][%l] %n: %v");
+	static AutoCVarRef cVarLogFileFormat(
 		"r.log.file.format", 
-		u16str("[%H:%M:%S][%l] %n: %v"),
+		GLogFileFormat,
 		"Saved format of log in file.", 
 		EConsoleVarFlags::ReadOnly);
 
-	static AutoCVar<u16str> cVarLogFileOutputFolder(
+	static u16str GLogFileOutputFolder = u16str("save/log");
+	static AutoCVarRef cVarLogFileOutputFolder(
 		"r.log.file.folder", 
-		u16str("save/log"),
+		GLogFileOutputFolder,
 		"Save folder path of log file.",
 		EConsoleVarFlags::ReadOnly);
 
-	static AutoCVar<u16str> cVarLogFileName(
+	static u16str GLogFileName = u16str("chord");
+	static AutoCVarRef cVarLogFileName(
 		"r.log.file.name", 
-		u16str("chord"),
+		GLogFileName,
 		"Save name of log file.", 
 		EConsoleVarFlags::ReadOnly);
 
@@ -110,7 +117,7 @@ namespace chord
 	void LoggerSystem::updateLogFile()
 	{
 		// Create save folder for log if no exist.
-		const auto saveFolder = cVarLogFileOutputFolder.get().u16();
+		const auto saveFolder = GLogFileOutputFolder.u16();
 		if (!std::filesystem::exists(saveFolder))
 		{
 			std::filesystem::create_directories(saveFolder);
@@ -160,7 +167,7 @@ namespace chord
 					auto duration = now - timePoint;
 
 					auto days = std::chrono::duration_cast<std::chrono::days>(duration).count();
-					if (days >= cVarLogFileDeleteDay.get())
+					if (days >= GLogFileDeleteDay)
 					{
 						return true;
 					}
@@ -170,11 +177,11 @@ namespace chord
 			return false;
 		};
 
-		const auto saveFilePath = cVarLogFileName.get().u16() + u16str(serializeTimePoint(now, "_%Y_%m_%d_%H_%M_%S") + ".log").u16();
+		const auto saveFilePath = GLogFileName.u16() + u16str(serializeTimePoint(now, "_%Y_%m_%d_%H_%M_%S") + ".log").u16();
 		const auto finalPath = std::filesystem::path(saveFolder) / saveFilePath;
 
 		// Delete old log files out of day.
-		if (cVarLogFileDelete.get())
+		if (bGLogFileDelete)
 		{
 			std::vector<std::filesystem::path> pendingFiles = {};
 
@@ -196,7 +203,7 @@ namespace chord
 		}
 
 		// Create new log file.
-		if (cVarLogFile.get())
+		if (bGLogFile)
 		{
 			{
 				const auto name = finalPath.stem().string();
@@ -204,7 +211,7 @@ namespace chord
 			}
 
 			m_fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(finalPath.string().c_str(), true);
-			m_fileSink->set_pattern(cVarLogFileFormat.get().str());
+			m_fileSink->set_pattern(GLogFileFormat.str());
 
 			if (m_fileDestSink)
 			{
@@ -233,7 +240,7 @@ namespace chord
 		// Set format.
 		for (auto& sink : m_logSinks)
 		{
-			sink->set_pattern(cVarLogPrintFormat.get().str());
+			sink->set_pattern(GLogPrintFormat.str());
 		}
 
 		// Log file.

@@ -1,3 +1,6 @@
+#ifndef SHADER_BLUR3x3_HLSL
+#define SHADER_BLUR3x3_HLSL
+
 #include "base.h"
 
 struct Blur3x3PushConsts
@@ -53,3 +56,5 @@ void blurShadowMask(
 }
 
 #endif 
+
+#endif // SHADER_BLUR3x3_HLSL

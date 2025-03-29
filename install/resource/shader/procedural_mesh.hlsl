@@ -1,3 +1,6 @@
+#ifndef SHADER_PROCEDURAL_MESH_HLSL
+#define SHADER_PROCEDURAL_MESH_HLSL
+
 // Some procedural mesh for debug use.
 
 #include "base.hlsli"
@@ -27,3 +30,5 @@ void proceduralSphere(   // Triangle List
     normal   = normalize(position);
     texcoord = float2(u, v);
 }
+
+#endif // SHADER_PROCEDURAL_MESH_HLSL

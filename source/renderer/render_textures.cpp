@@ -2,8 +2,6 @@
 
 namespace chord
 {
-    using namespace graphics;
-
     static constexpr auto kGBufferVkImageUsage 
         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT 
         | VK_IMAGE_USAGE_SAMPLED_BIT 
@@ -21,6 +19,8 @@ namespace chord
 
     GBufferTextures chord::allocateGBufferTextures(uint32 width, uint32 height)
     {
+        using namespace graphics;
+
         GBufferTextures result { };
         auto& pool = getContext().getTexturePool();
 
@@ -45,6 +45,7 @@ namespace chord
 
     void chord::GBufferTextures::generateHalfGbuffer()
     {
+        using namespace graphics;
         check(dimension.x != 0 && dimension.y != 0);
 
         uint halfWidth  = dimension.x / 2;
@@ -69,8 +70,9 @@ namespace chord
         roughness_Half = pool.create("Gbuffer.roughness_Half", halfWidth, halfHeight, GBufferTextures::roughnessHalfFormat(), kHalfGbufferImageUsage);
     }
 
-    void chord::addClearGbufferPass(GraphicsQueue& queue, GBufferTextures& textures)
+    void chord::addClearGbufferPass(graphics::GraphicsQueue& queue, GBufferTextures& textures)
     {
+        using namespace graphics;
         ScopePerframeMarker marker(queue, "Clear Gbuffers");
 
         queue.checkRecording();

@@ -25,6 +25,12 @@ file(GLOB_RECURSE chordSource CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/source/*.
 ## Add chord framework.
 add_library(chord ${chordHeader} ${chordSource} ${shaderHeaders})
 set_property(TARGET chord PROPERTY COMPILE_WARNING_AS_ERROR ON)
+set_property(TARGET chord PROPERTY UNITY_BUILD ON)
+
+set_source_files_properties(
+  "${PROJECT_SOURCE_DIR}/source/utils/utils_windows.cpp" 
+  "${PROJECT_SOURCE_DIR}/source/shader_compiler/compiler.cpp"
+  PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 ## Alias name for easy use.
 add_library(Chord::Chord ALIAS chord)

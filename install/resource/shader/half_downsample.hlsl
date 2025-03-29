@@ -1,3 +1,6 @@
+#ifndef SHADER_HALF_DOWNSAMPLE_HLSL
+#define SHADER_HALF_DOWNSAMPLE_HLSL
+
 // 2x downsample pass for GBuffer.
 #include "base.h"
 
@@ -94,3 +97,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_HALF_DOWNSAMPLE_HLSL

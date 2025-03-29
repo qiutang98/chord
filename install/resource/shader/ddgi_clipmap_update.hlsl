@@ -1,3 +1,6 @@
+#ifndef SHADER_DDGI_CLIPMAP_UPDATE_HLSL
+#define SHADER_DDGI_CLIPMAP_UPDATE_HLSL
+
 #include "ddgi.h"
 
 struct DDGIClipmapUpdatePushConsts
@@ -319,3 +322,5 @@ void appendRelightingProbeCountCS(uint dispatchId : SV_DispatchThreadID)
 
 
 #endif // 
+
+#endif // SHADER_DDGI_CLIPMAP_UPDATE_HLSL

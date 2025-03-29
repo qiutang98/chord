@@ -1,3 +1,6 @@
+#ifndef SHADER_MESH_RASTER_HLSL
+#define SHADER_MESH_RASTER_HLSL
+
 #include "gltf.h"
 
 #define PASS_TYPE_CLUSTER 0
@@ -207,3 +210,5 @@ void meshRasterPassPS(
 }
 
 #endif
+
+#endif // SHADER_MESH_RASTER_HLSL

@@ -1,3 +1,5 @@
+#ifndef SHADER_DDGI_PROBE_CONVOLUTION_HLSL
+#define SHADER_DDGI_PROBE_CONVOLUTION_HLSL
 
 #include "ddgi.h"
 
@@ -242,3 +244,5 @@ void mainCS(
 }
 
 #endif //!__cplusplus
+
+#endif // SHADER_DDGI_PROBE_CONVOLUTION_HLSL

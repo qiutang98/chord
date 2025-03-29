@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_SPECULAR_REMOVE_FIREFLARE_HLSL
+#define SHADER_GI_SPECULAR_REMOVE_FIREFLARE_HLSL
+
 #include "gi.h"
 
 struct GISpecularRemoveFireFlareFilterPushConsts
@@ -129,3 +132,5 @@ void mainCS(
     storeRWTexture2D_float4(pushConsts.UAV, tid, specularAccumulate);
 }
 #endif 
+
+#endif // SHADER_GI_SPECULAR_REMOVE_FIREFLARE_HLSL

@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_SCREEN_PROBE_SPAWN_HLSL
+#define SHADER_GI_SCREEN_PROBE_SPAWN_HLSL
+
 #include "gi.h"
 
 struct GIScreenProbeSpawnPushConsts
@@ -115,3 +118,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_GI_SCREEN_PROBE_SPAWN_HLSL

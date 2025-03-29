@@ -1,3 +1,6 @@
+#ifndef SHADER_BRDF_LUT_HLSL
+#define SHADER_BRDF_LUT_HLSL
+
 #include "base.h"
 
 struct BRDFLutPushConsts
@@ -68,3 +71,5 @@ void mainCS(uint3 tid : SV_DispatchThreadID)
     }
 }
 #endif
+
+#endif // SHADER_BRDF_LUT_HLSL

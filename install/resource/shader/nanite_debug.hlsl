@@ -1,3 +1,6 @@
+#ifndef SHADER_NANITE_DEBUG_HLSL
+#define SHADER_NANITE_DEBUG_HLSL
+
 #include "gltf.h"
 
 #define kNaniteDebugType_Meshlet      0
@@ -126,3 +129,5 @@ void mainPS(
 }
 
 #endif 
+
+#endif // SHADER_NANITE_DEBUG_HLSL

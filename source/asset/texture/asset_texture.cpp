@@ -4,8 +4,6 @@
 
 namespace chord
 {
-	using namespace graphics;
-
 	const AssetTypeMeta TextureAsset::kAssetTypeMeta = TextureAsset::createTypeMeta();
 
 	TextureAsset::TextureAsset(const AssetSaveInfo& saveInfo)
@@ -44,8 +42,10 @@ namespace chord
 		return false;
 	}
 
-	GPUTextureAssetRef TextureAsset::getGPUTexture(std::function<void(graphics::GPUTextureAssetRef)>&& afterLoadingCallback)
+	graphics::GPUTextureAssetRef TextureAsset::getGPUTexture(std::function<void(graphics::GPUTextureAssetRef)>&& afterLoadingCallback)
 	{
+		using namespace graphics;
+
 		if (auto cache = m_gpuTexture.lock())
 		{
 			return cache;

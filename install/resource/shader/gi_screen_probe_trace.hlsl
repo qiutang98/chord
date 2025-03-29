@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_SCREEN_PROBE_TRACE_HLSL
+#define SHADER_GI_SCREEN_PROBE_TRACE_HLSL
+
 #include "gi.h"
 
 // TODO: Ray sort before ray tracing.
@@ -139,3 +142,5 @@ void mainCS(
 
 
 #endif // 
+
+#endif // SHADER_GI_SCREEN_PROBE_TRACE_HLSL

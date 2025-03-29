@@ -2,8 +2,6 @@
 
 namespace chord
 {
-	using namespace graphics;
-
 	static int32 requireWidgetUniqueId()
 	{
 		static int32 uniqueId = 0;

@@ -10,18 +10,21 @@
 
 namespace chord
 {
-	using namespace graphics;
-
-	PRIVATE_GLOBAL_SHADER(VisibilityTileMarkerCS,  "resource/shader/visibility_tile.hlsl", "tilerMarkerCS", EShaderStage::Compute);
-	PRIVATE_GLOBAL_SHADER(VisibilityTilePrepareCS, "resource/shader/visibility_tile.hlsl", "tilePrepareCS", EShaderStage::Compute);
-	PRIVATE_GLOBAL_SHADER(VisibilityTileCmdFillCS, "resource/shader/visibility_tile.hlsl", "prepareTileParamCS", EShaderStage::Compute);
-
-	VisibilityTileMarkerContext visibilityMark(
-		GraphicsQueue& queue, 
-		uint cameraViewId,
-		PoolBufferGPUOnlyRef drawMeshletCmdBuffer,
-		PoolTextureRef visibilityImage)
+	namespace graphics
 	{
+		PRIVATE_GLOBAL_SHADER(VisibilityTileMarkerCS, "resource/shader/visibility_tile.hlsl", "tilerMarkerCS", EShaderStage::Compute);
+		PRIVATE_GLOBAL_SHADER(VisibilityTilePrepareCS, "resource/shader/visibility_tile.hlsl", "tilePrepareCS", EShaderStage::Compute);
+		PRIVATE_GLOBAL_SHADER(VisibilityTileCmdFillCS, "resource/shader/visibility_tile.hlsl", "prepareTileParamCS", EShaderStage::Compute);
+	}
+
+	VisibilityTileMarkerContext chord::visibilityMark(
+		graphics::GraphicsQueue& queue,
+		uint cameraViewId,
+		graphics::PoolBufferGPUOnlyRef drawMeshletCmdBuffer,
+		graphics::PoolTextureRef visibilityImage)
+	{
+		using namespace chord::graphics;
+
 		VisibilityTileMarkerContext ctx{};
 		ctx.visibilityTexture = visibilityImage;
 		ctx.visibilityDim = { visibilityImage->get().getExtent().width, visibilityImage->get().getExtent().height };
@@ -52,8 +55,10 @@ namespace chord
 		return ctx;
 	}
 
-	VisibilityTileContxt prepareShadingTileParam(GraphicsQueue& queue, EShadingType shadingType, const VisibilityTileMarkerContext& marker)
+	VisibilityTileContxt chord::prepareShadingTileParam(graphics::GraphicsQueue& queue, EShadingType shadingType, const VisibilityTileMarkerContext& marker)
 	{
+		using namespace chord::graphics;
+
 		VisibilityTileContxt ctx{};
 		ctx.tileCmdBuffer = getContext().getBufferPool().createGPUOnly("shadingTileCmd", sizeof(math::uvec2) * marker.markerDim.x * marker.markerDim.y, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 		ctx.dispatchIndirectBuffer = getContext().getBufferPool().createGPUOnly("TileIndirectCmd", sizeof(math::uvec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);

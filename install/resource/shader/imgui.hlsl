@@ -1,3 +1,6 @@
+#ifndef SHADER_IMGUI_HLSL
+#define SHADER_IMGUI_HLSL
+
 #include "colorspace.h"
 
 struct ImGuiDrawPushConsts
@@ -64,3 +67,5 @@ void mainPS(in VS2PS input, out float4 outColor : SV_Target0)
 } 
    
 #endif // HLSL only area end.
+
+#endif // SHADER_IMGUI_HLSL

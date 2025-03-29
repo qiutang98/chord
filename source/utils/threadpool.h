@@ -16,6 +16,12 @@
 
 namespace chord
 {
+	class alignas(kCpuCachelineSize) Job
+	{
+
+	};
+
+
 	// Check future is ready or not.
 	template<typename R>
 	bool isReady(std::future<R> const& f)

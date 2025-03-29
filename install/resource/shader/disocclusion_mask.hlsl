@@ -1,3 +1,6 @@
+#ifndef SHADER_DISOCCLUSION_MASK_HLSL
+#define SHADER_DISOCCLUSION_MASK_HLSL
+
 #include "base.h"
 
 struct DisocclusionMaskPushConsts
@@ -111,3 +114,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_DISOCCLUSION_MASK_HLSL

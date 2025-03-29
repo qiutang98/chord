@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_WORLD_PROBE_SH_UPDATE_HLSL
+#define SHADER_GI_WORLD_PROBE_SH_UPDATE_HLSL
+
 #include "gi.h"
 
 struct GIWorldProbeSHUpdatePushConsts
@@ -79,3 +82,5 @@ void mainCS(
 }
 
 #endif //  
+
+#endif // SHADER_GI_WORLD_PROBE_SH_UPDATE_HLSL

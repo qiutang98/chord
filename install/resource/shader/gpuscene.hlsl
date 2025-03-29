@@ -1,3 +1,6 @@
+#ifndef SHADER_GPUSCENE_HLSL
+#define SHADER_GPUSCENE_HLSL
+
 // GPU scene shader, sparse upload and management. 
 
 #include "base.h"
@@ -65,3 +68,5 @@ void mainCS(uint threadId : SV_DispatchThreadID)
 #endif // !GPUSCENE_SCATTER_UPLOAD
 
 #endif // HLSL only area end.
+
+#endif // SHADER_GPUSCENE_HLSL

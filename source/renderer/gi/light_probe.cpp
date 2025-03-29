@@ -10,8 +10,8 @@
 // 
 #include <random>
 
-using namespace chord;
-using namespace chord::graphics;
+namespace chord
+{
 
 static uint32 sEnableDDGI = 1;
 static AutoCVarRef cVarEnableDDGI(
@@ -27,35 +27,38 @@ static AutoCVarRef cVarEnableDDGIDebugOutput(
 	"Enable ddgi debug output or not."
 );
 
-PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateClearMarkerBufferCS, "resource/shader/ddgi_clipmap_update.hlsl", "clearMarkerBufferCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateIndirectCmdParamCS, "resource/shader/ddgi_clipmap_update.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateInvalidProbeTracePass_0_CS, "resource/shader/ddgi_clipmap_update.hlsl", "updateInvalidProbeTracePass_0_CS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateInvalidProbeTracePass_1_CS, "resource/shader/ddgi_clipmap_update.hlsl", "updateInvalidProbeTracePass_1_CS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIProbeTraceCS, "resource/shader/ddgi_probe_trace.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIProbeRelightingCS, "resource/shader/ddgi_relighting.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateAppendRelightingCS, "resource/shader/ddgi_clipmap_update.hlsl", "appendRelightingProbeCountCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIConvolutionIndirectCmdParamCS, "resource/shader/ddgi_probe_convolution.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIDebugSampleCS, "resource/shader/ddgi_probe_debug_sample.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIClipmapCopyValidCounterCS, "resource/shader/ddgi_clipmap_update.hlsl", "copyValidCounterCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIRelocationCS, "resource/shader/ddgi_relocation.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(DDGIRelocationIndirectCmdCS, "resource/shader/ddgi_relocation.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
-
-class DDGIConvolutionCS : public GlobalShader
+namespace graphics
 {
-public:
-	DECLARE_SUPER_TYPE(GlobalShader);
+	PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateClearMarkerBufferCS, "resource/shader/ddgi_clipmap_update.hlsl", "clearMarkerBufferCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateIndirectCmdParamCS, "resource/shader/ddgi_clipmap_update.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateInvalidProbeTracePass_0_CS, "resource/shader/ddgi_clipmap_update.hlsl", "updateInvalidProbeTracePass_0_CS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateInvalidProbeTracePass_1_CS, "resource/shader/ddgi_clipmap_update.hlsl", "updateInvalidProbeTracePass_1_CS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIProbeTraceCS, "resource/shader/ddgi_probe_trace.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIProbeRelightingCS, "resource/shader/ddgi_relighting.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIClipmapUpdateAppendRelightingCS, "resource/shader/ddgi_clipmap_update.hlsl", "appendRelightingProbeCountCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIConvolutionIndirectCmdParamCS, "resource/shader/ddgi_probe_convolution.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIDebugSampleCS, "resource/shader/ddgi_probe_debug_sample.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIClipmapCopyValidCounterCS, "resource/shader/ddgi_clipmap_update.hlsl", "copyValidCounterCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIRelocationCS, "resource/shader/ddgi_relocation.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(DDGIRelocationIndirectCmdCS, "resource/shader/ddgi_relocation.hlsl", "indirectCmdParamCS", EShaderStage::Compute);
 
-	class SV_bIrradiance : SHADER_VARIANT_BOOL("DDGI_BLEND_DIM_IRRADIANCE");
-	using Permutation = TShaderVariantVector<SV_bIrradiance>;
-};
-IMPLEMENT_GLOBAL_SHADER(DDGIConvolutionCS, "resource/shader/ddgi_probe_convolution.hlsl", "mainCS", EShaderStage::Compute);
+	class DDGIConvolutionCS : public GlobalShader
+	{
+	public:
+		DECLARE_SUPER_TYPE(GlobalShader);
 
-//
-static std::default_random_engine gen;
-static std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+		class SV_bIrradiance : SHADER_VARIANT_BOOL("DDGI_BLEND_DIM_IRRADIANCE");
+		using Permutation = TShaderVariantVector<SV_bIrradiance>;
+	};
+	IMPLEMENT_GLOBAL_SHADER(DDGIConvolutionCS, "resource/shader/ddgi_probe_convolution.hlsl", "mainCS", EShaderStage::Compute);
+}
 
 static inline float getRandomFloat()
 {
+	//
+	static std::default_random_engine gen;
+	static std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+
 	return distribution(gen);
 }
 
@@ -72,6 +75,8 @@ void chord::ddgiUpdate(
 	ICamera* camera,
 	graphics::PoolTextureRef hzb)
 {
+	using namespace graphics;
+
 	if (!sEnableDDGI || !getContext().isRaytraceSupport())
 	{
 		// Clear all resource of ddgi. 
@@ -654,4 +659,7 @@ void chord::ddgiUpdate(
 
 		debugBlitColor(queue, ddgiTexture, gbuffers.color);
 	}
+}
+
+
 }

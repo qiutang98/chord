@@ -17,8 +17,6 @@
 
 namespace chord
 { 
-	using namespace graphics;
-
 	static bool bEnableDocking = false;
 	static AutoCVarRef<bool> cVarEnableDocking(
 		"r.ui.docking",
@@ -61,8 +59,11 @@ namespace chord
 		"UI font base size.",
 		EConsoleVarFlags::ReadOnly);
 
-	PRIVATE_GLOBAL_SHADER(ImGuiDrawVS, "resource/shader/imgui.hlsl", "mainVS", EShaderStage::Vertex);
-	PRIVATE_GLOBAL_SHADER(ImGuiDrawPS, "resource/shader/imgui.hlsl", "mainPS", EShaderStage::Pixel);
+	namespace graphics
+	{
+		PRIVATE_GLOBAL_SHADER(ImGuiDrawVS, "resource/shader/imgui.hlsl", "mainVS", EShaderStage::Vertex);
+		PRIVATE_GLOBAL_SHADER(ImGuiDrawPS, "resource/shader/imgui.hlsl", "mainPS", EShaderStage::Pixel);
+	}
 
 	static void imguiSetWindowSize(ImGuiViewport* viewport, ImVec2 size)
 	{
@@ -113,8 +114,10 @@ namespace chord
 		return (size + alignment - 1) & ~(alignment - 1);
 	}
 
-	static void imguiRenderDrawData(uint32 backBufferIndex, VkCommandBuffer commandBuffer, void* drawDataInput, std::shared_ptr<IPipeline> pipeline)
+	static void imguiRenderDrawData(uint32 backBufferIndex, VkCommandBuffer commandBuffer, void* drawDataInput, std::shared_ptr<graphics::IPipeline> pipeline)
 	{
+		using namespace graphics;
+
 		auto* drawData = (ImDrawData*)drawDataInput;
 		auto* vrd = (ImGuiViewportData*)drawData->OwnerViewport->RendererUserData;
 		auto* bd = (ImGuiManager*)ImGui::GetIO().BackendRendererUserData;
@@ -283,6 +286,8 @@ namespace chord
 
 	static void imguiRenderWindow(ImGuiViewport* viewport, void* args)
 	{
+		using namespace graphics;
+
 		auto* vd = (ImGuiViewportData*)viewport->RendererUserData;
 		auto& swapchain = vd->swapchain();
 		const auto& extent = swapchain.getExtent();
@@ -707,6 +712,8 @@ namespace chord
 
 		fonts->Build();
 
+		using namespace graphics;
+
 		// Upload atlas to GPU, sync.
 		GPUTextureRef texture;
 		{
@@ -859,6 +866,8 @@ namespace chord
 
 	ImGuiViewportData::ImGuiViewportData(ImGuiViewport* viewport)
 	{
+		using namespace graphics;
+
 		// Create swapchain.
 		m_swapchain = std::make_unique<Swapchain>((GLFWwindow*)viewport->PlatformHandle);
 	}

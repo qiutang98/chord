@@ -313,16 +313,16 @@ namespace chord::graphics
 		std::vector<TimeStamp> m_cpuTimeStamps[5];
 	};
 
-	namespace log
+	namespace logger
 	{
 		extern spdlog::logger& get();
 	}
 
-	#define LOG_GRAPHICS_TRACE(...) chord_macro_sup_enableLogOnly({ log::get().trace(__VA_ARGS__); })
-	#define LOG_GRAPHICS_INFO(...) chord_macro_sup_enableLogOnly({ log::get().info(__VA_ARGS__); })
-	#define LOG_GRAPHICS_WARN(...) chord_macro_sup_enableLogOnly({ log::get().warn(__VA_ARGS__); })
-	#define LOG_GRAPHICS_ERROR(...) chord_macro_sup_enableLogOnly({ log::get().error(__VA_ARGS__); })
-	#define LOG_GRAPHICS_FATAL(...) chord_macro_sup_enableLogOnly({ log::get().critical(__VA_ARGS__); CHORD_CRASH })
+	#define LOG_GRAPHICS_TRACE(...) chord_macro_sup_enableLogOnly({ logger::get().trace(__VA_ARGS__); })
+	#define LOG_GRAPHICS_INFO(...) chord_macro_sup_enableLogOnly({ logger::get().info(__VA_ARGS__); })
+	#define LOG_GRAPHICS_WARN(...) chord_macro_sup_enableLogOnly({ logger::get().warn(__VA_ARGS__); })
+	#define LOG_GRAPHICS_ERROR(...) chord_macro_sup_enableLogOnly({ logger::get().error(__VA_ARGS__); })
+	#define LOG_GRAPHICS_FATAL(...) chord_macro_sup_enableLogOnly({ logger::get().critical(__VA_ARGS__); CHORD_CRASH })
 
 	static inline auto getNextPtr(auto& v)
 	{

@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_WORLD_PROBE_SH_PROPAGATE_HLSL
+#define SHADER_GI_WORLD_PROBE_SH_PROPAGATE_HLSL
+
 #include "gi.h"
 
 struct GIWorldProbeSHPropagatePushConsts
@@ -107,3 +110,5 @@ void mainCS(
 }
 
 #endif //  
+
+#endif // SHADER_GI_WORLD_PROBE_SH_PROPAGATE_HLSL

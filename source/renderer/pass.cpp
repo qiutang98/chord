@@ -4,18 +4,22 @@
 
 namespace chord
 { 
-	using namespace graphics;
-    IMPLEMENT_GLOBAL_SHADER(FullScreenVS, "resource/shader/fullscreen.hlsl", "fullScreenVS", EShaderStage::Vertex);
+	namespace graphics
+	{
+		IMPLEMENT_GLOBAL_SHADER(FullScreenVS, "resource/shader/fullscreen.hlsl", "fullScreenVS", EShaderStage::Vertex);
+	}
 
 
 
 	void chord::addFullScreenPass(
-		GraphicsQueue& queue, 
+		graphics::GraphicsQueue& queue,
 		const std::string& name, 
-		GraphicsPipelineRef pipe, 
+		graphics::GraphicsPipelineRef pipe,
 		RenderTargets RTs, 
-		std::function<void(GraphicsQueue& queue, GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
+		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		using namespace graphics;
+
 		auto& cmd = queue.getActiveCmd()->commandBuffer;
 		ScopePerframeMarker marker(queue, name.c_str());
 		RTs.beginRendering(queue);
@@ -32,12 +36,14 @@ namespace chord
 	}
 
 	void chord::addComputePass(
-		GraphicsOrComputeQueue& queue, 
+		graphics::GraphicsOrComputeQueue& queue,
 		const std::string& name, 
-		ComputePipelineRef pipe,
+		graphics::ComputePipelineRef pipe,
 		math::uvec3 dispatchParameter,
-		std::function<void(GraphicsOrComputeQueue& queue, ComputePipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
+		std::function<void(graphics::GraphicsOrComputeQueue& queue, graphics::ComputePipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		using namespace graphics;
+
 		queue.checkRecording();
 		auto& cmd = queue.getActiveCmd()->commandBuffer;
 
@@ -52,10 +58,12 @@ namespace chord
 		graphics::GraphicsOrComputeQueue& queue, 
 		const std::string& name, 
 		graphics::ComputePipelineRef pipe, 
-		PoolBufferRef dispatchBuffer,
+		graphics::PoolBufferRef dispatchBuffer,
 		VkDeviceSize offset,
 		std::function<void(graphics::GraphicsOrComputeQueue& queue, graphics::ComputePipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		using namespace graphics;
+
 		queue.checkRecording();
 		ScopePerframeMarker marker(queue, name.c_str());
 
@@ -75,6 +83,8 @@ namespace chord
 		RenderTargets& RTs, 
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		using namespace graphics;
+
 		queue.checkRecording();
 		auto& cmd = queue.getActiveCmd()->commandBuffer;
 		ScopePerframeMarker marker(queue, name.c_str());
@@ -100,6 +110,8 @@ namespace chord
 		uint32 drawCount,
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		using namespace graphics;
+
 		queue.checkRecording();
 		ScopePerframeMarker marker(queue, name.c_str());
 		queue.transition(cmdBuffer, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
@@ -128,6 +140,8 @@ namespace chord
 		uint32_t stride, 
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		using namespace graphics;
+
 		queue.checkRecording();
 		ScopePerframeMarker marker(queue, name.c_str());
 
@@ -149,10 +163,12 @@ namespace chord
 		const std::string& name, 
 		graphics::GraphicsPipelineRef pipe,
 		RenderTargets& RTs,
-		PoolBufferRef cmdBuffer, VkDeviceSize offset, PoolBufferRef countBuffer, VkDeviceSize countBufferOffset,
+		graphics::PoolBufferRef cmdBuffer, VkDeviceSize offset, graphics::PoolBufferRef countBuffer, VkDeviceSize countBufferOffset,
 		uint32_t maxDrawCount, uint32_t stride,
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		using namespace graphics;
+
 		queue.checkRecording();
 		ScopePerframeMarker marker(queue, name.c_str());
 		queue.transition(cmdBuffer, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);

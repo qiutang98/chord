@@ -20,8 +20,8 @@
 
 #include <random>
 
-using namespace chord;
-using namespace chord::graphics;
+namespace chord
+{
 
 static uint32 sEnableGI = 1;
 static AutoCVarRef cVarEnableGI(
@@ -159,22 +159,25 @@ static AutoCVarRef cVarGICompositeSpecularScale(
 	"GI composite specular scale."
 );
 
-PRIVATE_GLOBAL_SHADER(GIScreenProbeSpawnCS, "resource/shader/gi_screen_probe_spawn.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIScreenProbeInterpolateCS, "resource/shader/gi_screen_probe_interpolate.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIScreenProbeTraceCS, "resource/shader/gi_screen_probe_trace.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIScreenProbeProjectSHCS, "resource/shader/gi_screen_probe_project_sh.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIScreenProbeSHInjectCS, "resource/shader/gi_world_probe_sh_inject.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIWorldProbeSHUpdateCS, "resource/shader/gi_world_probe_sh_update.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIWorldProbeSHPropagateCS, "resource/shader/gi_world_probe_sh_propagate.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIScreenProbeSHReprojectCS, "resource/shader/gi_screen_probe_sh_reproject.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIHistoryReprojectCS, "resource/shader/gi_history_reprojection.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIDiffuseSpatialFilterCS, "resource/shader/gi_spatial_filter_diffuse.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GISpecularSpatialFilterCS, "resource/shader/gi_spatial_filter_specular.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GISpecularRemoveFireFlareFilterCS, "resource/shader/gi_spatial_specular_remove_fireflare.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GISpatialUpsampleCS, "resource/shader/gi_upsample.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GISpecularTraceCS, "resource/shader/gi_specular_trace.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GIRTAOCS, "resource/shader/gi_rt_ao.hlsl", "mainCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(GISSAOCS, "resource/shader/gi_ssao.hlsl", "mainCS", EShaderStage::Compute);
+namespace graphics
+{
+	PRIVATE_GLOBAL_SHADER(GIScreenProbeSpawnCS, "resource/shader/gi_screen_probe_spawn.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIScreenProbeInterpolateCS, "resource/shader/gi_screen_probe_interpolate.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIScreenProbeTraceCS, "resource/shader/gi_screen_probe_trace.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIScreenProbeProjectSHCS, "resource/shader/gi_screen_probe_project_sh.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIScreenProbeSHInjectCS, "resource/shader/gi_world_probe_sh_inject.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIWorldProbeSHUpdateCS, "resource/shader/gi_world_probe_sh_update.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIWorldProbeSHPropagateCS, "resource/shader/gi_world_probe_sh_propagate.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIScreenProbeSHReprojectCS, "resource/shader/gi_screen_probe_sh_reproject.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIHistoryReprojectCS, "resource/shader/gi_history_reprojection.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIDiffuseSpatialFilterCS, "resource/shader/gi_spatial_filter_diffuse.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GISpecularSpatialFilterCS, "resource/shader/gi_spatial_filter_specular.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GISpecularRemoveFireFlareFilterCS, "resource/shader/gi_spatial_specular_remove_fireflare.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GISpatialUpsampleCS, "resource/shader/gi_upsample.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GISpecularTraceCS, "resource/shader/gi_specular_trace.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GIRTAOCS, "resource/shader/gi_rt_ao.hlsl", "mainCS", EShaderStage::Compute);
+	PRIVATE_GLOBAL_SHADER(GISSAOCS, "resource/shader/gi_ssao.hlsl", "mainCS", EShaderStage::Compute);
+}
 
 void chord::giUpdate(
 	graphics::CommandList& cmd,
@@ -194,6 +197,8 @@ void chord::giUpdate(
 	bool bCameraCut,
 	RendererTimerLambda timer)
 {
+	using namespace graphics;
+
 	if (!sEnableGI || !getContext().isRaytraceSupport())
 	{
 		// Reset cache.
@@ -1042,4 +1047,7 @@ void chord::giUpdate(
 	{
 		debugBlitColor(queue, AORT, gbuffers.color);
 	}
+}
+
+
 }

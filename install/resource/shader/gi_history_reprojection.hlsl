@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_HISTORY_REPROJECTION_HLSL
+#define SHADER_GI_HISTORY_REPROJECTION_HLSL
+
 #include "gi.h"
 
 struct GIHistoryReprojectPushConsts
@@ -181,3 +184,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_GI_HISTORY_REPROJECTION_HLSL

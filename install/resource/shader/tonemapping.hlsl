@@ -1,3 +1,6 @@
+#ifndef SHADER_TONEMMAPPING_HLSL
+#define SHADER_TONEMMAPPING_HLSL
+
 #include "colorspace.h"
 
 struct TonemappingPushConsts
@@ -193,3 +196,5 @@ void mainPS(
 } 
 
 #endif
+
+#endif // SHADER_TONEMMAPPING_HLSL

@@ -3,9 +3,11 @@
 #include <utils/utils.h>
 #include <utils/noncopyable.h>
 #include <utils/delegate.h>
-#include <utils/log.h>
+#include <utils/thread.h>
+
 #include <mutex>
 #include <shared_mutex>
+
 
 namespace chord
 {
@@ -63,16 +65,19 @@ namespace chord
 
 		virtual ~CVarStorageInterface() = default;
 
+		// Type match or not.
 		virtual bool isValueTypeMatch(const char* typeName) const override
 		{
 			return typeName == getTypeName<T>();
 		}
 
+		// 
 		const T& get() const 
 		{ 
 			return getImpl(); 
 		}
 
+		// 
 		void set(const T& v)
 		{
 			// Just return if no data change.
@@ -119,7 +124,7 @@ namespace chord
 		virtual ~CVarStorageValue() = default;
 
 		// Callback when data change.
-		Delegate<CVarStorageValue<T>, void, const T&, const T&> onValueChange { };
+		Delegate<CVarStorageValue<T>, void, const T&, T&> onValueChange { };
 
 	private:
 		virtual const T& getImpl() const override 
@@ -168,6 +173,9 @@ namespace chord
 
 		virtual ~CVarStorageRef() = default;
 
+		// Callback when data change.
+		Delegate<CVarStorageRef<T>, void, const T&, T&> onValueChange{ };
+
 	private:
 		virtual const T& getImpl() const override 
 		{ 
@@ -181,7 +189,17 @@ namespace chord
 
 		virtual void setImpl(const T& v) override 
 		{
-			m_reference = v; 
+			if (onValueChange.isBound())
+			{
+				const T oldData = m_reference;
+				m_reference = v;
+
+				onValueChange.execute(oldData, m_reference);
+			}
+			else
+			{
+				m_reference = v;
+			}
 		}
 
 	private:
@@ -190,12 +208,17 @@ namespace chord
 	};
 
 	template<class T>
-	void cVarDisableTypeCheck()
+	constexpr void cVarDisableTypeCheck()
 	{
-		static_assert(!std::is_same_v<T, std::string>, "Don't use string directly, use u16str!");
-		static_assert(!std::is_same_v<T, std::u16string>, "Don't use u16string directly, use u16str!");
-		static_assert(!std::is_same_v<T, std::u32string>, "Don't use u32string directly, use u16str!");
-		static_assert(!std::is_same_v<T, std::u8string>, "Don't use u8string directly, use u16str!");
+		constexpr bool bTypeValid =
+			std::is_same_v<T, uint32> || 
+			std::is_same_v<T,  int32> ||
+			std::is_same_v<T,   bool> ||
+			std::is_same_v<T,  float> ||
+			std::is_same_v<T, double> ||
+			std::is_same_v<T, u16str>;
+
+		static_assert(bTypeValid, "Don't use un-support type when create cvar.");
 	}
 
 	class CVarSystem final : NonCopyable
@@ -207,9 +230,6 @@ namespace chord
 
 		CVarStorage* getCVarIfExistGeneric(std::string_view name) const
 		{
-
-			std::shared_lock<std::shared_mutex> lock(m_lock);
-
 			const size_t hashId = std::hash<std::string_view>()(name);
 			if (!m_storages.contains(hashId))
 			{
@@ -233,7 +253,7 @@ namespace chord
 		CVarStorageInterface<T>* getCVarCheck(std::string_view name) const
 		{
 			auto* ptr = getCVarIfExist<T>(name);
-			check(ptr != nullptr);
+			assert(ptr != nullptr);
 
 			return ptr;
 		}
@@ -257,10 +277,8 @@ namespace chord
 		{
 			cVarDisableTypeCheck<T>();
 
-			std::unique_lock<std::shared_mutex> lock(m_lock);
-
 			const size_t hashId = std::hash<std::string_view>()(name);
-			check(!m_storages.contains(hashId));
+			assert(!m_storages.contains(hashId));
 
 			m_storages[hashId] = std::make_unique<CVarStorageValue<T>>(flag, name, description, v);
 
@@ -277,10 +295,8 @@ namespace chord
 		{
 			cVarDisableTypeCheck<T>();
 
-			std::unique_lock<std::shared_mutex> lock(m_lock);
-
 			const size_t hashId = std::hash<std::string_view>()(name);
-			check(!m_storages.contains(hashId));
+			assert(!m_storages.contains(hashId));
 
 			m_storages[hashId] = std::make_unique<CVarStorageRef<T>>(flag, name, description, v);
 
@@ -293,10 +309,10 @@ namespace chord
 		}
 
 	private:
-		mutable std::shared_mutex m_lock;
+		mutable std::mutex m_lock;
 		std::unordered_map<size_t, std::unique_ptr<CVarStorage>> m_storages;
 
-
+		//
 		std::vector<CacheCommand> m_cacheCommands;
 	};
 
@@ -305,7 +321,7 @@ namespace chord
 	{
 	public:
 		explicit AutoCVar(std::string_view name, const T& v,  std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None,
-			std::function<void(const T&, const T&)>&& onValueChangeCallback = nullptr)
+			std::function<void(const T&/*old value*/, T&/*stored current data*/)>&& onValueChangeCallback = nullptr)
 		{
 			cVarDisableTypeCheck<T>();
 
@@ -327,11 +343,13 @@ namespace chord
 	class AutoCVarRef
 	{
 	public:
-		explicit AutoCVarRef(std::string_view name, T& v, std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None)
+		explicit AutoCVarRef(std::string_view name, T& v, std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None,
+			std::function<void(const T&/*old value*/, T&/*stored current data*/)>&& onValueChangeCallback = nullptr)
 		{
 			cVarDisableTypeCheck<T>();
 
 			m_ptr = CVarSystem::get().addCVarRef<T>(flag, name, description, v);
+			m_ptr->onValueChange.bind(std::move(onValueChangeCallback));
 		}
 
 		const T& get() const { return m_ptr->get(); }

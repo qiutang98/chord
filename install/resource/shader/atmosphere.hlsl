@@ -1,3 +1,6 @@
+#ifndef SHADER_ATOMSPHERE_HLSL
+#define SHADER_ATOMSPHERE_HLSL
+
 #include "base.h"
 
 struct AtmospherePushConsts
@@ -216,4 +219,6 @@ void multipleScatteringCS(uint3 workPos : SV_DispatchThreadID)
     // Accumulate.
     rwScattering[workPos] += scattering;
 }
-#endif  
+#endif  // !__cplusplus
+
+#endif // SHADER_ATOMSPHERE_HLSL

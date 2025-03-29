@@ -8,8 +8,9 @@
 #include <ui/ui_helper.h>
 #include <scene/scene.h>
 
-using namespace chord;
-using namespace chord::graphics;
+namespace chord
+{
+
 
 // kilometers unit.
 constexpr double kLengthUnitInMeters = 1000.0;
@@ -540,6 +541,8 @@ const AtmosphereLut& AtmosphereManager::render(const ApplicationTickData& tickDa
 
 void AtmosphereManager::createTextures()
 {
+    using namespace graphics;
+
     // Now allocated new textures.
     auto& pool = getContext().getTexturePool();
 
@@ -575,12 +578,16 @@ void AtmosphereManager::createTextures()
     m_dirty = true;
 }
 
-PRIVATE_GLOBAL_SHADER(AtmosphereTransmittanceLutCS,   "resource/shader/atmosphere.hlsl", "transmittanceLutCS",   EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(AtmosphereDirectIrradianceCS,   "resource/shader/atmosphere.hlsl", "directIrradianceCS",   EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(AtmosphereSingleScatteringCS,   "resource/shader/atmosphere.hlsl", "singleScatteringCS",   EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(AtmosphereScatteringDensityCS,  "resource/shader/atmosphere.hlsl", "scatteringDensityCS",  EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(AtmosphereIndirectIrradianceCS, "resource/shader/atmosphere.hlsl", "indirectIrradianceCS", EShaderStage::Compute);
-PRIVATE_GLOBAL_SHADER(AtmosphereMultipleScatteringCS, "resource/shader/atmosphere.hlsl", "multipleScatteringCS", EShaderStage::Compute);
+namespace graphics
+{
+    PRIVATE_GLOBAL_SHADER(AtmosphereTransmittanceLutCS, "resource/shader/atmosphere.hlsl", "transmittanceLutCS", EShaderStage::Compute);
+    PRIVATE_GLOBAL_SHADER(AtmosphereDirectIrradianceCS, "resource/shader/atmosphere.hlsl", "directIrradianceCS", EShaderStage::Compute);
+    PRIVATE_GLOBAL_SHADER(AtmosphereSingleScatteringCS, "resource/shader/atmosphere.hlsl", "singleScatteringCS", EShaderStage::Compute);
+    PRIVATE_GLOBAL_SHADER(AtmosphereScatteringDensityCS, "resource/shader/atmosphere.hlsl", "scatteringDensityCS", EShaderStage::Compute);
+    PRIVATE_GLOBAL_SHADER(AtmosphereIndirectIrradianceCS, "resource/shader/atmosphere.hlsl", "indirectIrradianceCS", EShaderStage::Compute);
+    PRIVATE_GLOBAL_SHADER(AtmosphereMultipleScatteringCS, "resource/shader/atmosphere.hlsl", "multipleScatteringCS", EShaderStage::Compute);
+}
+
 
 void AtmosphereManager::precompute(
     graphics::CommandList& cmd,
@@ -595,6 +602,8 @@ void AtmosphereManager::precompute(
     bool bBlend, 
     int32 numScatteringOrders)
 {
+    using namespace graphics;
+
     AtmospherePrecomputeParameter constParams { };
     constParams.atmosphere = m_cacheAtmosphereRawData.buildAtmosphereParameters(lambdas, m_config);
     constParams.luminanceFromRadiance_0 = float4(luminanceFromRadiance[0], luminanceFromRadiance[1], luminanceFromRadiance[2], 0.0f);
@@ -717,8 +726,9 @@ void AtmosphereManager::precompute(
     }
 }
 
-void AtmosphereManager::computeLuts(graphics::CommandList& cmd, GraphicsQueue& queue, int32 numScatteringOrders)
+void AtmosphereManager::computeLuts(graphics::CommandList& cmd, graphics::GraphicsQueue& queue, int32 numScatteringOrders)
 {
+    using namespace graphics;
     {
         static const auto clearValue = VkClearColorValue{ .uint32 = { 0, 0, 0, 0} };
         static const auto range = helper::buildBasicImageSubresource();
@@ -843,5 +853,4 @@ void AtmosphereManager::computeLuts(graphics::CommandList& cmd, GraphicsQueue& q
     m_dirty = false;
 }
 
-
-
+} // namespace chord

@@ -1,3 +1,6 @@
+#ifndef SHADER_INSTANCE_CULLING_HLSL
+#define SHADER_INSTANCE_CULLING_HLSL
+
 #include "gltf.h"
 
 // Instance culling do frustum culling in object level. 
@@ -205,3 +208,5 @@ void clusterGroupCullingCS(uint threadId : SV_DispatchThreadID)
 }
 
 #endif // !__cplusplus
+
+#endif // SHADER_INSTANCE_CULLING_HLSL

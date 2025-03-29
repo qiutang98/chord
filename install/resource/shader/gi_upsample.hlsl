@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_UPSAMPLE_HLSL
+#define SHADER_GI_UPSAMPLE_HLSL
+
 #include "gi.h"
 
 struct GIUpsamplePushConsts
@@ -166,3 +169,5 @@ void mainCS(
 
 
 #endif 
+
+#endif // SHADER_GI_UPSAMPLE_HLSL

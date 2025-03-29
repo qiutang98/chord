@@ -1,3 +1,6 @@
+#ifndef SHADER_INDIRECT_CMD_HLSL
+#define SHADER_INDIRECT_CMD_HLSL
+
 #include "base.h"
 
 struct IndirectDispatchCmdPushConsts
@@ -29,3 +32,5 @@ void indirectCmdParamCS()
 }
 
 #endif
+
+#endif // SHADER_INDIRECT_CMD_HLSL

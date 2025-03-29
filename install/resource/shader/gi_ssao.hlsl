@@ -1,3 +1,6 @@
+#ifndef SHADER_GI_SSAO_HLSL
+#define SHADER_GI_SSAO_HLSL
+
 #include "gi.h"
 
 struct GISSAOPushConsts
@@ -224,3 +227,5 @@ void mainCS(uint2 workGroupId : SV_GroupID, uint localThreadIndex : SV_GroupInde
 }
 
 #endif 
+
+#endif // SHADER_GI_SSAO_HLSL

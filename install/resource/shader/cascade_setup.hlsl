@@ -1,3 +1,6 @@
+#ifndef SHADER_CASCADE_SETUP_HLSL
+#define SHADER_CASCADE_SETUP_HLSL
+
 #include "base.h"
 
 // Hybrid sdsm and cached cascaded shadow map.
@@ -368,3 +371,5 @@ void cascadeComputeCS(uint localThreadIndex : SV_GroupIndex)
 
 
 #endif 
+
+#endif // SHADER_CASCADE_SETUP_HLSL

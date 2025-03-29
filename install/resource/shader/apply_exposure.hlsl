@@ -1,3 +1,6 @@
+#ifndef SHADER_APPLY_EXPOSURE_HLSL
+#define SHADER_APPLY_EXPOSURE_HLSL
+
 #include "base.h"
 
 struct ApplyExposurePushConsts
@@ -57,4 +60,6 @@ void mainCS(
     }
 }
 
-#endif 
+#endif // !__cplusplus
+
+#endif // SHADER_APPLY_EXPOSURE_HLSL

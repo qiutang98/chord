@@ -8,8 +8,6 @@
 
 namespace chord
 {
-	using namespace graphics;
-
     static uint32 sDebugLineMaxVerticesCount = 1024 * 1024 / 4; // 1MB
     static AutoCVarRef cVarDebugLineMaxVerticesCount(
         "r.debugline.maxVerticesCount",
@@ -17,21 +15,27 @@ namespace chord
         "Debug line max vertices count, 0 meaning disable."
     );
 
-    PRIVATE_GLOBAL_SHADER(DebugLineFillDrawCmdCS, "resource/shader/debug_line.hlsl", "gpuFillIndirectCS", EShaderStage::Compute);
-    PRIVATE_GLOBAL_SHADER(DebugLineDrawPS, "resource/shader/debug_line.hlsl", "mainPS", EShaderStage::Pixel);
-
-    class DebugLineDrawVS : public GlobalShader
+    namespace graphics
     {
-    public:
-        DECLARE_SUPER_TYPE(GlobalShader);
 
-        class DIM_GPU : SHADER_VARIANT_BOOL("DIM_GPU");
-        using Permutation = TShaderVariantVector<DIM_GPU>;
-    };
-    IMPLEMENT_GLOBAL_SHADER(DebugLineDrawVS, "resource/shader/debug_line.hlsl", "mainVS", EShaderStage::Vertex);
+        PRIVATE_GLOBAL_SHADER(DebugLineFillDrawCmdCS, "resource/shader/debug_line.hlsl", "gpuFillIndirectCS", EShaderStage::Compute);
+        PRIVATE_GLOBAL_SHADER(DebugLineDrawPS, "resource/shader/debug_line.hlsl", "mainPS", EShaderStage::Pixel);
+
+        class DebugLineDrawVS : public GlobalShader
+        {
+        public:
+            DECLARE_SUPER_TYPE(GlobalShader);
+
+            class DIM_GPU : SHADER_VARIANT_BOOL("DIM_GPU");
+            using Permutation = TShaderVariantVector<DIM_GPU>;
+        };
+        IMPLEMENT_GLOBAL_SHADER(DebugLineDrawVS, "resource/shader/debug_line.hlsl", "mainVS", EShaderStage::Vertex);
+    }
 
     DebugLineCtx allocateDebugLineCtx()
     {
+        using namespace graphics;
+
         DebugLineCtx ctx { };
 
         ctx.gpuMaxCount = math::clamp(sDebugLineMaxVerticesCount, 0U, 67108864U); // MAX 256 MB.
@@ -55,8 +59,10 @@ namespace chord
         queue.clearUAV(gpuCountBuffer);
     }
 
-    void chord::debugLine(GraphicsQueue& queue, const DebugLineCtx& ctx, PoolTextureRef depthImage, PoolTextureRef outImage)
+    void chord::debugLine(graphics::GraphicsQueue& queue, const DebugLineCtx& ctx, graphics::PoolTextureRef depthImage, graphics::PoolTextureRef outImage)
     {
+        using namespace graphics;
+
         RenderTargets RTs{ };
         {
             RTs.RTs[0] = RenderTargetRT(outImage, ERenderTargetLoadStoreOp::Load_Store);

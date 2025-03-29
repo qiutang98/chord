@@ -14,38 +14,39 @@
 
 namespace chord
 {
-	using namespace graphics;
-
 	static uint32 sDrawFullScreenSkyBatchSize = 2;
 	static AutoCVarRef cVarDrawFullScreenSkyBatchSize(
 		"r.sky.drawFullScreenBatchSize",
 		sDrawFullScreenSkyBatchSize,
 		"Draw full screen sky batch size.");
 
-	class DrawSkyCS : public GlobalShader
+	namespace graphics
 	{
-	public:
-		DECLARE_GLOBAL_SHADER(GlobalShader);
+		class DrawSkyCS : public GlobalShader
+		{
+		public:
+			DECLARE_GLOBAL_SHADER(GlobalShader);
 
-		class SV_BatchSize : SHADER_VARIANT_RANGE_INT("DRAW_SKY_BATCH_SIZE", 1, 2);
-		using Permutation = TShaderVariantVector<SV_BatchSize>;
-	};
-	IMPLEMENT_GLOBAL_SHADER(DrawSkyCS, "resource/shader/lighting.hlsl", "drawSkyCS", EShaderStage::Compute);
+			class SV_BatchSize : SHADER_VARIANT_RANGE_INT("DRAW_SKY_BATCH_SIZE", 1, 2);
+			using Permutation = TShaderVariantVector<SV_BatchSize>;
+		};
+		IMPLEMENT_GLOBAL_SHADER(DrawSkyCS, "resource/shader/lighting.hlsl", "drawSkyCS", EShaderStage::Compute);
 
-	class LightingCS : public GlobalShader
-	{
-	public:
-		DECLARE_SUPER_TYPE(GlobalShader);
-		class SV_ShadingType : SHADER_VARIANT_ENUM("LIGHTING_TYPE", EShadingType);
-		using Permutation = TShaderVariantVector<SV_ShadingType>;
-	};
-	IMPLEMENT_GLOBAL_SHADER(LightingCS, "resource/shader/lighting.hlsl", "mainCS", EShaderStage::Compute);
+		class LightingCS : public GlobalShader
+		{
+		public:
+			DECLARE_SUPER_TYPE(GlobalShader);
+			class SV_ShadingType : SHADER_VARIANT_ENUM("LIGHTING_TYPE", EShadingType);
+			using Permutation = TShaderVariantVector<SV_ShadingType>;
+		};
+		IMPLEMENT_GLOBAL_SHADER(LightingCS, "resource/shader/lighting.hlsl", "mainCS", EShaderStage::Compute);
 
-	PRIVATE_GLOBAL_SHADER(HalfGbufferDownsample_CS, "resource/shader/half_downsample.hlsl", "mainCS", EShaderStage::Compute);
-	PRIVATE_GLOBAL_SHADER(DisocclusionMask_CS, "resource/shader/disocclusion_mask.hlsl", "mainCS", EShaderStage::Compute);
+		PRIVATE_GLOBAL_SHADER(HalfGbufferDownsample_CS, "resource/shader/half_downsample.hlsl", "mainCS", EShaderStage::Compute);
+		PRIVATE_GLOBAL_SHADER(DisocclusionMask_CS, "resource/shader/disocclusion_mask.hlsl", "mainCS", EShaderStage::Compute);
 
-	PRIVATE_GLOBAL_SHADER(ShadowProjectionMaskBlur_CS, "resource/shader/blur3x3.hlsl", "blurShadowMask", EShaderStage::Compute);
-	PRIVATE_GLOBAL_SHADER(ShadowProjectionPCSS_CS, "resource/shader/pcss.hlsl", "percentageCloserSoftShadowCS", EShaderStage::Compute);
+		PRIVATE_GLOBAL_SHADER(ShadowProjectionMaskBlur_CS, "resource/shader/blur3x3.hlsl", "blurShadowMask", EShaderStage::Compute);
+		PRIVATE_GLOBAL_SHADER(ShadowProjectionPCSS_CS, "resource/shader/pcss.hlsl", "percentageCloserSoftShadowCS", EShaderStage::Compute);
+	}
 
 	CascadeShadowEvaluateResult chord::cascadeShadowEvaluate(
 		graphics::GraphicsQueue& queue, 
@@ -57,7 +58,7 @@ namespace chord
 	{
 		CascadeShadowEvaluateResult result{ };
 
-
+		using namespace graphics;
 		if (!cascadeCtx.isValid())
 		{
 			return result;
@@ -158,6 +159,8 @@ namespace chord
 		uint32 cameraViewId, 
 		const AtmosphereLut& skyLuts)
 	{
+		using namespace graphics;
+
 		LightingPushConsts pushConst{};
 		pushConst.visibilityTexelSize = math::vec2(1.0f) / math::vec2(gbuffers.dimension);
 		pushConst.visibilityDim = gbuffers.dimension;
@@ -188,13 +191,15 @@ namespace chord
 	}
 
 	void chord::lighting(
-		GraphicsQueue& queue, 
+		graphics::GraphicsQueue& queue,
 		GBufferTextures& gbuffers, 
 		uint32 cameraViewId, 
-		PoolBufferGPUOnlyRef drawMeshletCmdBuffer, 
+		graphics::PoolBufferGPUOnlyRef drawMeshletCmdBuffer,
 		const AtmosphereLut& skyLuts,
 		const VisibilityTileMarkerContext& marker)
 	{
+		using namespace graphics;
+
 		uint sceneColorUAV          = asUAV(queue, gbuffers.color);
 		uint vertexNormalUAV        = asUAV(queue, gbuffers.vertexRSNormal);
 		uint pixelNormalUAV         = asUAV(queue, gbuffers.pixelRSNormal);
@@ -244,6 +249,8 @@ namespace chord
 		graphics::GraphicsQueue& queue,
 		GBufferTextures& gbuffers)
 	{
+		using namespace graphics;
+
 		// Now generate half resolution buffer.
 		gbuffers.generateHalfGbuffer();
 		{
@@ -282,6 +289,8 @@ namespace chord
 		graphics::PoolTextureRef depth_Half_LastFrame,
 		graphics::PoolTextureRef vertexNormalRS_Half_LastFrame)
 	{
+		using namespace graphics;
+
 		uint halfWidth = gbuffers.dimension.x / 2;
 		uint halfHeight = gbuffers.dimension.y / 2;
 

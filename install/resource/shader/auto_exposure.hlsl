@@ -1,3 +1,6 @@
+#ifndef SHADER_AUTO_EXPOSURE
+#define SHADER_AUTO_EXPOSURE
+
 #include "base.h"
 
 struct AutoExposurePushConsts
@@ -139,3 +142,5 @@ void mainCS(
 
 
 #endif 
+
+#endif // SHADER_AUTO_EXPOSURE

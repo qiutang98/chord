@@ -1,3 +1,6 @@
+#ifndef SHADER_TSR_SHARPEN_HLSL
+#define SHADER_TSR_SHARPEN_HLSL
+
 #include "base.h"
 
 struct TSRSharpenPushConsts
@@ -130,3 +133,5 @@ void mainCS(
 
 
 #endif 
+
+#endif // SHADER_TSR_SHARPEN_HLSL

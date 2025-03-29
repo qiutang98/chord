@@ -16,232 +16,186 @@
 #include <renderer/renderer.h>
 #include <shader/cascade_setup.hlsl>
 
-using namespace chord;
-using namespace chord::graphics;
-
-static uint32 sGLTFRenderingEnable = 1;
-static AutoCVarRef cVarGLTFRenderingEnable(
-    "r.gltf.rendering",
-    sGLTFRenderingEnable,
-    "Enable gltf rendering or not."
-);
-
-static uint32 sShadowHZBCullingEnable = 1;
-static AutoCVarRef cVarShadowHZBCullingEnable(
-    "r.shadow.hzbCulling",
-    sShadowHZBCullingEnable,
-    "Enable hzb culling for shadow or not."
-);
-
-static float sShadowExtentScaleForHZBCulling = 1.5f;
-static AutoCVarRef cVarShadowExtentScaleForHZBCulling(
-    "r.shadow.hzbCulling.extentScale",
-    sShadowExtentScaleForHZBCulling,
-    "Cascade extent scale for hzb culling."
-    "NOTE: Shadow hzb culling don't do two stage culling, "
-    "      meaning it easy make mistake when nanite enable."
-    "      So add a extent scale avoid culling bug."
-);
-
-bool chord::shouldRenderGLTF(const GLTFRenderContext& renderCtx)
+namespace chord
 {
-    return (renderCtx.gltfObjectCount != 0) && (sGLTFRenderingEnable != 0);
+    static uint32 sGLTFRenderingEnable = 1;
+    static AutoCVarRef cVarGLTFRenderingEnable(
+        "r.gltf.rendering",
+        sGLTFRenderingEnable,
+        "Enable gltf rendering or not."
+    );
+
+    static uint32 sShadowHZBCullingEnable = 1;
+    static AutoCVarRef cVarShadowHZBCullingEnable(
+        "r.shadow.hzbCulling",
+        sShadowHZBCullingEnable,
+        "Enable hzb culling for shadow or not."
+    );
+
+    static float sShadowExtentScaleForHZBCulling = 1.5f;
+    static AutoCVarRef cVarShadowExtentScaleForHZBCulling(
+        "r.shadow.hzbCulling.extentScale",
+        sShadowExtentScaleForHZBCulling,
+        "Cascade extent scale for hzb culling."
+        "NOTE: Shadow hzb culling don't do two stage culling, "
+        "      meaning it easy make mistake when nanite enable."
+        "      So add a extent scale avoid culling bug."
+    );
+
+    bool chord::shouldRenderGLTF(const GLTFRenderContext& renderCtx)
+    {
+        return (renderCtx.gltfObjectCount != 0) && (sGLTFRenderingEnable != 0);
+    }
 }
 
-class SV_bMaskedMaterial : SHADER_VARIANT_BOOL("DIM_MASKED_MATERIAL");
-class SV_bTwoSide        : SHADER_VARIANT_BOOL("DIM_TWO_SIDED");
-class SV_PassType        : SHADER_VARIANT_SPARSE_INT("DIM_PASS_TYPE", PASS_TYPE_CLUSTER, PASS_TYPE_DEPTH);
 
-class MeshRasterPassMS : public GlobalShader
+namespace chord::graphics
 {
-public:
-    DECLARE_SUPER_TYPE(GlobalShader);
-    using Permutation = TShaderVariantVector<SV_bMaskedMaterial, SV_bTwoSide, SV_PassType>;
-};
-IMPLEMENT_GLOBAL_SHADER(MeshRasterPassMS, "resource/shader/mesh_raster.hlsl", "meshRasterPassMS", EShaderStage::Mesh);
+    class SV_bMaskedMaterial : SHADER_VARIANT_BOOL("DIM_MASKED_MATERIAL");
+    class SV_bTwoSide        : SHADER_VARIANT_BOOL("DIM_TWO_SIDED");
+    class SV_PassType        : SHADER_VARIANT_SPARSE_INT("DIM_PASS_TYPE", PASS_TYPE_CLUSTER, PASS_TYPE_DEPTH);
 
-class MeshRasterPassPS : public GlobalShader
-{
-public:
-    DECLARE_SUPER_TYPE(GlobalShader);
-    using Permutation = TShaderVariantVector<SV_bMaskedMaterial, SV_bTwoSide, SV_PassType>;
-};
-IMPLEMENT_GLOBAL_SHADER(MeshRasterPassPS, "resource/shader/mesh_raster.hlsl", "meshRasterPassPS", EShaderStage::Pixel);
-
-PRIVATE_GLOBAL_SHADER(CascadeSetupCS, "resource/shader/cascade_setup.hlsl", "cascadeComputeCS", EShaderStage::Compute);
-
-static inline void renderMeshRasterPipe(
-    graphics::GraphicsQueue& queue,
-    RenderTargets RTs,
-    const GLTFRenderContext& renderCtx,
-    int passType,
-    bool bMaskedMaterial,
-    bool bTwoSide,
-    bool bDepthClamped,
-    float depthBiasConst,
-    float depthBiasSlope,
-    uint instanceViewId,
-    uint instanceViewOffset,
-    VkCullModeFlags cullMode,
-    PoolBufferGPUOnlyRef cmdBuffer,
-    PoolBufferGPUOnlyRef countBuffer)
-{
-    const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
-
-    MeshRasterPushConst pushConst{ };
-    pushConst.cameraViewId = renderCtx.cameraView;
-    pushConst.drawedMeshletCmdId = asSRV(queue, cmdBuffer);
-    pushConst.instanceViewId = instanceViewId;
-    pushConst.instanceViewOffset = instanceViewOffset;
-
-    bool bExistPixelShader = true;
-    if (passType == PASS_TYPE_DEPTH)
+    class MeshRasterPassMS : public GlobalShader
     {
-        bExistPixelShader = bMaskedMaterial;
-    }
+    public:
+        DECLARE_SUPER_TYPE(GlobalShader);
+        using Permutation = TShaderVariantVector<SV_bMaskedMaterial, SV_bTwoSide, SV_PassType>;
+    };
+    IMPLEMENT_GLOBAL_SHADER(MeshRasterPassMS, "resource/shader/mesh_raster.hlsl", "meshRasterPassMS", EShaderStage::Mesh);
 
-    MeshRasterPassMS::Permutation MSPermutation;
-    MSPermutation.set<SV_bMaskedMaterial>(bMaskedMaterial);
-    MSPermutation.set<SV_bTwoSide>(bTwoSide);
-    MSPermutation.set<SV_PassType>(passType);
-    auto meshShader = getContext().getShaderLibrary().getShader<MeshRasterPassMS>(MSPermutation);
-
-
-
-    ShaderModuleRef pixelShader = nullptr;
-    if (bExistPixelShader)
+    class MeshRasterPassPS : public GlobalShader
     {
-        MeshRasterPassPS::Permutation PSPermutation;
-        PSPermutation.set<SV_bMaskedMaterial>(bMaskedMaterial);
-        PSPermutation.set<SV_bTwoSide>(bTwoSide);
-        PSPermutation.set<SV_PassType>(passType);
-        pixelShader = getContext().getShaderLibrary().getShader<MeshRasterPassPS>(PSPermutation);
-    }
+    public:
+        DECLARE_SUPER_TYPE(GlobalShader);
+        using Permutation = TShaderVariantVector<SV_bMaskedMaterial, SV_bTwoSide, SV_PassType>;
+    };
+    IMPLEMENT_GLOBAL_SHADER(MeshRasterPassPS, "resource/shader/mesh_raster.hlsl", "meshRasterPassPS", EShaderStage::Pixel);
 
-    GraphicsPipelineRef pipeline = getContext().graphicsMeshShadingPipe(
-        nullptr, // amplifyShader
-        meshShader, 
-        pixelShader,
-        bMaskedMaterial ? "Raster: Masked" : "Raster: NonMask",
-        std::move(RTs.getRTsFormats()),
-        RTs.getDepthFormat(),
-        RTs.getStencilFormat());
+    PRIVATE_GLOBAL_SHADER(CascadeSetupCS, "resource/shader/cascade_setup.hlsl", "cascadeComputeCS", EShaderStage::Compute);
 
-    auto clusterCmdBuffer = indirectDispatchCmdFill("MeshRasterCmd", queue, 1, countBuffer);
+    static inline void renderMeshRasterPipe(
+        graphics::GraphicsQueue& queue,
+        RenderTargets RTs,
+        const GLTFRenderContext& renderCtx,
+        int passType,
+        bool bMaskedMaterial,
+        bool bTwoSide,
+        bool bDepthClamped,
+        float depthBiasConst,
+        float depthBiasSlope,
+        uint instanceViewId,
+        uint instanceViewOffset,
+        VkCullModeFlags cullMode,
+        PoolBufferGPUOnlyRef cmdBuffer,
+        PoolBufferGPUOnlyRef countBuffer)
+    {
+        const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
-    addMeshIndirectDrawPass(
-        queue,
-        "GLTF: Raster",
-        pipeline,
-        RTs,
-        clusterCmdBuffer, 0, sizeof(uint4), 1,
-        [&](graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)
+        MeshRasterPushConst pushConst{ };
+        pushConst.cameraViewId = renderCtx.cameraView;
+        pushConst.drawedMeshletCmdId = asSRV(queue, cmdBuffer);
+        pushConst.instanceViewId = instanceViewId;
+        pushConst.instanceViewOffset = instanceViewOffset;
+
+        bool bExistPixelShader = true;
+        if (passType == PASS_TYPE_DEPTH)
         {
-            vkCmdSetCullMode(cmd, cullMode);
-            pipe->pushConst(cmd, pushConst);
+            bExistPixelShader = bMaskedMaterial;
+        }
 
-            // Mesh raster pass enable depth write and depth test.
-            helper::enableDepthTestDepthWrite(cmd);
+        MeshRasterPassMS::Permutation MSPermutation;
+        MSPermutation.set<SV_bMaskedMaterial>(bMaskedMaterial);
+        MSPermutation.set<SV_bTwoSide>(bTwoSide);
+        MSPermutation.set<SV_PassType>(passType);
+        auto meshShader = getContext().getShaderLibrary().getShader<MeshRasterPassMS>(MSPermutation);
 
-            if (bDepthClamped)
-            {
-                vkCmdSetDepthClampEnableEXT(cmd, VK_TRUE);
-            }
-
-            if (depthBiasConst != 0.0f || depthBiasSlope != 0.0f)
-            {
-                vkCmdSetDepthBias(cmd, depthBiasConst, 0.0f, depthBiasSlope);
-            }
-        });
-}
-
-static inline void renderMeshDepth(
-    graphics::GraphicsQueue& queue,
-    RenderTargets RTs,
-    const GLTFRenderContext& renderCtx,
-    int passType,
-    bool bDepthClamped,
-    float depthBiasConst,
-    float depthBiasSlope,
-    uint instanceViewId,
-    uint instanceViewOffset,
-    PoolBufferGPUOnlyRef inCmdBuffer,
-    PoolBufferGPUOnlyRef inCountBuffer)
-{
-    auto& pool = getContext().getBufferPool();
-    const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
-
-    auto filterCmd = chord::detail::filterPipelineIndirectDispatchCmd(queue, renderCtx, "Pipeline filter prepare.", inCountBuffer);
-
-    for (uint alphaMode = 0; alphaMode <= 1; alphaMode++) // alpha mode == 3 meaning blend.
-    {
-        // Fill cmd for indirect, when render depth only pass, don't care two side state.
-        auto [filteredCountBuffer, filteredCmdBuffer] =
-            chord::detail::filterPipeForVisibility(queue, renderCtx, filterCmd, inCmdBuffer, inCountBuffer, alphaMode, detail::kNoCareTwoSideFlag);
-
-        // Now rendering.
-        const bool bMasked = (alphaMode == 1);
-
-        // Always two side rendering.
-        const bool bTwoSide = true; 
-        VkCullModeFlags cullMode = VK_CULL_MODE_NONE;
-        renderMeshRasterPipe(
-            queue, 
-            RTs, 
-            renderCtx, 
-            passType, 
-            bMasked, 
-            bTwoSide, 
-            bDepthClamped, 
-            depthBiasConst, 
-            depthBiasSlope, 
-            instanceViewId, 
-            instanceViewOffset, 
-            cullMode, 
-            filteredCmdBuffer, 
-            filteredCountBuffer);
-    }
-}
-
-static inline void renderMesh(
-    graphics::GraphicsQueue& queue,
-    RenderTargets RTs,
-    const GLTFRenderContext& renderCtx, 
-    const HZBContext& hzbCtx,
-    int passType,
-    uint instanceViewId,
-    uint instanceViewOffset,
-    PoolBufferGPUOnlyRef inCmdBuffer, 
-    PoolBufferGPUOnlyRef inCountBuffer)
-{
-    auto& pool = getContext().getBufferPool();
-    const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
-
-    auto filterCmd = chord::detail::filterPipelineIndirectDispatchCmd(queue, renderCtx, "Pipeline filter prepare.", inCountBuffer);
-
-    for (uint alphaMode = 0; alphaMode <= 1; alphaMode++) // alpha mode == 3 meaning blend.
-    {
-        for (uint bTwoside = 0; bTwoside <= 1; bTwoside++)
+        ShaderModuleRef pixelShader = nullptr;
+        if (bExistPixelShader)
         {
-            // Fill cmd for indirect.
-            auto [filteredCountBuffer, filteredCmdBuffer] = 
-                chord::detail::filterPipeForVisibility(queue, renderCtx, filterCmd, inCmdBuffer, inCountBuffer, alphaMode, bTwoside);
-        
+            MeshRasterPassPS::Permutation PSPermutation;
+            PSPermutation.set<SV_bMaskedMaterial>(bMaskedMaterial);
+            PSPermutation.set<SV_bTwoSide>(bTwoSide);
+            PSPermutation.set<SV_PassType>(passType);
+            pixelShader = getContext().getShaderLibrary().getShader<MeshRasterPassPS>(PSPermutation);
+        }
+
+        GraphicsPipelineRef pipeline = getContext().graphicsMeshShadingPipe(
+            nullptr, // amplifyShader
+            meshShader, 
+            pixelShader,
+            bMaskedMaterial ? "Raster: Masked" : "Raster: NonMask",
+            std::move(RTs.getRTsFormats()),
+            RTs.getDepthFormat(),
+            RTs.getStencilFormat());
+
+        auto clusterCmdBuffer = indirectDispatchCmdFill("MeshRasterCmd", queue, 1, countBuffer);
+
+        addMeshIndirectDrawPass(
+            queue,
+            "GLTF: Raster",
+            pipeline,
+            RTs,
+            clusterCmdBuffer, 0, sizeof(uint4), 1,
+            [&](graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)
+            {
+                vkCmdSetCullMode(cmd, cullMode);
+                pipe->pushConst(cmd, pushConst);
+
+                // Mesh raster pass enable depth write and depth test.
+                helper::enableDepthTestDepthWrite(cmd);
+
+                if (bDepthClamped)
+                {
+                    vkCmdSetDepthClampEnableEXT(cmd, VK_TRUE);
+                }
+
+                if (depthBiasConst != 0.0f || depthBiasSlope != 0.0f)
+                {
+                    vkCmdSetDepthBias(cmd, depthBiasConst, 0.0f, depthBiasSlope);
+                }
+            });
+    }
+
+    static inline void renderMeshDepth(
+        graphics::GraphicsQueue& queue,
+        RenderTargets RTs,
+        const GLTFRenderContext& renderCtx,
+        int passType,
+        bool bDepthClamped,
+        float depthBiasConst,
+        float depthBiasSlope,
+        uint instanceViewId,
+        uint instanceViewOffset,
+        PoolBufferGPUOnlyRef inCmdBuffer,
+        PoolBufferGPUOnlyRef inCountBuffer)
+    {
+        auto& pool = getContext().getBufferPool();
+        const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
+
+        auto filterCmd = chord::detail::filterPipelineIndirectDispatchCmd(queue, renderCtx, "Pipeline filter prepare.", inCountBuffer);
+
+        for (uint alphaMode = 0; alphaMode <= 1; alphaMode++) // alpha mode == 3 meaning blend.
+        {
+            // Fill cmd for indirect, when render depth only pass, don't care two side state.
+            auto [filteredCountBuffer, filteredCmdBuffer] =
+                chord::detail::filterPipeForVisibility(queue, renderCtx, filterCmd, inCmdBuffer, inCountBuffer, alphaMode, detail::kNoCareTwoSideFlag);
 
             // Now rendering.
             const bool bMasked = (alphaMode == 1);
-            VkCullModeFlags cullMode = bTwoside ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT;
-            const bool bDepthClamped = false;
+
+            // Always two side rendering.
+            const bool bTwoSide = true; 
+            VkCullModeFlags cullMode = VK_CULL_MODE_NONE;
             renderMeshRasterPipe(
                 queue, 
                 RTs, 
                 renderCtx, 
                 passType, 
                 bMasked, 
-                bTwoside, 
+                bTwoSide, 
                 bDepthClamped, 
-                0.0f,  // Depth bias
-                0.0f,  // Depth slope bias
+                depthBiasConst, 
+                depthBiasSlope, 
                 instanceViewId, 
                 instanceViewOffset, 
                 cullMode, 
@@ -249,18 +203,66 @@ static inline void renderMesh(
                 filteredCountBuffer);
         }
     }
-}
 
-static inline RenderTargets getVisibilityRTs(const GBufferTextures& gbuffers)
-{
-    RenderTargets RTs{ };
-    RTs.RTs[0] = RenderTargetRT(gbuffers.visibility, ERenderTargetLoadStoreOp::Load_Store);
-    RTs.depthStencil = DepthStencilRT(
-        gbuffers.depthStencil,
-        EDepthStencilOp::DepthWrite_StencilWrite,
-        ERenderTargetLoadStoreOp::Load_Store); // Already clear.
+    static inline void renderMesh(
+        graphics::GraphicsQueue& queue,
+        RenderTargets RTs,
+        const GLTFRenderContext& renderCtx, 
+        const HZBContext& hzbCtx,
+        int passType,
+        uint instanceViewId,
+        uint instanceViewOffset,
+        PoolBufferGPUOnlyRef inCmdBuffer, 
+        PoolBufferGPUOnlyRef inCountBuffer)
+    {
+        auto& pool = getContext().getBufferPool();
+        const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
-    return RTs;
+        auto filterCmd = chord::detail::filterPipelineIndirectDispatchCmd(queue, renderCtx, "Pipeline filter prepare.", inCountBuffer);
+
+        for (uint alphaMode = 0; alphaMode <= 1; alphaMode++) // alpha mode == 3 meaning blend.
+        {
+            for (uint bTwoside = 0; bTwoside <= 1; bTwoside++)
+            {
+                // Fill cmd for indirect.
+                auto [filteredCountBuffer, filteredCmdBuffer] = 
+                    chord::detail::filterPipeForVisibility(queue, renderCtx, filterCmd, inCmdBuffer, inCountBuffer, alphaMode, bTwoside);
+        
+
+                // Now rendering.
+                const bool bMasked = (alphaMode == 1);
+                VkCullModeFlags cullMode = bTwoside ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT;
+                const bool bDepthClamped = false;
+                renderMeshRasterPipe(
+                    queue, 
+                    RTs, 
+                    renderCtx, 
+                    passType, 
+                    bMasked, 
+                    bTwoside, 
+                    bDepthClamped, 
+                    0.0f,  // Depth bias
+                    0.0f,  // Depth slope bias
+                    instanceViewId, 
+                    instanceViewOffset, 
+                    cullMode, 
+                    filteredCmdBuffer, 
+                    filteredCountBuffer);
+            }
+        }
+    }
+
+    static inline RenderTargets getVisibilityRTs(const GBufferTextures& gbuffers)
+    {
+        RenderTargets RTs{ };
+        RTs.RTs[0] = RenderTargetRT(gbuffers.visibility, ERenderTargetLoadStoreOp::Load_Store);
+        RTs.depthStencil = DepthStencilRT(
+            gbuffers.depthStencil,
+            EDepthStencilOp::DepthWrite_StencilWrite,
+            ERenderTargetLoadStoreOp::Load_Store); // Already clear.
+
+        return RTs;
+    }
 }
 
 bool chord::gltfVisibilityRenderingStage0(
@@ -273,6 +275,8 @@ bool chord::gltfVisibilityRenderingStage0(
     CountAndCmdBuffer inCountAndCmdBuffer,
     CountAndCmdBuffer& outCountAndCmdBuffer)
 {
+    using namespace chord::graphics;
+
     bool bShouldInvokeStage1 = false;
     outCountAndCmdBuffer = { nullptr, nullptr };
 
@@ -315,13 +319,15 @@ void chord::gltfVisibilityRenderingStage1(
     uint instanceViewOffset,
     CountAndCmdBuffer inCountAndCmdBuffer)
 {
+    using namespace chord::graphics;
+
     chord::CountAndCmdBuffer countAndCmdBuffers;
     detail::hzbCulling(queue, hzbCtx, renderCtx, false, inCountAndCmdBuffer.first, inCountAndCmdBuffer.second, countAndCmdBuffers);
 
     renderMesh(queue, getVisibilityRTs(gbuffers), renderCtx, hzbCtx, PASS_TYPE_CLUSTER, instanceViewId, instanceViewOffset, countAndCmdBuffers.second, countAndCmdBuffers.first);
 }
 
-CascadeShadowContext chord::renderShadow(
+chord::CascadeShadowContext chord::renderShadow(
     graphics::CommandList& cmd, 
     graphics::GraphicsQueue& queue, 
     const GLTFRenderContext& renderCtx,
@@ -333,6 +339,8 @@ CascadeShadowContext chord::renderShadow(
     const float3& lightDirection,
     const HZBContext& hzbCtx)
 {
+    using namespace chord::graphics;
+
     if (!shouldRenderGLTF(renderCtx))
     {
         return { };
@@ -532,7 +540,7 @@ CascadeShadowContext chord::renderShadow(
     return resultCtx;
 }
 
-CascadeShadowHistory chord::extractCascadeShadowHistory(
+chord::CascadeShadowHistory chord::extractCascadeShadowHistory(
     graphics::GraphicsQueue& queue, 
     const float3& direction,
     const CascadeShadowContext& shadowCtx, 

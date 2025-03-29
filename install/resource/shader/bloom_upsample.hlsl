@@ -1,3 +1,6 @@
+#ifndef SHADER_BLOOM_UPSAMPLE_HLSL
+#define SHADER_BLOOM_UPSAMPLE_HLSL
+
 #include "base.h"
 
 struct BloomUpsamplePushConsts
@@ -75,4 +78,6 @@ void mainCS(
 }
 
 
-#endif 
+#endif // !__cplusplus
+
+#endif // SHADER_BLOOM_UPSAMPLE_HLSL

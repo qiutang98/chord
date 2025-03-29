@@ -1,3 +1,6 @@
+#ifndef SHADER_TSR_PREPARE_HLSL
+#define SHADER_TSR_PREPARE_HLSL
+
 #include "base.h"
 
 struct TSRPreparePushConsts
@@ -72,3 +75,5 @@ void mainCS(
 }
 
 #endif 
+
+#endif // SHADER_TSR_PREPARE_HLSL

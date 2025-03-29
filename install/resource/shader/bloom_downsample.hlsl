@@ -1,3 +1,6 @@
+#ifndef SHADER_BLOOM_DOWNSAMPLE_HLSL
+#define SHADER_BLOOM_DOWNSAMPLE_HLSL
+
 #include "base.h"
 
 struct BloomDownSamplePushConsts
@@ -111,4 +114,6 @@ void mainCS(
 
     storeRWTexture2D_float3(pushConsts.UAV, workPos, outColor);
 }
-#endif
+#endif // __cplusplus
+
+#endif // SHADER_BLOOM_DOWNSAMPLE_HLSL

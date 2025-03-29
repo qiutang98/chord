@@ -2,9 +2,8 @@
 
 namespace chord
 {
-	using namespace graphics;
 
-	PushSetBuilder& chord::PushSetBuilder::addSRV(PoolBufferRef buffer)
+	PushSetBuilder& chord::PushSetBuilder::addSRV(graphics::PoolBufferRef buffer)
 	{
 		asSRV(m_queue, buffer);
 
@@ -25,7 +24,7 @@ namespace chord
 		return *this;
 	}
 
-	PushSetBuilder& PushSetBuilder::addUAV(PoolBufferRef buffer)
+	PushSetBuilder& PushSetBuilder::addUAV(graphics::PoolBufferRef buffer)
 	{
 		asUAV(m_queue, buffer);
 
@@ -127,7 +126,7 @@ namespace chord
         };
     }
 
-	void PushSetBuilder::push(ComputePipelineRef pipe, uint32 set)
+	void PushSetBuilder::push(graphics::ComputePipelineRef pipe, uint32 set)
     {
         std::vector<VkWriteDescriptorSet> writes(m_cacheBindingBuilder.size());
         std::vector<VkDescriptorImageInfo> images(m_cacheBindingBuilder.size());
@@ -179,7 +178,7 @@ namespace chord
             }
         }
 
-        getContext().pushDescriptorSet(
+        graphics::getContext().pushDescriptorSet(
             m_cmd, 
             VK_PIPELINE_BIND_POINT_COMPUTE, 
             pipe->getLayout(),
