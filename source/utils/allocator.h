@@ -4,8 +4,116 @@
 #include <cstdint>
 #include <vector>
 
+#include <utils/noncopyable.h>
+#include <utils/tagged_ptr.h>
+
 namespace chord
 {
+	template<typename T, size_t kPageSize>
+	class LinkListArenaAllocator final : NonCopyable 
+	{
+		#pragma warning(push)
+		#pragma warning(disable:4624)
+		struct Node
+		{
+			union 
+			{
+				T data { };
+				Node* next;
+			};
+		};
+		#pragma warning(pop)
+
+		using TPointer = TaggedPointer<Node>;
+		static_assert(sizeof(Node) < kPageSize);
+		static constexpr uint32 kElementCount = kPageSize / sizeof(Node);
+
+		alignas(kCpuCachelineSize) std::atomic<TPointer> m_freeList{ };
+		static_assert(std::atomic<TPointer>::is_always_lock_free);
+
+		std::mutex m_arenaCreateMutex;
+		std::vector<void*> m_arenas;
+
+		void createArena()
+		{
+			void* memory = std::malloc(kPageSize);
+			m_arenas.push_back(memory);
+
+			T* newBlob = reinterpret_cast<T*>(memory);
+			for (uint32 i = 0; i < kElementCount; i++)
+			{
+				free(&newBlob[i]);
+			}
+		}
+
+	public:
+		explicit LinkListArenaAllocator()
+		{
+			createArena();
+		}
+
+		~LinkListArenaAllocator()
+		{
+			for (void* nodes : m_arenas)
+			{
+				std::free(nodes);
+			}
+		}
+
+		void* allocate() // new allocate() T;
+		{
+			TPointer tagPtr = m_freeList.load(std::memory_order_relaxed);
+			while (tagPtr.getPointer() && !m_freeList.compare_exchange_weak(tagPtr, TPointer(tagPtr.getPointer()->next, tagPtr.getTag() + 1),
+				std::memory_order_acq_rel, std::memory_order_relaxed))
+			{
+			}
+
+			if (tagPtr.getPointer())
+			{
+				Node* ptr = tagPtr.getPointer();
+				return reinterpret_cast<void*>(ptr);
+			}
+
+			// Block allocate when create new arena.
+			std::lock_guard lock(m_arenaCreateMutex);
+			if (!m_freeList.load(std::memory_order_acquire).getPointer())
+			{
+				createArena();
+			}
+			return allocate();
+		}
+
+		void free(T* tnode)
+		{
+			Node* node = reinterpret_cast<Node*>(tnode);
+
+			TPointer tagPtr = m_freeList.load(std::memory_order_relaxed);
+			node->next = tagPtr.getPointer();
+
+			while (!m_freeList.compare_exchange_weak(tagPtr, TPointer(node, tagPtr.getTag() + 1),
+				std::memory_order_acq_rel, std::memory_order_relaxed))
+			{
+				node->next = tagPtr.getPointer();
+			}
+		}
+	};
+
+	// Small object just use heap allocator is fine.
+	template<typename T>
+	class HeapAllocator final : NonCopyable
+	{
+	public:
+		T* allocate()
+		{
+			return reinterpret_cast<T*>(std::malloc(sizeof(T)));
+		}
+
+		inline void free(T* node)
+		{
+			std::free(reinterpret_cast<void*>(node));
+		}
+	};
+
 	// Single object inline allocator. it keep one small stack memory.
 	// When stack memory overflow, then use heap memory.
 	template<std::size_t kMaxStackSize>
