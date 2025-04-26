@@ -72,7 +72,9 @@ namespace chord
 		// Main thread.
 		std::future<void> m_future;
 
-		alignas(kCpuCachelineSize) std::atomic<bool> m_bPushLog;
+		std::mutex mutex_pushing;
+		std::condition_variable cv_pushing;
+
 		alignas(kCpuCachelineSize) std::atomic<bool> m_bRunning;
 
 		// Writing log file.
@@ -98,7 +100,6 @@ namespace chord
 			: m_bStdOut(bStdOut)
 			, m_minLogLevel(minLogLevel)
 			, m_bRunning(true)
-			, m_bPushLog(false)
 			, m_file(nullptr)
 		{
 			if (!outFilePath.empty())
@@ -130,8 +131,10 @@ namespace chord
 					printAllLogs();
 
 					// Make current thread wait for notify.
-					m_bPushLog.wait(false, std::memory_order_acquire);
-					m_bPushLog.store(false, std::memory_order_release);
+					{
+						std::unique_lock lock(mutex_pushing);
+						cv_pushing.wait(lock);
+					}
 				}
 
 				// Flush all log message before return.
@@ -154,17 +157,13 @@ namespace chord
 			m_messageQueue.enqueue(std::move(logMessage));
 
 			// Notify all thread break while loop.
-			m_bPushLog.store(true, std::memory_order_release);
-			m_bPushLog.notify_one();
+			cv_pushing.notify_one();
 		}
 
 		~AsyncLogWriter()
 		{
 			m_bRunning = false;
-
-			// 
-			m_bPushLog.store(true, std::memory_order_release);
-			m_bPushLog.notify_all();
+			cv_pushing.notify_all();
 
 			//
 			m_future.wait();

@@ -179,10 +179,9 @@ namespace chord::jobsystem
 		{
 			//
 			const uint16 jobIndex = allocator->computeAndCheckOffset(job);
+			job->jobState = EJobState::Pushed;
 
 			func(jobIndex);
-
-			job->jobState = EJobState::Pushed;
 
 			sQueuedAnyJobCount.fetch_add(1, std::memory_order_seq_cst);
 			sRecentQueueAnyJob.cv.notify_one();
@@ -455,19 +454,24 @@ namespace chord::jobsystem
 		auto& waitAtomicSignal = bForegroundWorker ? sRecentQueueForeJob : sRecentQueueAnyJob;
 		do
 		{
+			bool bSuccess = false;
 			if (isJobInQueues(bForegroundWorker))
 			{
 				Job* job = findOneJob(!tlsWorkerData->bForegroundWorker);
 				if (job)
 				{
 					execute(job);
+					bSuccess = true;
 				}
 			}
 
-			if (!isJobInQueues(bForegroundWorker))
+			if (!bSuccess)
 			{
 				std::unique_lock lock(waitAtomicSignal.mutex);
-				waitAtomicSignal.cv.wait(lock, [bForegroundWorker]() { return isJobInQueues(bForegroundWorker) || isJobSystemRequiredStop(); });
+				while (!isJobInQueues(bForegroundWorker))
+				{
+					waitAtomicSignal.cv.wait(lock);
+				}
 			}
 		} while (!isJobSystemRequiredStop());
 

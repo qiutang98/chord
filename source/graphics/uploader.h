@@ -2,6 +2,8 @@
 #include <graphics/common.h>
 #include <graphics/resource.h>
 #include <graphics/buffer_pool.h>
+#include <utils/job_system.h>
+#include <utils/mpsc_queue.h>
 
 namespace chord::graphics
 {
