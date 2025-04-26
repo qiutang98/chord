@@ -263,10 +263,10 @@ namespace chord::graphics
 		void release();
 
 		// After context basic init will call and clean this event.
-		Events<Context> onInit;
+		ChordEvent<> onInit;
 
 		// Tick event.
-		Events<Context, const ApplicationTickData&> onTick;
+		ChordEvent<const ApplicationTickData&> onTick;
 
 	private:
 		// Sync init builtin resources.

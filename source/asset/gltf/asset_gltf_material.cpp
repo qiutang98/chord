@@ -3,9 +3,11 @@
 #include <asset/texture/texture.h>
 #include <application/application.h>
 #include <asset/gltf/gltf.h>
+#include <utils/job_system.h>
 
-namespace chord::gltf
+namespace chord
 {
+
 	enum class EKHRGLTFExtension : uint8
 	{
 		LightPunctual = 0,
@@ -73,8 +75,7 @@ namespace chord::gltf
 		{
 			if (b16Bit)
 			{
-				// TODO: Support in gltf.
-				checkEntry();
+				checkEntry(); // TODO: Support in gltf.
 			}
 
 			// 8 bit type.
@@ -146,7 +147,7 @@ namespace chord::gltf
 				imageChannelUsageMap[baseColorImageIndex].rgba = { true, true, true, true };
 			}
 
-
+			//
 			if (material.emissiveTexture.index != -1)
 			{
 				int32 emissiveImageIndex = model.textures.at(material.emissiveTexture.index).source;
@@ -179,6 +180,7 @@ namespace chord::gltf
 				// Metallic roughness image use .gb channel.
 				int32 metallicRoughnessImageIndex = model.textures.at(material.pbrMetallicRoughness.metallicRoughnessTexture.index).source;
 
+				// Always mark red channel in used, so we can compress well with BC1
 				if (material.occlusionTexture.index == -1)
 				{
 					imageChannelUsageMap[metallicRoughnessImageIndex].rgba.r = true;
@@ -286,7 +288,7 @@ namespace chord::gltf
 				}
 			}
 
-			if (0 && material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialTransmission)))
+			if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialTransmission)))
 			{
 				const auto& ext = material.extensions.at(getGLTFExtension(EKHRGLTFExtension::MaterialTransmission));
 				int32 texture;
@@ -317,6 +319,8 @@ namespace chord::gltf
 		std::map<int32, int32> skipLoadImage; // The image already composite in other image, use this map to indexing.
 		for (auto& material : model.materials)
 		{
+
+			// Case #0: Merge occlusion texture to metallic roughness texture.
 			if (material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 && material.occlusionTexture.index != -1)
 			{
 				tinygltf::Texture metallicRoughnessTexture = model.textures.at(material.pbrMetallicRoughness.metallicRoughnessTexture.index);
@@ -327,7 +331,7 @@ namespace chord::gltf
 					if (metallicRoughnessTexture.source != occlusionTexture.source)
 					{
 						{
-							auto sourceSwitch = metallicRoughnessTexture;
+							tinygltf::Texture sourceSwitch = metallicRoughnessTexture;
 							sourceSwitch.source = occlusionTexture.source;
 							checkMsgf(sourceSwitch == occlusionTexture,
 								"Try to compositing metallicRoughnessTexture and occlusionTexture for '{}', but it's sampler or other state no same!", material.name);
@@ -357,220 +361,261 @@ namespace chord::gltf
 			}
 		}
 
-		// Composition.
+		std::filesystem::path tempCacheTextureFolder = std::filesystem::path(projectPaths.cachePath.u16()) / generateUUID();
+
+		// Composition: run with async task.
 		std::unordered_map<int32, std::filesystem::path> compositedSaveImage;
-		for (int32 i = 0; i < model.images.size(); i++)
+		std::mutex compositedSaveImage_mutex;
+		std::vector<std::filesystem::path> tempSavedCompositedImages;
+		jobsystem::parallelFor(EBusyWaitType::All, model.images.size(), EJobFlags::Foreground, 
+			[&pendingCompositeImages = std::as_const(pendingCompositeImages),
+			&model = std::as_const(model),
+			&srcBaseDir = std::as_const(srcBaseDir),
+			&srgbImagesMap = std::as_const(srgbImagesMap),
+			&tempCacheTextureFolder = std::as_const(tempCacheTextureFolder),
+			&compositedSaveImage_mutex,
+			&compositedSaveImage,
+			&tempSavedCompositedImages](const uint32 loopStart, const uint32 loopEnd)
 		{
-			if (!pendingCompositeImages.contains(i))
+			for (uint32 i = loopStart; i < loopEnd; ++i)
 			{
-				continue;
-			}
-
-			const auto& pendingCompositions = pendingCompositeImages[i];
-			const auto& destImage = model.images[i];
-
-			std::vector<uint8> compositeMemory{ };
-			compositeMemory.resize(destImage.width * destImage.height * 4);
-			std::filesystem::path destUri;
-			{
-				std::string uriDecoded;
-				tinygltf::URIDecode(destImage.uri, &uriDecoded, nullptr);
-				destUri = std::filesystem::path(uriDecoded);
-				std::string extension = destUri.extension().string();
-
-				if (extension.empty())
+				if (!pendingCompositeImages.contains(i))
 				{
-					memcpy(compositeMemory.data(), destImage.image.data(), compositeMemory.size());
-				}
-				else
-				{
-					ImageLdr2D ldr{ };
-					std::filesystem::path imgUri = srcBaseDir / destUri;
-					ldr.fillFromFile(imgUri.string());
-
-					memcpy(compositeMemory.data(), ldr.getPixels(), compositeMemory.size());
-				}
-			}
-			std::string imgName = destUri.filename().string();
-
-			for (const auto& detail : pendingCompositions)
-			{
-				const auto& srcImage = model.images[detail.srcImage];
-				check(detail.destImageChannel <= 3 && detail.destImageChannel >= 0);
-				check(detail.srcImageChannel <= 3 && detail.srcImageChannel >= 0);
-
-				if (srcImage.bits != 8 && srcImage.bits != -1) { unimplemented(); }
-				if (srgbImagesMap.contains(detail.srcImage)) { unimplemented(); }
-
-				std::string uriDecoded;
-				tinygltf::URIDecode(srcImage.uri, &uriDecoded, nullptr);
-				std::filesystem::path uri = std::filesystem::path(uriDecoded);
-				std::string extension = uri.extension().string();
-
-
-				std::unique_ptr<ImageLdr2D> imagePtr = nullptr;
-				const uint8* srcData = nullptr;
-				if (extension.empty())
-				{
-					// Load from glb.
-					srcData = srcImage.image.data();
-				}
-				else
-				{
-					imagePtr = std::make_unique<ImageLdr2D>();
-					std::filesystem::path imgUri = srcBaseDir / uri;
-
-					imagePtr->fillFromFile(imgUri.string());
-					srcData = imagePtr->getPixels();
+					continue;
 				}
 
-				std::vector<uint8> sizeFitData{ };
-				if (srcImage.width != destImage.width || srcImage.height != destImage.height)
-				{
-					sizeFitData.resize(destImage.width * destImage.height * 4);
-					stbir_resize_uint8(
-						srcData, srcImage.width, srcImage.height, 0,
-						sizeFitData.data(), destImage.width, destImage.height, 0, 4);
+				const auto& pendingCompositions = pendingCompositeImages.at(i);
+				const auto& destImage = model.images[i];
 
-					srcData = sizeFitData.data();
+				std::vector<uint8> compositeMemory{ };
+				compositeMemory.resize(destImage.width * destImage.height * 4);
+				std::filesystem::path destUri;
+				{
+					std::string uriDecoded;
+					tinygltf::URIDecode(destImage.uri, &uriDecoded, nullptr);
+					destUri = std::filesystem::path(uriDecoded);
+					std::string extension = destUri.extension().string();
+
+					if (extension.empty())
+					{
+						memcpy(compositeMemory.data(), destImage.image.data(), compositeMemory.size());
+					}
+					else
+					{
+						ImageLdr2D ldr{ };
+						std::filesystem::path imgUri = srcBaseDir / destUri;
+						ldr.fillFromFile(imgUri.string());
+
+						memcpy(compositeMemory.data(), ldr.getPixels(), compositeMemory.size());
+					}
+				}
+				std::string imgName = destUri.filename().string();
+
+				for (const auto& detail : pendingCompositions)
+				{
+					const auto& srcImage = model.images[detail.srcImage];
+					check(detail.destImageChannel <= 3 && detail.destImageChannel >= 0);
+					check(detail.srcImageChannel <= 3 && detail.srcImageChannel >= 0);
+
+					if (srcImage.bits != 8 && srcImage.bits != -1) { unimplemented(); }
+					if (srgbImagesMap.contains(detail.srcImage)) { unimplemented(); }
+
+					std::string uriDecoded;
+					tinygltf::URIDecode(srcImage.uri, &uriDecoded, nullptr);
+					std::filesystem::path uri = std::filesystem::path(uriDecoded);
+					std::string extension = uri.extension().string();
+
+					std::unique_ptr<ImageLdr2D> imagePtr = nullptr;
+					const uint8* srcData = nullptr;
+					if (extension.empty())
+					{
+						// Load from glb.
+						srcData = srcImage.image.data();
+					}
+					else
+					{
+						imagePtr = std::make_unique<ImageLdr2D>();
+						std::filesystem::path imgUri = srcBaseDir / uri;
+
+						imagePtr->fillFromFile(imgUri.string());
+						srcData = imagePtr->getPixels();
+					}
+
+					std::vector<uint8> sizeFitData{ };
+					if (srcImage.width != destImage.width || srcImage.height != destImage.height)
+					{
+						sizeFitData.resize(destImage.width * destImage.height * 4);
+						stbir_resize_uint8(
+							srcData, srcImage.width, srcImage.height, 0,
+							sizeFitData.data(), destImage.width, destImage.height, 0, 4);
+
+						srcData = sizeFitData.data();
+					}
+
+					for (uint i = 0; i < compositeMemory.size(); i += 4)
+					{
+						compositeMemory[i + detail.destImageChannel] = srcData[i + detail.srcImageChannel];
+					}
+
+					imgName += uri.filename().string();
 				}
 
-				for (uint i = 0; i < compositeMemory.size(); i += 4)
-				{
-					compositeMemory[i + detail.destImageChannel] = srcData[i + detail.srcImageChannel];
-				}
-
-				imgName += uri.filename().string();
-			}
-
-			if (imgName.empty())
-			{
-				imgName += generateUUID();
-			}
-			imgName += ".png";
-
-			std::filesystem::path tempSavedTexturesPath = std::filesystem::path(projectPaths.cachePath.u16()) / imgName;
-
-			stbi_write_png(tempSavedTexturesPath.string().c_str(), destImage.width, destImage.height,
-				4, compositeMemory.data(), destImage.width * 4);
-
-			compositedSaveImage[i] = tempSavedTexturesPath;
-		}
-
-		// Now load all images.
-		for (int32 imageIndex = 0; imageIndex < model.images.size(); imageIndex++)
-		{
-			if (skipLoadImage.contains(imageIndex))
-			{
-				// Current pass skip image which composite to other image.
-				continue;
-			}
-
-			const auto& gltfImage = model.images[imageIndex];
-
-			// This texture is srgb encode or not.
-			const bool bSrgb = srgbImagesMap.contains(imageIndex);
-
-			// This texture should be alpha coverage or not.
-			const bool bAlphaCoverage = alphaCoverageImagesMap.contains(imageIndex);
-
-			// Check it's channel collect.
-			const bool bExistChannelCollect = imageChannelUsageMap.contains(imageIndex);
-			if (!bExistChannelCollect)
-			{
-				LOG_ERROR("Texture '{}' no exist channel collect, may cause error format select, we skip it.", gltfImage.name);
-				continue;
-			}
-
-			std::string uriDecoded;
-			tinygltf::URIDecode(gltfImage.uri, &uriDecoded, nullptr);
-			std::filesystem::path uri = std::filesystem::path(uriDecoded);
-			std::string extension = uri.extension().string();
-			std::string imgName = uri.filename().string();
-
-			std::filesystem::path imgUri = srcBaseDir / uri;
-			AssetSaveInfo saveInfo;
-
-			const bool bCompositedSaved = compositedSaveImage.contains(imageIndex);
-			if (bCompositedSaved)
-			{
-				imgUri = compositedSaveImage[imageIndex];
-			}
-
-			if (extension.empty() && (!bCompositedSaved))
-			{
-				// Loaded from glb, first extract to png.
 				if (imgName.empty())
 				{
-					imgName = generateUUID() + ".png";
+					imgName += generateUUID();
 				}
-				std::filesystem::path tempSavedTexturesPath = std::filesystem::path(projectPaths.cachePath.u16()) / imgName;
+				imgName += ".png";
 
-				int32 channelNum = gltfImage.component == -1 ? 4 : gltfImage.component;
-				if (gltfImage.bits != 8 && gltfImage.bits != -1)
+				// Save files.
+				std::filesystem::path tempSavedTexturesPath = tempCacheTextureFolder / imgName;
+				stbi_write_png(tempSavedTexturesPath.string().c_str(), destImage.width, destImage.height,
+					4, compositeMemory.data(), destImage.width * 4);
+
 				{
-					LOG_ERROR("Image '{0}' embed with bit {1} not support.", gltfImage.name, gltfImage.bits);
-				}
-				stbi_write_png(tempSavedTexturesPath.string().c_str(), gltfImage.width, gltfImage.height,
-					channelNum, gltfImage.image.data(), gltfImage.width * channelNum);
-
-				const bool b16Bit = (gltfImage.bits == 16);
-				auto textureAssetImportConfig = std::make_shared<TextureAssetImportConfig>();
-
-				textureAssetImportConfig->importFilePath = tempSavedTexturesPath;
-				textureAssetImportConfig->storeFilePath = imageFolderPath / std::filesystem::path(imgName).replace_extension();
-				textureAssetImportConfig->bSRGB = bSrgb;
-				textureAssetImportConfig->bGenerateMipmap = true;
-				textureAssetImportConfig->alphaMipmapCutoff = bAlphaCoverage ? alphaCoverageImagesMap[imageIndex] : 1.0f;
-				textureAssetImportConfig->format = imageChannelUsageMap[imageIndex].getFormat(b16Bit);
-
-				if (!TextureAsset::kAssetTypeMeta.importConfig.importAssetFromConfig(textureAssetImportConfig))
-				{
-					LOG_ERROR("Fail to import texture {}.", utf8::utf16to8(imgUri.u16string()))
-				}
-				else
-				{
-					saveInfo = textureAssetImportConfig->getSaveInfo(TextureAsset::kAssetTypeMeta.suffix);
-				}
-
-				std::filesystem::remove(tempSavedTexturesPath);
-			}
-			else
-			{
-				// Read the header again to check if it has 16 bit data, e.g. for a heightmap.
-				const bool b16Bit = stbi_is_16_bit(imgUri.string().c_str());
-
-				// Loaded from file.
-				auto textureAssetImportConfig = std::make_shared<TextureAssetImportConfig>();
-
-				textureAssetImportConfig->importFilePath = imgUri;
-				textureAssetImportConfig->storeFilePath = imageFolderPath / imgUri.filename().replace_extension();
-				textureAssetImportConfig->bSRGB = bSrgb;
-				textureAssetImportConfig->bGenerateMipmap = true;
-				textureAssetImportConfig->alphaMipmapCutoff = bAlphaCoverage ? alphaCoverageImagesMap[imageIndex] : 1.0f;
-				textureAssetImportConfig->format = imageChannelUsageMap[imageIndex].getFormat(b16Bit);
-
-				if (!TextureAsset::kAssetTypeMeta.importConfig.importAssetFromConfig(textureAssetImportConfig))
-				{
-					LOG_ERROR("Fail to import texture {}.", utf8::utf16to8(imgUri.u16string()))
-				}
-				else
-				{
-					saveInfo = textureAssetImportConfig->getSaveInfo(TextureAsset::kAssetTypeMeta.suffix);
+					std::lock_guard lock(compositedSaveImage_mutex);
+					compositedSaveImage[i] = tempSavedTexturesPath;
+					tempSavedCompositedImages.push_back(tempSavedTexturesPath);
 				}
 			}
+		});
 
-			// Cache import texture save infos.
-			if (!saveInfo.empty())
-			{
-				importedImages[imageIndex] = saveInfo;
-			}
-		}
-
-		for (auto& compositionTempPath : compositedSaveImage)
+		jobsystem::parallelFor(EBusyWaitType::All, model.images.size(), EJobFlags::Foreground, [
+			&pendingCompositeImages = std::as_const(pendingCompositeImages),
+			&model = std::as_const(model),
+			&srcBaseDir = std::as_const(srcBaseDir),
+			&srgbImagesMap = std::as_const(srgbImagesMap),
+			&tempCacheTextureFolder = std::as_const(tempCacheTextureFolder),
+			&skipLoadImage = std::as_const(skipLoadImage),
+			&alphaCoverageImagesMap = std::as_const(alphaCoverageImagesMap),
+			&imageChannelUsageMap = std::as_const(imageChannelUsageMap),
+			&compositedSaveImage = std::as_const(compositedSaveImage),
+			&imageFolderPath = std::as_const(imageFolderPath),
+			&compositedSaveImage_mutex,
+			&importedImages]
+			(const size_t loopStart, const size_t loopEnd)
 		{
-			std::filesystem::remove(compositionTempPath.second);
-		}
+			for (int32 imageIndex = loopStart; imageIndex < loopEnd; ++imageIndex)
+			{
+				if (skipLoadImage.contains(imageIndex))
+				{
+					// Current pass skip image which composite to other image.
+					continue;
+				}
+
+				const auto& gltfImage = model.images[imageIndex];
+
+				// This texture is srgb encode or not.
+				const bool bSrgb = srgbImagesMap.contains(imageIndex);
+
+				// This texture should be alpha coverage or not.
+				const bool bAlphaCoverage = alphaCoverageImagesMap.contains(imageIndex);
+
+				// Check it's channel collect.
+				const bool bExistChannelCollect = imageChannelUsageMap.contains(imageIndex);
+				if (!bExistChannelCollect)
+				{
+					LOG_ERROR("Texture '{}' no exist channel collect, may cause error format select, we skip it.", gltfImage.name);
+					continue;
+				}
+
+				std::string uriDecoded;
+				tinygltf::URIDecode(gltfImage.uri, &uriDecoded, nullptr);
+				std::filesystem::path uri = std::filesystem::path(uriDecoded);
+				std::string extension = uri.extension().string();
+				std::string imgName = uri.filename().string();
+
+				// 
+				std::filesystem::path imgUri = srcBaseDir / uri;
+				AssetSaveInfo saveInfo;
+
+				//
+				const bool bCompositedSaved = compositedSaveImage.contains(imageIndex);
+				if (bCompositedSaved)
+				{
+					imgUri = compositedSaveImage.at(imageIndex);
+				}
+
+				if (extension.empty() && (!bCompositedSaved))
+				{
+					// Loaded from glb, first extract to png.
+					if (imgName.empty())
+					{
+						imgName = generateUUID() + ".png";
+					}
+					std::filesystem::path tempSavedTexturesPath = tempCacheTextureFolder / imgName;
+
+					int32 channelNum = gltfImage.component == -1 ? 4 : gltfImage.component;
+					if (gltfImage.bits != 8 && gltfImage.bits != -1)
+					{
+						LOG_ERROR("Image '{0}' embed with bit {1} not support.", gltfImage.name, gltfImage.bits);
+					}
+					stbi_write_png(tempSavedTexturesPath.string().c_str(), gltfImage.width, gltfImage.height,
+						channelNum, gltfImage.image.data(), gltfImage.width * channelNum);
+
+					const bool b16Bit = (gltfImage.bits == 16);
+					auto textureAssetImportConfig = std::make_shared<TextureAssetImportConfig>();
+
+					textureAssetImportConfig->importFilePath = tempSavedTexturesPath;
+					textureAssetImportConfig->storeFilePath = imageFolderPath / std::filesystem::path(imgName).replace_extension();
+					textureAssetImportConfig->bSRGB = bSrgb;
+					textureAssetImportConfig->bGenerateMipmap = true;
+					textureAssetImportConfig->alphaMipmapCutoff = bAlphaCoverage ? alphaCoverageImagesMap.at(imageIndex) : 1.0f;
+					textureAssetImportConfig->format = imageChannelUsageMap.at(imageIndex).getFormat(b16Bit);
+
+					if (!TextureAsset::kAssetTypeMeta.importConfig.importAssetFromConfig(textureAssetImportConfig))
+					{
+						LOG_ERROR("Fail to import texture {}.", utf8::utf16to8(imgUri.u16string()))
+					}
+					else
+					{
+						saveInfo = textureAssetImportConfig->getSaveInfo(TextureAsset::kAssetTypeMeta.suffix);
+					}
+
+					std::filesystem::remove(tempSavedTexturesPath);
+				}
+				else
+				{
+					// Read the header again to check if it has 16 bit data, e.g. for a heightmap.
+					const bool b16Bit = stbi_is_16_bit(imgUri.string().c_str());
+
+					// Loaded from file.
+					auto textureAssetImportConfig = std::make_shared<TextureAssetImportConfig>();
+
+					textureAssetImportConfig->importFilePath = imgUri;
+					textureAssetImportConfig->storeFilePath = imageFolderPath / imgUri.filename().replace_extension();
+					textureAssetImportConfig->bSRGB = bSrgb;
+					textureAssetImportConfig->bGenerateMipmap = true;
+					textureAssetImportConfig->alphaMipmapCutoff = bAlphaCoverage ? alphaCoverageImagesMap.at(imageIndex) : 1.0f;
+					textureAssetImportConfig->format = imageChannelUsageMap.at(imageIndex).getFormat(b16Bit);
+
+					if (!TextureAsset::kAssetTypeMeta.importConfig.importAssetFromConfig(textureAssetImportConfig))
+					{
+						LOG_ERROR("Fail to import texture {}.", utf8::utf16to8(imgUri.u16string()))
+					}
+					else
+					{
+						saveInfo = textureAssetImportConfig->getSaveInfo(TextureAsset::kAssetTypeMeta.suffix);
+					}
+				}
+
+				// Cache import texture save infos.
+				if (!saveInfo.empty())
+				{
+					std::lock_guard lock(compositedSaveImage_mutex);
+					importedImages[imageIndex] = saveInfo;
+				}
+			}
+		});
+
+		// Delete temp saved composited images.
+		jobsystem::parallelFor(EBusyWaitType::Foreground, tempSavedCompositedImages.size(), EJobFlags::Foreground, 
+		[&tempSavedCompositedImages](const size_t loopStart, const size_t loopEnd)
+		{
+			for (size_t i = loopStart; i < loopEnd; ++i)
+			{
+				std::filesystem::remove(tempSavedCompositedImages[i]);
+			}
+		});
 
 		// Skip image use it's composite image save info.
 		for (int32 imageIndex = 0; imageIndex < model.images.size(); imageIndex++)
@@ -603,7 +648,7 @@ namespace chord::gltf
 		const auto& meta = GLTFMaterialAsset::kAssetTypeMeta;
 		const auto materialStoreRelativePath = buildRelativePath(Project::get().getPath().assetPath.u16(), materialFolderPath);
 		int32 index = -1;
-		for (auto index = 0; index < model.materials.size(); index ++)
+		for (auto index = 0; index < model.materials.size(); index++)
 		{
 			const auto& material = model.materials[index];
 
@@ -662,7 +707,7 @@ namespace chord::gltf
 			assignGLTFTexture(materialPtr->normalTexture, material.normalTexture);
 			materialPtr->normalTextureScale = (float)material.normalTexture.scale;
 
-				
+
 			materialPtr->bExistOcclusion = material.occlusionTexture.index != -1;
 			if (materialPtr->bExistOcclusion && pbr.metallicRoughnessTexture.index > -1)
 			{
@@ -682,9 +727,10 @@ namespace chord::gltf
 
 		return std::move(importedMaterials);
 	}
-}
 
-chord::GLTFMaterialAssetRef chord::tryLoadGLTFMaterialAsset(const std::filesystem::path& path, bool bThreadSafe)
-{
-	return Application::get().getAssetManager().getOrLoadAsset<GLTFMaterialAsset>(path, bThreadSafe);
+	GLTFMaterialAssetRef chord::tryLoadGLTFMaterialAsset(const std::filesystem::path& path, bool bThreadSafe)
+	{
+		return Application::get().getAssetManager().getOrLoadAsset<GLTFMaterialAsset>(path, bThreadSafe);
+	}
+
 }

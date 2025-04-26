@@ -27,8 +27,8 @@ namespace chord
 		bool loadScene(const std::filesystem::path& loadPath);
 
 		// Event when active scene change.
-		Events<SceneManager, SceneRef> onSceneLoad;
-		Events<SceneManager, SceneRef> onSceneUnload;
+		ChordEvent<SceneRef> onSceneLoad;
+		ChordEvent<SceneRef> onSceneUnload;
 
 		const auto& getUIComponentDrawDetailsMap() const
 		{

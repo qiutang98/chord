@@ -41,7 +41,8 @@ namespace chord
 		
 		CVarSystem::get().getCVarCheck<u16str>("r.log.file.folder")->set(m_projectPath.logPath);
 		CVarSystem::get().getCVarCheck<u16str>("r.log.file.name")->set(u16str("flower"));
-		LoggerSystem::get().updateLogFile();
+		LoggerSystem::get().updateLoggerWriterAnyThread();
+		LoggerSystem::cleanDiskSavedLogFile(2);
 
 		const auto titleName = getAppTitleName();
 		glfwSetWindowTitle(Application::get().getWindowData().window, titleName.c_str());

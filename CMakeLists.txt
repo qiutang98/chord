@@ -24,6 +24,8 @@ file(GLOB_RECURSE chordSource CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/source/*.
 
 ## Add chord framework.
 add_library(chord ${chordHeader} ${chordSource} ${shaderHeaders})
+
+set_property(TARGET chord PROPERTY UNITY_BUILD ON)
 set_property(TARGET chord PROPERTY COMPILE_WARNING_AS_ERROR ON)
 set_property(TARGET chord PROPERTY UNITY_BUILD ON)
 

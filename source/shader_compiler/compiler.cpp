@@ -1,7 +1,6 @@
 #include <shader_compiler/shader.h>
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
-#include <utils/threadpool.h>
 #include <shader_compiler/compiler.h>
 #include <utils/thread.h>
 
@@ -142,7 +141,7 @@ namespace chord::graphics
 		virtual void compileShader(
 			SizedBuffer shaderData,
 			const std::vector<std::string>& args,
-			ShaderCompileResult& result) override
+			ShaderCompileResult& result) const override
 		{
 			// Default we think it will sucess.
 			result.bSuccess = true;
@@ -280,19 +279,7 @@ namespace chord::graphics
 #endif 
 
 	ShaderCompilerManager::ShaderCompilerManager(uint32 freeCount, uint32 desiredMaxCompileThreadCount)
-		: Super(L"ShaderCompiler", freeCount, desiredMaxCompileThreadCount, [this]() { this->worker(); })
 	{
-
-	}
-
-	ShaderCompilerManager::~ShaderCompilerManager()
-	{
-
-	}
-
-	void ShaderCompilerManager::worker()
-	{
-		std::unique_ptr<IPlatformShaderCompiler> compiler = std::make_unique<PlatformShaderCompiler>();
-		loop([&](const TaskType& func) { func(*compiler); });
+		m_compiler = std::make_unique<PlatformShaderCompiler>();
 	}
 }

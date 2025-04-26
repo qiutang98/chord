@@ -84,10 +84,10 @@ namespace chord::graphics
 		VkSemaphore getCurrentFrameFinishSemaphore() const;
 
 		// Call this event when swapchain prepare to recreate.
-		Events<Swapchain> onBeforeSwapchainRecreate;
+		ChordEvent<> onBeforeSwapchainRecreate;
 
 		// Call this event when window swapchain recreated.
-		Events<Swapchain> onAfterSwapchainRecreate;
+		ChordEvent<> onAfterSwapchainRecreate;
 
 		
 		template<typename T, bool bCheckPoolType = true>

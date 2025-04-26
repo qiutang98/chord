@@ -16,10 +16,9 @@ constexpr const char* kIconConsoleFilter = ICON_FA_MAGNIFYING_GLASS;
 
 static inline bool isConsoleEditable(EConsoleVarFlags flags)
 {
-	const bool bProjectIni = uint32(flags) & uint32(EConsoleVarFlags::ProjectIni);
-	const bool bReadOnly   = uint32(flags) & uint32(EConsoleVarFlags::ReadOnly);
+	const bool bReadOnly = uint32(flags) & uint32(EConsoleVarFlags::ReadOnly);
 
-	return (!bProjectIni) && (!bReadOnly);
+	return !bReadOnly;
 }
 
 static inline int myStricmp(const char* s1, const char* s2)
@@ -88,7 +87,7 @@ void WidgetConsole::onInit()
 	m_bScrollToBottom = false;
 	m_bAutoScroll = true;
 
-	m_logCacheHandle = LoggerSystem::get().pushCallback([this](const std::string& info, ELogType type)
+	m_logCacheHandle = LoggerSystem::get().pushCallback([this](const std::string& info, ELogLevel type)
 	{
 		this->addLog(info, type);
 	});
@@ -127,31 +126,31 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 
 	// Log type visibility toggle.
 	{
-		const auto buttonLogTypeVisibilityToggle = [this](ELogType index, std::string Name)
+		const auto buttonLogTypeVisibilityToggle = [this](ELogLevel index, std::string Name)
 		{
 			bool& visibility = m_logVisible[(size_t)index];
 			std::string numCount = (m_logTypeCount[(size_t)index] <= 99) ? std::format("{}", m_logTypeCount[(size_t)index]) : "99+";
 			ImGui::Checkbox(std::format(" {} [{}] ", Name, numCount).c_str(), &visibility);
 		};
 
-		const std::string sFilterName = combineIcon(utf8::utf16to8(u"查找"), kIconConsoleFilter);
+		const std::string sFilterName = combineIcon("Filter", kIconConsoleFilter);
 
 		m_filter.Draw(sFilterName.c_str(), 180);
 		ImGui::SameLine();
 
-		buttonLogTypeVisibilityToggle(ELogType::Trace, utf8::utf16to8(u"通知"));
+		buttonLogTypeVisibilityToggle(ELogLevel::Trace, "Trace");
 		ImGui::SameLine();
 
-		buttonLogTypeVisibilityToggle(ELogType::Info, utf8::utf16to8(u"讯息"));
+		buttonLogTypeVisibilityToggle(ELogLevel::Info, "Info");
 		ImGui::SameLine();
 
-		buttonLogTypeVisibilityToggle(ELogType::Warn, utf8::utf16to8(u"警告"));
+		buttonLogTypeVisibilityToggle(ELogLevel::Warn, "Warning");
 		ImGui::SameLine();
 
-		buttonLogTypeVisibilityToggle(ELogType::Error, utf8::utf16to8(u"错误"));
+		buttonLogTypeVisibilityToggle(ELogLevel::Error, "Error");
 		ImGui::SameLine();
 
-		buttonLogTypeVisibilityToggle(ELogType::Other, utf8::utf16to8(u"其他"));
+		buttonLogTypeVisibilityToggle(ELogLevel::Fatal, "Fatal");
 	}
 
 	ImGui::Separator();
@@ -179,9 +178,9 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 		ImVec4 color;
 		bool bHasColor = false;
 		bool bOutSeparate = false;
-		if (m_logItems[i].second == ELogType::Error)
+		if (m_logItems[i].second == ELogLevel::Error)
 		{
-			if (!m_logVisible[size_t(ELogType::Error)])
+			if (!m_logVisible[size_t(ELogLevel::Error)])
 			{
 				continue;
 			}
@@ -189,9 +188,9 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 			color = ImVec4(1.0f, 0.08f, 0.08f, 1.0f);
 			bHasColor = true;
 		}
-		else if (m_logItems[i].second == ELogType::Warn)
+		else if (m_logItems[i].second == ELogLevel::Warn)
 		{
-			if (!m_logVisible[size_t(ELogType::Warn)])
+			if (!m_logVisible[size_t(ELogLevel::Warn)])
 			{
 				continue;
 			}
@@ -199,23 +198,23 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 			color = ImVec4(1.0f, 1.0f, 0.1f, 1.0f);
 			bHasColor = true;
 		}
-		else if (m_logItems[i].second == ELogType::Trace)
+		else if (m_logItems[i].second == ELogLevel::Trace)
 		{
-			if (!m_logVisible[size_t(ELogType::Trace)])
+			if (!m_logVisible[size_t(ELogLevel::Trace)])
 			{
 				continue;
 			}
 		}
-		else if (m_logItems[i].second == ELogType::Info)
+		else if (m_logItems[i].second == ELogLevel::Info)
 		{
-			if (!m_logVisible[size_t(ELogType::Info)])
+			if (!m_logVisible[size_t(ELogLevel::Info)])
 			{
 				continue;
 			}
 		}
 		else if (strncmp(m_logItems[i].first.c_str(), "# ", 2) == 0)
 		{
-			if (!m_logVisible[size_t(ELogType::Other)])
+			if (!m_logVisible[size_t(ELogLevel::Info)])
 			{
 				continue;
 			}
@@ -225,7 +224,7 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 		}
 		else if (strncmp(m_logItems[i].first.c_str(), "Help: ", 5) == 0)
 		{
-			if (!m_logVisible[size_t(ELogType::Other)])
+			if (!m_logVisible[size_t(ELogLevel::Info)])
 			{
 				continue;
 			}
@@ -235,7 +234,7 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 		}
 		else
 		{
-			if (!m_logVisible[size_t(ELogType::Other)])
+			if (!m_logVisible[size_t(ELogLevel::Info)])
 			{
 				continue;
 			}
@@ -318,7 +317,7 @@ void WidgetConsole::onVisibleTick(const ApplicationTickData& tickData)
 		myStrtrim(s);
 		if (s[0])
 		{
-			m_cvarCommandCtx.execCommand(s, [this](const std::string& log) { addLog(log, ELogType::Other);  });
+			m_cvarCommandCtx.execCommand(s, [this](const std::string& log) { addLog(log, ELogLevel::Info);  });
 			m_cvarCommandCtx.activeCommands.clear();
 
 			// On command input, we scroll to bottom even if AutoScroll==false
@@ -347,7 +346,7 @@ void WidgetConsole::clearLog()
 	}
 }
 
-void WidgetConsole::addLog(const std::string& info, ELogType type)
+void WidgetConsole::addLog(const std::string& info, ELogLevel type)
 {
 	std::lock_guard lock(m_asyncLogItemslock);
 

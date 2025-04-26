@@ -30,7 +30,7 @@ public:
 	void setTitle(const std::string& name, bool bAppPrefix) const;
 
 	// Event call once after tick.
-	chord::CallOnceEvents<Flower, const chord::ApplicationTickData&> onceEventAfterTick;
+	chord::CallOnceEvents<const chord::ApplicationTickData&> onceEventAfterTick;
 
 	// 
 	void onProjectSetup();

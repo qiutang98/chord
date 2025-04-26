@@ -6,6 +6,8 @@
 
 namespace chord::graphics
 {
+	constexpr bool bEnableTexturePoolLifeLog = false;
+
 	PoolTextureRef GPUTexturePool::createCube(
 		const std::string& name,
 		uint32 width,
@@ -43,11 +45,14 @@ namespace chord::graphics
 
 	GPUTexturePool::~GPUTexturePool()
 	{
+		std::lock_guard lock(m_mutex);
 		m_rendertargets.clear();
 	}
 
 	void GPUTexturePool::garbageCollected(const ApplicationTickData& tickData)
 	{
+		std::lock_guard lock(m_mutex);
+
 		// Update inner counter.
 		m_frameCounter = tickData.tickCount;
 
@@ -62,14 +67,17 @@ namespace chord::graphics
 			{
 				textures.erase(std::remove_if(textures.begin(), textures.end(), [&](const auto& t)
 				{
-					if (m_frameCounter - t.freeFrame > m_freeFrameCount)
+					const bool bShouldFree = m_frameCounter - t.freeFrame > m_freeFrameCount;
+					if constexpr (bEnableTexturePoolLifeLog)
 					{
-						LOG_TRACE("Remove texture {2}: ({0}x{1}).", t.texture->getExtent().width, t.texture->getExtent().height, t.texture->getName());
+						if (bShouldFree)
+						{
+							LOG_TRACE("Remove texture {2}: ({0}x{1}).", t.texture->getExtent().width, t.texture->getExtent().height, t.texture->getName());
+						}
 					}
-					return m_frameCounter - t.freeFrame > m_freeFrameCount;
+					return bShouldFree;
 				}), textures.end());
 			}
-
 
 			if (textures.empty())
 			{
@@ -85,6 +93,8 @@ namespace chord::graphics
 
 	PoolTextureRef GPUTexturePool::create(const std::string& name, const PoolTextureCreateInfo& createInfo, bool bSameFrameReuse)
 	{
+		std::lock_guard lock(m_mutex);
+
 		const uint64 hashId = cityhash::cityhash64((const char*)&createInfo, sizeof(createInfo));
 		auto& freeTextures = m_rendertargets[hashId];
 
@@ -121,12 +131,14 @@ namespace chord::graphics
 
 			texture = freeTextures.back().texture;
 
-		#if 0
-			if (freeTextures.back().freeFrame == m_frameCounter)
+			if constexpr (bEnableTexturePoolLifeLog)
 			{
-				LOG_TRACE("Reuse texture '{}' in same frame success.", texture->getName());
+				if (freeTextures.back().freeFrame == m_frameCounter)
+				{
+					LOG_TRACE("Reuse texture '{}' in same frame success.", texture->getName());
+				}
 			}
-		#endif	
+
 			texture->rename(name, false);
 			freeTextures.pop_back();
 
@@ -146,6 +158,8 @@ namespace chord::graphics
 
 	GPUTexturePool::PoolTexture::~PoolTexture()
 	{
+		std::lock_guard lock(m_pool.m_mutex);
+
 		FreePoolTexture poolTexture;
 		poolTexture.freeFrame = m_pool.m_frameCounter;
 		poolTexture.texture = m_texture;

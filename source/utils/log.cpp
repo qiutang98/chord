@@ -6,44 +6,15 @@
 
 #include <utils/delegate.h>
 #include <utils/cvar.h>
-#include <regex>
-#include <execution>
+#include <utils/mpsc_queue.h>
 
 namespace chord
 {
-	static u16str GLogPrintFormat = u16str("%^[%H:%M:%S][%l] %n: %v%$");
-	static AutoCVarRef cVarLogPrintFormat(
-		"r.log.printFormat", 
-		GLogPrintFormat,
-		"Print format of log in app.", 
-		EConsoleVarFlags::ReadOnly);
-
 	static bool bGLogFile = true;
 	static AutoCVarRef cVarLogFile(
 		"r.log.file", 
 		bGLogFile,
 		"Enable log file save in disk.", 
-		EConsoleVarFlags::ReadOnly);
-
-	static bool bGLogFileDelete = true;
-	static AutoCVarRef cVarLogFileDelete(
-		"r.log.file.delete", 
-		bGLogFileDelete,
-		"Enable delete old log file save in disk.", 
-		EConsoleVarFlags::ReadOnly);
-
-	static int32 GLogFileDeleteDay = 2;
-	static AutoCVarRef cVarLogFileDeleteDay(
-		"r.log.file.deleteDay", 
-		GLogFileDeleteDay,
-		"Delete days for old logs.", 
-		EConsoleVarFlags::ReadOnly);
-
-	static u16str GLogFileFormat = u16str("[%H:%M:%S][%l] %n: %v");
-	static AutoCVarRef cVarLogFileFormat(
-		"r.log.file.format", 
-		GLogFileFormat,
-		"Saved format of log in file.", 
 		EConsoleVarFlags::ReadOnly);
 
 	static u16str GLogFileOutputFolder = u16str("save/log");
@@ -60,204 +31,299 @@ namespace chord
 		"Save name of log file.", 
 		EConsoleVarFlags::ReadOnly);
 
+	// 
+	static const std::regex kLogNamePattern(R"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})");
+
 	LoggerSystem& LoggerSystem::get()
 	{
 		static LoggerSystem logger { };
 		return logger;
 	}
 
-	// Custom log cache sink, use for editor/hub/custom console output. etc.
-	template<typename Mutex>
-	class LogCacheSink : public spdlog::sinks::base_sink <Mutex>
+	struct LogDescriptor
 	{
-		friend LoggerSystem;
-	public:
-		virtual ~LogCacheSink() { }
+		const char* name;
+		const char* color;
+	};
+
+	static const LogDescriptor kLevelStr[(uint32)ELogLevel::COUNT] =
+	{
+		{ .name = "TRACE", .color = " \x1b[37;1m"},
+		{ .name = "INFO",  .color = " \x1b[32;1m"},
+		{ .name = "WARN",  .color = " \x1b[33;1m"},
+		{ .name = "ERROR", .color = " \x1b[31;1m"},
+		{ .name = "FATAL", .color = " \x1b[35;1m"},
+	};
+
+	class AsyncLogWriter
+	{
+	private:
+		bool m_bStdOut;
+		ELogLevel m_minLogLevel;
+
+		struct LogMessage
+		{
+			std::string message;
+			ELogLevel level;
+		};
+		// 4kb page -> 73 element.
+		MPSCQueue<LogMessage, MPSCQueuePoolAllocator<LogMessage, 4096>> m_messageQueue;
+
+		// Main thread.
+		std::future<void> m_future;
+
+		alignas(kCpuCachelineSize) std::atomic<bool> m_bPushLog;
+		alignas(kCpuCachelineSize) std::atomic<bool> m_bRunning;
+
+		// Writing log file.
+		FILE* m_file;
 
 	private:
-		Events<LogCacheSink, const std::string&, ELogType> m_callbacks;
-
-		static ELogType toLogType(spdlog::level::level_enum level)
+		void printLog(const LogMessage& message)
 		{
-			switch (level)
+			if (m_bStdOut)
 			{
-			case spdlog::level::trace:    return ELogType::Trace;
-			case spdlog::level::info:     return ELogType::Info;
-			case spdlog::level::warn:     return ELogType::Warn;
-			case spdlog::level::err:      return ELogType::Error;
-			case spdlog::level::critical: return ELogType::Fatal;
+				printf(std::format("{1}{0}\x1b[0m \n", message.message, kLevelStr[(uint32)message.level].color).c_str());
 			}
-			return ELogType::Other;
+
+			if (m_file)
+			{
+				fprintf(m_file, "%s\n", message.message.c_str());
+				fflush(m_file); // One log one fflush.
+			}
 		}
 
-	protected:
-		void sink_it_(const spdlog::details::log_msg& msg) override
+	public:
+		AsyncLogWriter(bool bStdOut, ELogLevel minLogLevel, const std::filesystem::path& outFilePath)
+			: m_bStdOut(bStdOut)
+			, m_minLogLevel(minLogLevel)
+			, m_bRunning(true)
+			, m_bPushLog(false)
+			, m_file(nullptr)
 		{
-			spdlog::memory_buf_t formatted;
-			spdlog::sinks::base_sink<Mutex>::formatter_->format(msg, formatted);
-			m_callbacks.broadcast(fmt::to_string(formatted), toLogType(msg.level));
+			if (!outFilePath.empty())
+			{
+				m_file = fopen(outFilePath.string().c_str(), "a");
+			}
+
+			m_future = std::async(std::launch::async, [this]()
+			{
+				LogMessage logMessage;
+
+				auto printAllLogs = [&]()
+				{
+					while (!m_messageQueue.isEmpty())
+					{
+						if (m_messageQueue.dequeue(logMessage))
+						{
+							printLog(logMessage);
+						}
+						else
+						{
+							std::this_thread::yield();
+						}
+					}
+				};
+
+				while (m_bRunning)
+				{
+					printAllLogs();
+
+					// Make current thread wait for notify.
+					m_bPushLog.wait(false, std::memory_order_acquire);
+					m_bPushLog.store(false, std::memory_order_release);
+				}
+
+				// Flush all log message before return.
+				printAllLogs();
+			});
 		}
 
-		void flush_() override
+		bool shouldPrintLog(ELogLevel level) const
 		{
+			return level >= m_minLogLevel;
+		}
 
+		void log(std::string&& message, ELogLevel level)
+		{
+			LogMessage logMessage;
+			logMessage.level = level;
+			logMessage.message = std::move(message);
+
+			// Enqueue.
+			m_messageQueue.enqueue(std::move(logMessage));
+
+			// Notify all thread break while loop.
+			m_bPushLog.store(true, std::memory_order_release);
+			m_bPushLog.notify_one();
+		}
+
+		~AsyncLogWriter()
+		{
+			m_bRunning = false;
+
+			// 
+			m_bPushLog.store(true, std::memory_order_release);
+			m_bPushLog.notify_all();
+
+			//
+			m_future.wait();
+
+			if (m_file)
+			{
+				fclose(m_file);
+			}
 		}
 	};
 
-	EventHandle LoggerSystem::pushCallback(std::function<void(const std::string&, ELogType)>&& callback)
+	LoggerSystem::~LoggerSystem()
 	{
-		return m_loggerCache->m_callbacks.add(std::move(callback));
+		if (m_asyncLogWriter != nullptr)
+		{
+			delete m_asyncLogWriter;
+			m_asyncLogWriter = nullptr;
+		}
 	}
 
-	void LoggerSystem::popCallback(EventHandle& handle)
+	static bool shouldDeleteOldLogInDisk(const std::filesystem::path& path, const std::chrono::system_clock::time_point& now, int32 maxKeepDay)
 	{
-		check(m_loggerCache->m_callbacks.remove(handle));
+		if (path.extension() != ".log")
+		{
+			return false; // Early return when extension no match.
+		}
+
+		const auto fileName = path.stem().string();
+
+		std::smatch matches;
+		if (!std::regex_search(fileName, matches, kLogNamePattern))
+		{
+			return false; // Early return when file name format no match.
+		}
+
+		std::string datetimeStr = matches[0];
+		int32 year, month, day, hour, minute, second;
+		{
+			const auto item = sscanf(datetimeStr.c_str(), "%d_%d_%d_%d_%d_%d", &year, &month, &day, &hour, &minute, &second);
+			(void)item;
+		}
+
+		std::tm tm = { 0 };
+		tm.tm_year = year - 1900;
+		tm.tm_mon = month - 1;
+		tm.tm_mday = day;
+		tm.tm_hour = hour;
+		tm.tm_min = minute;
+		tm.tm_sec = second;
+
+		std::time_t t = std::mktime(&tm);
+		std::chrono::system_clock::time_point timePoint = std::chrono::system_clock::from_time_t(t);
+
+		auto duration = now - timePoint;
+		auto days = std::chrono::duration_cast<std::chrono::days>(duration).count();
+
+		// Now get final result.
+		return days > maxKeepDay;
 	}
 
-	void LoggerSystem::updateLogFile()
+	void LoggerSystem::cleanDiskSavedLogFile(int32 keepDays, const std::filesystem::path& folerPath)
 	{
+		std::vector<std::filesystem::path> pendingFiles = {};
+		auto now = std::chrono::system_clock::now();
+
+		std::filesystem::path checkPath = folerPath.empty() ? GLogFileOutputFolder.u16() : folerPath;
+		if (std::filesystem::exists(folerPath))
+		{
+			for (const auto& dirEntry : std::filesystem::recursive_directory_iterator(folerPath))
+			{
+				const auto& path = dirEntry.path();
+				if (shouldDeleteOldLogInDisk(path, now, keepDays))
+				{
+					pendingFiles.push_back(path);
+				}
+			}
+		}
+
+		// Parallel delete.
+		std::for_each(std::execution::par, pendingFiles.begin(), pendingFiles.end(), [](const auto& p) { std::filesystem::remove(p); });
+	}
+
+	void LoggerSystem::updateLoggerWriter(bool bAnyThread)
+	{
+		std::unique_lock<std::mutex> lock;
+		if (bAnyThread)
+		{
+			lock = std::unique_lock(m_asyncLogWriterCreateMutex);
+		}
+
+		if (!bGLogFile)
+		{
+			if (m_asyncLogWriter)
+			{
+				delete m_asyncLogWriter;
+				m_asyncLogWriter = nullptr;
+			}
+			return;
+		}
+
 		// Create save folder for log if no exist.
-		const auto saveFolder = GLogFileOutputFolder.u16();
+		const std::u16string& saveFolder = GLogFileOutputFolder.u16();
 		if (!std::filesystem::exists(saveFolder))
 		{
 			std::filesystem::create_directories(saveFolder);
 		}
 
-		using TimePoint = std::chrono::system_clock::time_point;
-		auto serializeTimePoint = [](const TimePoint& time, const std::string& format)
-		{
-			std::time_t tt = std::chrono::system_clock::to_time_t(time);
-			std::tm tm = *std::localtime(&tt);
-			std::stringstream ss;
-			ss << std::put_time(&tm, format.c_str());
-			return ss.str();
-		};
+		auto now = std::chrono::system_clock::now();
 
-		TimePoint now = std::chrono::system_clock::now();
-
-		const std::regex kLogNamePattern(R"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})");
-		auto shouldDeleteLogInDisk = [&](const std::filesystem::path& path) -> bool
-		{
-			if (path.extension() == ".log")
-			{
-				const auto fileName = path.stem().string();
-
-				std::smatch matches;
-				if (std::regex_search(fileName, matches, kLogNamePattern))
-				{
-					std::string datetimeStr = matches[0];
-
-					int32 year, month, day, hour, minute, second;
-					{
-						const auto item = sscanf(datetimeStr.c_str(), "%d_%d_%d_%d_%d_%d", &year, &month, &day, &hour, &minute, &second);
-						(void)item;
-					}
-
-					std::tm tm = { 0 };
-					tm.tm_year = year - 1900;
-					tm.tm_mon = month - 1;
-					tm.tm_mday = day;
-					tm.tm_hour = hour;
-					tm.tm_min = minute;
-					tm.tm_sec = second;
-
-					std::time_t t = std::mktime(&tm);
-					std::chrono::system_clock::time_point timePoint = std::chrono::system_clock::from_time_t(t);
-
-					auto duration = now - timePoint;
-
-					auto days = std::chrono::duration_cast<std::chrono::days>(duration).count();
-					if (days >= GLogFileDeleteDay)
-					{
-						return true;
-					}
-				}
-			}
-
-			return false;
-		};
-
-		const auto saveFilePath = GLogFileName.u16() + u16str(serializeTimePoint(now, "_%Y_%m_%d_%H_%M_%S") + ".log").u16();
+		//
+		const auto saveFilePath = GLogFileName.u16() + u16str(formatTimestamp(now, "_%Y_%m_%d_%H_%M_%S") + ".log").u16();
 		const auto finalPath = std::filesystem::path(saveFolder) / saveFilePath;
 
-		// Delete old log files out of day.
-		if (bGLogFileDelete)
+		if constexpr (CHORD_DEBUG)
 		{
-			std::vector<std::filesystem::path> pendingFiles = {};
-
-			auto checkDeleted = finalPath.parent_path();
-			if (std::filesystem::exists(checkDeleted))
-			{
-				for (const auto& dirEntry : std::filesystem::recursive_directory_iterator(checkDeleted))
-				{
-					const auto& path = dirEntry.path();
-					if (shouldDeleteLogInDisk(path))
-					{
-						pendingFiles.push_back(path);
-					}
-				}
-			}
-
-			// Parallel delete.
-			std::for_each(std::execution::par, pendingFiles.begin(), pendingFiles.end(), [](const auto& p) { std::filesystem::remove(p); });
+			const auto name = finalPath.stem().string();
+			assert(std::regex_search(name, kLogNamePattern) && "Log name pattern must match kLogNamePattern!");
 		}
 
-		// Create new log file.
-		if (bGLogFile)
-		{
-			{
-				const auto name = finalPath.stem().string();
-				check(std::regex_search(name, kLogNamePattern));
-			}
-
-			m_fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(finalPath.string().c_str(), true);
-			m_fileSink->set_pattern(GLogFileFormat.str());
-
-			if (m_fileDestSink)
-			{
-				std::vector<spdlog::sink_ptr> nextSinks({ m_fileSink });
-				m_fileDestSink->set_sinks(nextSinks);
-			}
-			else
-			{
-				std::vector<spdlog::sink_ptr> initialSinks({ m_fileSink });
-				m_fileDestSink = std::make_shared<spdlog::sinks::dist_sink_mt>(initialSinks);
-				m_logSinks.push_back(m_fileDestSink);
-			}
-
-		}
+		m_asyncLogWriter = new AsyncLogWriter(m_bStdOutput, m_minLogLevel, finalPath);
+	
+		//
+		std::atomic_thread_fence(std::memory_order_seq_cst);
 	}
 
-	LoggerSystem::LoggerSystem()
+	// First time create logger.
+	void LoggerSystem::createLoggerIfNoExist()
 	{
-		// Basic sinks.
-		m_logSinks.emplace_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
-
-		// Cache sinks.
-		m_loggerCache = std::make_shared<LogCacheSink<std::mutex>>();
-		m_logSinks.emplace_back(m_loggerCache);
-
-		// Set format.
-		for (auto& sink : m_logSinks)
+		if (m_asyncLogWriterAlreadyCreate.load()) CHORD_LIKELY
 		{
-			sink->set_pattern(GLogPrintFormat.str());
+			return;
 		}
 
-		// Log file.
-		updateLogFile();
+		std::lock_guard lock(m_asyncLogWriterCreateMutex);
+		if (m_asyncLogWriter == nullptr) CHORD_UNLIKELY
+		{
+			updateLoggerWriter(false); // Outside lock so don't lock inside.
+		}
 
-		// Register a default logger for basic usage.
-		m_defaultLogger = registerLogger("Default");
+		m_asyncLogWriterAlreadyCreate.store(true);
+
+		std::atomic_thread_fence(std::memory_order_seq_cst);
 	}
 
-	std::shared_ptr<spdlog::logger> LoggerSystem::registerLogger(const std::string& name)
+	// From any thread.
+	void LoggerSystem::addLog(const std::string& loggerName, const std::string& message, ELogLevel level)
 	{
-		auto logger = std::make_shared<spdlog::logger>(name, begin(m_logSinks), end(m_logSinks));
-		spdlog::register_logger(logger);
+		createLoggerIfNoExist();
+		if (m_asyncLogWriter && m_asyncLogWriter->shouldPrintLog(level))
+		{
+			const auto& desc = kLevelStr[(uint32)level];
 
-		logger->set_level(spdlog::level::trace);
-		logger->flush_on(spdlog::level::trace);
+			//
+			auto now = std::chrono::system_clock::now();
+			std::string finalLogStr = std::format("{2} [{0}] {3}: {1}", desc.name, message, formatTimestamp(now, "%m-%d %H:%M:%S"), loggerName);
+			m_logCallback.broadcast(finalLogStr, level);
 
-		return logger;
+			// 
+			m_asyncLogWriter->log(std::move(finalLogStr), level);
+		}
 	}
 }

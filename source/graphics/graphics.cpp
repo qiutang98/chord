@@ -54,7 +54,7 @@ namespace chord::graphics
 		"r.graphics.texturepool.freeframecount",
 		sPoolTextureFreeFrameCount,
 		"Graphics texture pool free frame count, min is 1, max is 10.",
-		EConsoleVarFlags::ProjectIni
+		EConsoleVarFlags::Scalability
 	);
 
 	static uint32 sPoolBufferFreeFrameCount = 3;
@@ -62,7 +62,7 @@ namespace chord::graphics
 		"r.graphics.bufferpool.freeframecount",
 		sPoolBufferFreeFrameCount,
 		"Graphics buffer pool free frame count, min is 1, max is 10.",
-		EConsoleVarFlags::ProjectIni
+		EConsoleVarFlags::Scalability
 	);
 
 	static uint32 sAsyncUploaderStaticMaxSize = 8;
@@ -70,7 +70,7 @@ namespace chord::graphics
 		"r.graphics.asyncuploader.staticmaxsize",
 		sAsyncUploaderStaticMaxSize,
 		"Async uploader static buffer max size (MB).",
-		EConsoleVarFlags::ProjectIni
+		EConsoleVarFlags::Scalability
 	);
 
 	static uint32 sAsyncUploaderDynamicMinSize = 6;
@@ -78,7 +78,7 @@ namespace chord::graphics
 		"r.graphics.asyncuploader.dynamicminsize",
 		sAsyncUploaderDynamicMinSize,
 		"Async uploader dynamic buffer min size (MB).",
-		EConsoleVarFlags::ProjectIni
+		EConsoleVarFlags::Scalability
 	);
 
 	namespace debugUtils
@@ -106,12 +106,6 @@ namespace chord::graphics
 	#endif 
 
 		constexpr const char* kValidationLayerName = "VK_LAYER_KHRONOS_validation";
-
-		static auto& getValidationLogger()
-		{
-			static auto logger = chord::LoggerSystem::get().registerLogger("GraphicsValidation");
-			return *logger;
-		}
 
 		VKAPI_ATTR VkBool32 VKAPI_CALL messengerCallback(
 			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -148,16 +142,16 @@ namespace chord::graphics
 						}
 
 						//
-						getValidationLogger().error(shaderMessage);
+						chord::LoggerSystem::get().error("ShaderDebugger", shaderMessage);
 					}
 				}
 
 				if(!bHandle)
 				{
-			             if (bVerse)   { getValidationLogger().trace(callbackData->pMessage); }
-					else if (bInfo)    { getValidationLogger().info(callbackData->pMessage);  }
-					else if (bWarning) { getValidationLogger().warn(callbackData->pMessage);  }
-					else if (bError)   { getValidationLogger().error(callbackData->pMessage); }
+			             if (bVerse)   { chord::LoggerSystem::get().trace("Validation", callbackData->pMessage); }
+					else if (bInfo)    { chord::LoggerSystem::get().info ("Validation", callbackData->pMessage); }
+					else if (bWarning) { chord::LoggerSystem::get().warn ("Validation", callbackData->pMessage); }
+					else if (bError)   { chord::LoggerSystem::get().error("Validation", callbackData->pMessage); }
 				}
 			};
 
@@ -199,12 +193,6 @@ namespace chord::graphics
 			// ci.messageType |= VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 			return ci;
 		}
-	}
-
-	spdlog::logger& logger::get()
-	{
-		static auto logger = chord::LoggerSystem::get().registerLogger("Graphics");
-		return *logger;
 	}
 
 	PhysicalDeviceFeatures::PhysicalDeviceFeatures()

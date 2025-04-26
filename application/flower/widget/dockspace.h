@@ -63,12 +63,12 @@ protected:
 		chord::EventHandle logHandle{ };
 
 		std::mutex asyncLogLock;
-		std::deque<std::pair<chord::ELogType, std::string>> asyncLogItems{ };
-		std::deque<std::pair<chord::ELogType, std::string>> logItems{ };
+		std::deque<std::pair<chord::ELogLevel, std::string>> asyncLogItems{ };
+		std::deque<std::pair<chord::ELogLevel, std::string>> logItems{ };
 	} m_importProgress{ };
 
 	// Import execut futures.
-	chord::FutureCollection<void> m_executeFutures = {};
+	chord::FutureCollection m_executeFutures = {};
 
 	// The assets is importing?
 	bool m_bImporting = false;

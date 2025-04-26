@@ -113,6 +113,8 @@ namespace chord::graphics
 		//
 		const uint32 shaderFileNameHashId;
 
+		static bool shouldRegisterGlobalShader();
+
 		explicit GlobalShaderRegisteredInfo(
 			const std::string&  shaderNameIn,
 			const std::string&  shaderFilePathIn,

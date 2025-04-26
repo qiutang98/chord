@@ -2,73 +2,82 @@
 
 #include <utils/utils.h>
 #include <utils/noncopyable.h>
-
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/sinks/dist_sink.h>
+#include <utils/delegate.h>
 
 namespace chord
 {
-	enum class ELogType : uint8
+	enum class ELogLevel : uint8
 	{
-		None = 0,
-
-		Trace,
+		Trace = 0,
 		Info,
 		Warn,
 		Error,
 		Fatal,
-		Other,
 
-		MAX,
+		COUNT
 	};
 
-	// Custom log cache sink.
-	template<typename Mutex> class LogCacheSink;
-
+	class AsyncLogWriter;
 	class LoggerSystem : NonCopyable
 	{
 	private:
-		LoggerSystem();
+		std::atomic<bool> m_asyncLogWriterAlreadyCreate { false };
+		mutable std::mutex m_asyncLogWriterCreateMutex;
+		AsyncLogWriter* m_asyncLogWriter{ nullptr };
+
+		//
+		bool m_bStdOutput = true;
+		ELogLevel m_minLogLevel = ELogLevel::Trace;
+
+		//
+		ChordEvent<const std::string&, ELogLevel> m_logCallback;
 
 	public:
 		static LoggerSystem& get();
+		~LoggerSystem();
 
-		// Get default logger.
-		auto& getDefaultLogger() noexcept { return m_defaultLogger; }
-
-		// Register a new logger.
-		CHORD_NODISCARD std::shared_ptr<spdlog::logger> registerLogger(const std::string& name);
+		// From any thread.
+		void addLog(const std::string& loggerName, const std::string& message, ELogLevel level);
 
 		// Push callback to logger sink.
-		CHORD_NODISCARD EventHandle pushCallback(std::function<void(const std::string&, ELogType)>&& callback);
+		CHORD_NODISCARD EventHandle pushCallback(std::function<void(const std::string&, ELogLevel)>&& callback)
+		{
+			return m_logCallback.add(std::move(callback));
+		}
 
 		// Pop callback from logger sink.
-		void popCallback(EventHandle& name);
+		void popCallback(EventHandle& handle)
+		{
+			const bool bResult = m_logCallback.remove(handle);
+			assert(bResult);
+		}
 
-		void updateLogFile();
+		static void cleanDiskSavedLogFile(int32 keepDays, const std::filesystem::path& folerPath = {});
+
+		void trace(const std::string& loggerName, const std::string& message) { addLog(loggerName, message, ELogLevel::Trace); }
+		void info (const std::string& loggerName, const std::string& message) { addLog(loggerName, message, ELogLevel::Info); }
+		void warn (const std::string& loggerName, const std::string& message) { addLog(loggerName, message, ELogLevel::Warn); }
+		void error(const std::string& loggerName, const std::string& message) { addLog(loggerName, message, ELogLevel::Error); }
+		void fatal(const std::string& loggerName, const std::string& message) { addLog(loggerName, message, ELogLevel::Fatal); }
+
+		inline void updateLoggerWriterAnyThread()
+		{
+			updateLoggerWriter(true);
+		}
 
 	private:
-		std::shared_ptr<spdlog::sinks::basic_file_sink_mt> m_fileSink = nullptr;
-		std::shared_ptr<spdlog::sinks::dist_sink_mt> m_fileDestSink = nullptr;
+		LoggerSystem() = default;
+		void createLoggerIfNoExist();
 
-		// Sink cache all logger.
-		std::vector<spdlog::sink_ptr> m_logSinks{ };
-
-		// Default logger.
-		std::shared_ptr<spdlog::logger> m_defaultLogger;
-
-		// Logger cache for custom logger.
-		std::shared_ptr<LogCacheSink<std::mutex>> m_loggerCache;
+		void updateLoggerWriter(bool bAnyThread = true);
 	};
-
-	#define LOG_TRACE(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->trace(__VA_ARGS__); })
-	#define LOG_INFO(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->info(__VA_ARGS__); })
-	#define LOG_WARN(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->warn(__VA_ARGS__); })
-	#define LOG_ERROR(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->error(__VA_ARGS__); })
-	#define LOG_FATAL(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().getDefaultLogger()->critical(__VA_ARGS__); CHORD_CRASH })
 }
+
+#define LOG_TRACE(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().trace("Default", std::format(__VA_ARGS__)); })
+#define LOG_INFO(...)  chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().info ("Default", std::format(__VA_ARGS__)); })
+#define LOG_WARN(...)  chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().warn ("Default", std::format(__VA_ARGS__)); })
+#define LOG_ERROR(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().error("Default", std::format(__VA_ARGS__)); })
+#define LOG_FATAL(...) chord_macro_sup_enableLogOnly({ chord::LoggerSystem::get().fatal("Default", std::format(__VA_ARGS__)); CHORD_CRASH })
 
 #define check(x) chord_macro_sup_checkPrintContent(x, LOG_FATAL)
 #define checkMsgf(x, ...) chord_macro_sup_checkMsgfPrintContent(x, LOG_FATAL, __VA_ARGS__)

@@ -88,6 +88,9 @@ namespace chord::graphics
 	private:
 		friend PoolTexture;
 
+		//
+		mutable std::mutex m_mutex;
+
 		// Frame count ready to release.
 		const uint64 m_freeFrameCount;
 

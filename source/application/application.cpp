@@ -13,6 +13,7 @@
 #include <renderer/gpu_scene.h>
 #include <asset/gltf/gltf.h>
 #include <asset/gltf/gltf_helper.h>
+#include <utils/job_system.h>
 
 namespace chord
 {
@@ -159,6 +160,9 @@ namespace chord
         };
         setConsoleFont(fontTypes);
 
+        constexpr int32 kLeftFreeCore = 1;
+        jobsystem::init(kLeftFreeCore);
+
         // Create main window.
         createMainWindow(config);
 
@@ -192,7 +196,7 @@ namespace chord
         m_timer.init();
 
 
-        m_threadPool = std::make_unique<ThreadPool>(L"ApplicationThreadPool", 1);
+
         m_assetManager = std::make_unique<AssetManager>();
 
         // Engine context.
@@ -268,6 +272,8 @@ namespace chord
 
     void Application::release()
     {
+
+
         m_runtimePeriod = ERuntimePeriod::BeforeReleasing;
 
         m_engine->beforeRelease();
@@ -297,6 +303,9 @@ namespace chord
 
         // Final terminate GLFW.
         glfwTerminate();
+
+        // Wait all jobsystem task finish before release.
+        jobsystem::release(EBusyWaitType::All);
     }
 
     void Application::setMainWindowTitle(const std::string& name) const

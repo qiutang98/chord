@@ -1,8 +1,29 @@
 #include <utils/utils.h>
 #include <utils/log.h>
+#include <utils/cvar.h>
+#include <application/application.h>
+
+#include <utils/work_stealing_queue.h>
 
 #define UUID_SYSTEM_GENERATOR
 #include <stduuid/uuid.h>
+
+namespace chord
+{
+	static uint32 sCrashOutputFullDump = 1;
+	static AutoCVarRef cVarCrashOutputFullDump(
+		"r.crash.fulldump",
+		sCrashOutputFullDump,
+		"Output fulldump when crash or not."
+	);
+
+	static u16str sCrashFileOutputFolder = u16str("save/crash");
+	static AutoCVarRef cVarCrashFileOutputFolder(
+		"r.crash.folder",
+		sCrashFileOutputFolder,
+		"Save folder path of dump file.",
+		EConsoleVarFlags::ReadOnly);
+}
 
 chord::UUID chord::generateUUID()
 {
@@ -198,4 +219,70 @@ chord::IResource::IResource()
 chord::IResource::~IResource()
 {
 	sResourceAliveCounter --;
+}
+
+namespace chord
+{
+	static inline bool writeMiniDump(bool bFullDump, const std::string& outputFileName)
+	{
+		auto now = std::chrono::system_clock::now();
+
+		const std::filesystem::path saveFolderName = std::filesystem::path(outputFileName).parent_path();
+		if (!std::filesystem::exists(saveFolderName))
+		{
+			std::filesystem::create_directories(saveFolderName);
+		}
+
+		const std::filesystem::path saveFileName = std::filesystem::path(outputFileName).filename();
+		const auto finalSaveFileName = saveFileName.string() + formatTimestamp(now) + ".dmp";
+		const auto finalCrashSavePath = saveFolderName / finalSaveFileName;
+
+		// Create a minidump file.
+		return createDump(bFullDump, finalCrashSavePath.wstring().c_str());
+	}
+
+	static inline void reportDumpAndBreak(bool bException, bool bFullDump, const std::string& outputFileName)
+	{
+		if (isDebuggerAttach())
+		{
+			__debugbreak();
+		}
+		else
+		{
+			if (!outputFileName.empty())
+			{
+				if (writeMiniDump(bFullDump, outputFileName))
+				{
+					LOG_TRACE("Minidump already write to '{0}'.", outputFileName);
+				}
+				else
+				{
+					LOG_ERROR("Try to write minidump to '{0}' but failed!", outputFileName);
+				}
+			}
+		}
+
+		if (bException)
+		{
+			throw std::logic_error("Application check failed crash! Read detail from log and crash dump file!");
+		}
+	}
+
+}
+
+void chord::reportCrash()
+{
+	constexpr bool bThrowException = true;
+	std::string name = std::format("{0}/{1}_crash", sCrashFileOutputFolder.str(), Application::get().getName());
+	
+	reportDumpAndBreak(bThrowException, sCrashOutputFullDump, name);
+}
+
+void chord::reportBreakpoint()
+{
+	constexpr bool bThrowException = false;
+	constexpr bool bFullDump = false;
+
+	std::string name = std::format("{0}/{1}_breakpoint", sCrashFileOutputFolder.str(), Application::get().getName());
+	reportDumpAndBreak(bThrowException, bFullDump, name);
 }

@@ -2,5 +2,6 @@
 
 int main(int argc, const char** argv)
 {
-	return Flower::get().run(argc, argv);
+	int exitCode = Flower::get().run(argc, argv);
+	std::exit(exitCode);
 }

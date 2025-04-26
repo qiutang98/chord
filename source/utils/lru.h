@@ -7,6 +7,7 @@ namespace chord
 	class LRUCache : NonCopyable
 	{
 	public:
+		// LUR value type should provide getSize() function to compute element size.
 		static_assert(requires(const ValueType& t) { { t.getSize() } -> std::convertible_to<std::size_t>; });
 
 		// Init lru asset cache with capacity and elasticity in MB unit.

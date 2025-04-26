@@ -1,4 +1,5 @@
 #include <utils/cvar.h>
+#include <utils/log.h>
 
 namespace chord
 {
@@ -12,6 +13,12 @@ namespace chord
 	{
 		if (CVarStorage* storage = getCVarIfExistGeneric(name))
 		{
+			if (hasFlag(storage->getFlags(), EConsoleVarFlags::ReadOnly))
+			{
+				LOG_ERROR("CVar '{}' is read only.", name);
+				return false;
+			}
+
 			// Lock now.
 			std::lock_guard lock(m_lock);
 

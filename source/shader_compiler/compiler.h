@@ -4,7 +4,7 @@
 #include <utils/noncopyable.h>
 #include <utils/optional.h>
 #include <graphics/common.h>
-#include <utils/threadpool.h>
+#include <utils/job_system.h>
 
 
 namespace chord::graphics
@@ -49,41 +49,22 @@ namespace chord::graphics
 		virtual void compileShader(
 			SizedBuffer shaderData, 
 			const std::vector<std::string>& args,
-			ShaderCompileResult& result) = 0;
+			ShaderCompileResult& result) const = 0;
 	};
 
-	class ShaderCompilerManager : public LambdaThreadPool<IPlatformShaderCompiler&>
+	class ShaderCompilerManager : NonCopyable
 	{
-		using Super = LambdaThreadPool<IPlatformShaderCompiler&>;
 		using TaskType = std::function<void(IPlatformShaderCompiler&)>;
 
 	public:
 		explicit ShaderCompilerManager(uint32 freeCount, uint32 desiredMaxCompileThreadCount);
-		virtual ~ShaderCompilerManager();
 
-		void pushTask(const TaskType&& task)
+		const IPlatformShaderCompiler& getPlatformCompiler() const
 		{
-			{
-				const std::lock_guard tasksLock(m_taskQueueMutex);
-				m_tasksQueue.push(TaskType(task));
-			}
-
-			++m_tasksQueueTotalNum;
-			m_cvTaskAvailable.notify_one();
-		}
-
-		CHORD_NODISCARD std::future<void> submit(const TaskType&& task)
-		{
-			auto taskPromise = std::make_shared<std::promise<void>>();
-			pushTask([task, taskPromise](IPlatformShaderCompiler& compiler)
-			{
-				task(compiler);
-				taskPromise->set_value();
-			});
-			return taskPromise->get_future();
-		}
+			return *m_compiler; 
+		} 
 
 	protected:
-		void worker();
+		std::unique_ptr<IPlatformShaderCompiler> m_compiler;
 	};
 }

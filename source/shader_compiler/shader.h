@@ -5,9 +5,7 @@
 #include <utils/optional.h>
 #include <graphics/graphics.h>
 #include <shader_compiler/permutation.h>
-#include <utils/threadpool.h>
-
-#include <regex>
+#include <utils/job_system.h>
 
 namespace chord::graphics
 {
@@ -230,7 +228,7 @@ namespace chord::graphics
 			return m_shaderCollection.at(hash);
 		}
 
-		FutureCollection<void> prepareBatchCompile(const ShaderPermutationBatchCompile& batch);
+		FutureCollection prepareBatchCompile(const ShaderPermutationBatchCompile& batch);
 
 	private:
 		// Shader file paths.

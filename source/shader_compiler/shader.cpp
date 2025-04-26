@@ -19,13 +19,17 @@ namespace chord::graphics
 		"recompileshaders",
 		sRecompileShaderFile,
 		"Recompile shader file in the fly, if param equal 'all', will recompile all shaders."
-		"If you want to recompile single shader file, just fill it path like 'resource/shader/gltf.hlsl'."
-	);
+		"If you want to recompile single shader file, just fill it path like 'resource/shader/gltf.hlsl'.");
 
 	constexpr const char* kShaderVersionFilePath = "resource/shader/shader_version.h";
 
 	void GlobalShaderRegisteredInfo::updateShaderFileHash()
 	{
+		if (!std::filesystem::exists(shaderFilePath))
+		{
+			return; 
+		} 
+
 		// File last edit time and stage.
 		auto ftime = std::format("{}", std::filesystem::last_write_time(shaderFilePath));
 		m_shaderFileHash = cityhash::ctyhash64WithSeed(ftime.data(), ftime.size(), uint64(stage));
@@ -158,10 +162,12 @@ namespace chord::graphics
 
 	}
 
-	FutureCollection<void> ShaderFile::prepareBatchCompile(const ShaderPermutationBatchCompile& batch)
+	FutureCollection ShaderFile::prepareBatchCompile(const ShaderPermutationBatchCompile& batch)
 	{
-		FutureCollection<void> compilerFutures{ };
-		BatchShaderCompileTasks tasks { .fileName = m_filePath };
+		FutureCollection compilerFutures{ };
+
+		std::shared_ptr<BatchShaderCompileTasks> tasks = std::make_shared<BatchShaderCompileTasks>();
+		tasks->fileName = m_filePath;
 
 		// Generate per env shader compile task.
 		const auto& infos = batch.getBatches();
@@ -190,13 +196,14 @@ namespace chord::graphics
 			compileBatch.shaderModule = std::make_shared<ShaderModule>(SizedBuffer{}, env.getMetaInfo());
 			m_shaderCollection[hash] = compileBatch.shaderModule;
 
-			tasks.batches.push_back(std::move(compileBatch));
+			tasks->batches.push_back(std::move(compileBatch));
 		}
 
-		compilerFutures.futures.push_back(getContext().getShaderCompiler().submit([tasks](IPlatformShaderCompiler& compiler)
+		compilerFutures.add(jobsystem::launch(EJobFlags::Foreground, [tasks]()
 		{
+			const auto& platformCompiler = getContext().getShaderCompiler().getPlatformCompiler();
 			std::vector<char> shaderSrcFileData {};
-			for (auto& batch : tasks.batches)
+			for (auto& batch : tasks->batches)
 			{
 				// Try load from temp store.
 				if (std::filesystem::exists(batch.tempStorePath))
@@ -212,9 +219,10 @@ namespace chord::graphics
 
 				if (shaderSrcFileData.empty())
 				{
-					if (!loadFile(tasks.fileName, shaderSrcFileData, "rb"))
+					if (!loadFile(tasks->fileName, shaderSrcFileData, "rb"))
 					{
-						LOG_ERROR("Shader src file {0} load fail, shader {1} compile error.", tasks.fileName, batch.name);
+						LOG_ERROR("Shader src file {0} load fail, shader {1} compile error.", 
+							tasks->fileName, batch.name);
 						batch.shaderModule->setCompileState(ShaderModule::ECompileState::Error);
 						continue;
 					}
@@ -222,7 +230,7 @@ namespace chord::graphics
 
 				// Still unvalid, recompile.
 				ShaderCompileResult compileResult;
-				compiler.compileShader(shaderSrcFileData, batch.arguments, compileResult);
+				platformCompiler.compileShader(shaderSrcFileData, batch.arguments, compileResult);
 
 				if (compileResult.bSuccess)
 				{
@@ -247,7 +255,7 @@ namespace chord::graphics
 				{
 					// Failed.
 					LOG_GRAPHICS_ERROR("Shader '{0}' in file '{1}' compile error, see the detailed msg and fix it.\n {2}",
-						batch.name, tasks.fileName, compileResult.errorMsg);
+						batch.name, tasks->fileName, compileResult.errorMsg);
 					batch.shaderModule->setCompileState(ShaderModule::ECompileState::Error);
 				}
 			}
@@ -317,7 +325,7 @@ namespace chord::graphics
 			}
 
 			const auto& batchCompile = GlobalShaderRegisterTable::get().getBatchCompile();
-			FutureCollection<void> futures{};
+			FutureCollection futures{};
 
 			for (const auto& batch : batchCompile)
 			{
@@ -325,10 +333,10 @@ namespace chord::graphics
 				auto shaderFilePtr = getShaderFile(registerInfo.shaderFilePath);
 				if (bAllRecompile || targetShaderFile == shaderFilePtr)
 				{
-					futures.combine(std::move(shaderFilePtr->prepareBatchCompile(batch)));
+					futures.combine(shaderFilePtr->prepareBatchCompile(batch));
 				}
 			}
-			futures.wait();
+			futures.wait(EBusyWaitType::All);
 
 			// Reset shader file.
 			sRecompileShaderFile = u16str("");
@@ -339,16 +347,16 @@ namespace chord::graphics
 	{
 		const auto& batchCompile = GlobalShaderRegisterTable::get().getBatchCompile();
 
-		FutureCollection<void> futures{};
+		FutureCollection futures{};
 		for (const auto& batch : batchCompile)
 		{
 			const auto& registerInfo = batch.getRegisteredInfo();
 			auto shaderFile = getShaderFile(registerInfo.shaderFilePath);
-			futures.combine(std::move(shaderFile->prepareBatchCompile(batch)));
+			futures.combine(shaderFile->prepareBatchCompile(batch));
 		}
 
 		// Wait all builtin task finish.
-		futures.wait();
+		futures.wait(EBusyWaitType::All);
 	}
 
 	std::shared_ptr<ShaderFile> ShaderLibrary::getShaderFile(const std::string& path)

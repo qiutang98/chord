@@ -169,7 +169,7 @@ public:
 	~ProjectContentManager();
 
 	// Event on asset tree update.
-	chord::Events<ProjectContentManager, const ProjectContentEntryTree&> onTreeUpdate;
+	chord::ChordEvent<const ProjectContentEntryTree&> onTreeUpdate;
 
 	const auto& getTree() const
 	{

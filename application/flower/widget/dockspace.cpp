@@ -396,7 +396,7 @@ void ContentAssetImportWidget::onDrawState()
         {
             check(!m_importProgress.logHandle);
             {
-                m_importProgress.logHandle = LoggerSystem::get().pushCallback([&](const std::string& info, ELogType type)
+                m_importProgress.logHandle = LoggerSystem::get().pushCallback([&](const std::string& info, ELogLevel type)
                 {
                     std::lock_guard lock(m_importProgress.asyncLogLock);
 
@@ -408,21 +408,20 @@ void ContentAssetImportWidget::onDrawState()
                 });
             }
 
-            check(m_executeFutures.futures.empty());
+            check(m_executeFutures.isEmpty());
             {
-                const auto loop = [this, meta](const size_t loopStart, const size_t loopEnd)
-                {
-                    for (size_t i = loopStart; i < loopEnd; ++i)
+				for (uint32 i = 0; i < importConfigs.size(); i++)
+				{
+                    m_executeFutures.add(chord::jobsystem::launch(EJobFlags::None, [meta, config = importConfigs[i]]()
                     {
-                        if (!meta->importConfig.importAssetFromConfig(importConfigs[i]))
+                        if (!meta->importConfig.importAssetFromConfig(config))
                         {
                             LOG_ERROR("Import asset from '{}' to '{}' failed.",
-                                utf8::utf16to8(importConfigs[i]->importFilePath.u16string()),
-                                utf8::utf16to8(importConfigs[i]->storeFilePath.u16string()));
+                                utf8::utf16to8(config->importFilePath.u16string()),
+                                utf8::utf16to8(config->storeFilePath.u16string()));
                         }
-                    }
-                };
-                m_executeFutures = Application::get().getThreadPool().parallelizeLoop(0, importConfigs.size(), loop);
+                    }));
+				}
             }
         }
     }
@@ -449,7 +448,7 @@ void ContentAssetImportWidget::onDrawState()
 
 void ContentAssetImportWidget::onDrawImporting()
 {
-    check(!m_executeFutures.futures.empty());
+    check(!m_executeFutures.isEmpty());
     check(m_bImporting);
 
     ImGui::Indent();
@@ -479,12 +478,12 @@ void ContentAssetImportWidget::onDrawImporting()
     for (int i = 0; i < m_importProgress.logItems.size(); i++)
     {
         ImVec4 color;
-        if (m_importProgress.logItems[i].first == ELogType::Error ||
-            m_importProgress.logItems[i].first == ELogType::Fatal)
+        if (m_importProgress.logItems[i].first == ELogLevel::Error ||
+            m_importProgress.logItems[i].first == ELogLevel::Fatal)
         {
             color = ImVec4(1.0f, 0.08f, 0.08f, 1.0f);
         }
-        else if (m_importProgress.logItems[i].first == ELogType::Warn)
+        else if (m_importProgress.logItems[i].first == ELogLevel::Warn)
         {
             color = ImVec4(1.0f, 1.0f, 0.1f, 1.0f);
         }
@@ -503,11 +502,11 @@ void ContentAssetImportWidget::onDrawImporting()
     bool bAccept = false;
     if (progress > 0.99f)
     {
-        m_executeFutures.wait();
+        m_executeFutures.wait(EBusyWaitType::None);
+        m_executeFutures.clear();
 
         // Clean state.
         m_bImporting = false;
-        m_executeFutures = {};
         if (m_importProgress.logHandle)
         {
             LoggerSystem::get().popCallback(m_importProgress.logHandle);

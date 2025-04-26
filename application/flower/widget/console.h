@@ -54,7 +54,7 @@ public:
 	static const std::string& getShowName();
 
 	// Add single log in widget.
-	void addLog(const std::string& info, chord::ELogType type);
+	void addLog(const std::string& info, chord::ELogLevel type);
 
 protected:
 	// event init.
@@ -88,8 +88,8 @@ private:
 
 	// Log items deque.
 	std::mutex m_asyncLogItemslock;
-	std::deque<std::pair<std::string, chord::ELogType>> m_asyncLogItems;
-	std::deque<std::pair<std::string, chord::ELogType>> m_logItems;
+	std::deque<std::pair<std::string, chord::ELogLevel>> m_asyncLogItems;
+	std::deque<std::pair<std::string, chord::ELogLevel>> m_logItems;
 
 	// Max log item store.
 	static const chord::uint32 kMaxLogsItemNum = 200;
@@ -101,27 +101,21 @@ private:
 	bool m_bLogItemMenuPopup = false;
 
 	// Log visibility.
-	bool m_logVisible[(size_t)chord::ELogType::MAX] =
+	bool m_logVisible[(size_t)chord::ELogLevel::COUNT] =
 	{
-		false, // NONE
-
 		true,  // Trace
 		true,  // Info
 		true,  // Warn
 		true,  // Error
 		true,  // Fatal
-		true,  // Other
 	};
 
-	chord::uint32 m_logTypeCount[(size_t)chord::ELogType::MAX] =
+	chord::uint32 m_logTypeCount[(size_t)chord::ELogLevel::COUNT] =
 	{
-		0, // NONE
-
 		0, // Trace
 		0, // Info
 		0, // Warn
 		0, // Error
 		0, // Fatal
-		0  // Other
 	};
 };

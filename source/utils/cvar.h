@@ -18,11 +18,8 @@ namespace chord
 		// ReadOnly meaning can not change value by code in runtime.
 		ReadOnly    = 0x01 << 0,
 
-		// Read only, but still can config in project ini.
-		ProjectIni  = 0x01 << 1,
-
 		// Export this value as a scalability config.
-		Scalability = 0x01 << 2, 
+		Scalability = 0x01 << 1, 
 		
 		MAX,
 	};
@@ -124,7 +121,7 @@ namespace chord
 		virtual ~CVarStorageValue() = default;
 
 		// Callback when data change.
-		Delegate<CVarStorageValue<T>, void, const T&, T&> onValueChange { };
+		Delegate<void, const T&, T&> onValueChange { };
 
 	private:
 		virtual const T& getImpl() const override 
@@ -174,7 +171,7 @@ namespace chord
 		virtual ~CVarStorageRef() = default;
 
 		// Callback when data change.
-		Delegate<CVarStorageRef<T>, void, const T&, T&> onValueChange{ };
+		Delegate<void, const T&, T&> onValueChange{ };
 
 	private:
 		virtual const T& getImpl() const override 

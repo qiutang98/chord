@@ -6,12 +6,12 @@
 
 namespace chord
 {
-	Events<IAsset, AssetRef> chord::onAssetMarkDirtyEvents;
-	Events<IAsset, AssetRef> chord::onAssetSavedEvents;
-	Events<IAsset, AssetRef> chord::onAssetNewlySaveToDiskEvents;
+	ChordEvent<AssetRef> chord::onAssetMarkDirtyEvents;
+	ChordEvent<AssetRef> chord::onAssetSavedEvents;
+	ChordEvent<AssetRef> chord::onAssetNewlySaveToDiskEvents;
 
-	Events<AssetManager, AssetRef> chord::onAssetRemoveEvents;
-	Events<AssetManager, AssetRef> chord::onAssetInsertEvents;
+	ChordEvent<AssetRef> chord::onAssetRemoveEvents;
+	ChordEvent<AssetRef> chord::onAssetInsertEvents;
 
 	IAsset::IAsset(const AssetSaveInfo& saveInfo)
 		: m_saveInfo(saveInfo)

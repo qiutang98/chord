@@ -138,10 +138,10 @@ void loadGLTFMetallicRoughnessPBRMaterial(
 
         //
         gbufferCtx.metallic  =  metallicRoughnessRaw.b;
-        if (materialInfo.bExistOcclusion)
-        {
-            gbufferCtx.materialAO = materialInfo.occlusionTextureStrength * metallicRoughnessRaw.r;
-        }
+
+        gbufferCtx.materialAO = (materialInfo.bExistOcclusion) 
+            ? materialInfo.occlusionTextureStrength * metallicRoughnessRaw.r
+            : 1.0f;
     }
     else
     {

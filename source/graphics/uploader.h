@@ -1,6 +1,7 @@
 #pragma once
 #include <graphics/common.h>
 #include <graphics/resource.h>
+#include <graphics/buffer_pool.h>
 
 namespace chord::graphics
 {
@@ -74,7 +75,7 @@ namespace chord::graphics
 	{
 	private:
 		AsyncUploadTaskRef m_processingTask = nullptr;
-		HostVisibleGPUBufferRef m_stageBuffer = nullptr;
+		PoolBufferHostVisible m_stageBuffer = nullptr;
 
 	protected:
 		virtual void threadFunction() override;
@@ -137,11 +138,11 @@ namespace chord::graphics
 		auto getStaticUploadMaxSize() const { return m_staticUploaderMaxSize; }
 		auto getDynamicUploadMinSize() const { return m_dynamicUploaderMinSize; }
 
-		auto& getStaticMutex() { return m_staticContext.mutex; }
-		auto& getDynamicMutex() { return m_dynamicContext.mutex; }
+		auto& getStaticMutex() const { return m_staticContext.mutex; }
+		auto& getDynamicMutex() const { return m_dynamicContext.mutex; }
 
-		auto& getStaticCondition() { return m_staticContext.cv; }
-		auto& getDynamicCondition() { return m_dynamicContext.cv; }
+		auto& getStaticCondition() const { return m_staticContext.cv; }
+		auto& getDynamicCondition() const { return m_dynamicContext.cv; }
 
 		bool staticLoadAssetTaskEmpty() const
 		{
@@ -172,7 +173,7 @@ namespace chord::graphics
 		// Task need to load use static stage buffer.
 		struct UploaderContext
 		{
-			std::condition_variable cv;
+			mutable std::condition_variable cv;
 			mutable std::mutex mutex;
 			std::queue<AsyncUploadTaskRef> tasks;
 		};
@@ -186,7 +187,7 @@ namespace chord::graphics
 		const uint32 m_staticUploaderMaxSize;
 		const uint32 m_dynamicUploaderMinSize;
 
-		std::mutex m_submitObjectsMutex;
+		mutable std::mutex m_submitObjectsMutex;
 		std::vector<IAsyncUploader*> m_submitObjects;
 		std::vector<IAsyncUploader*> m_pendingObjects;
 	};
@@ -247,8 +248,7 @@ namespace chord::graphics
 			GPUTextureAsset* fallback,
 			const std::string& name,
 			const VkImageCreateInfo& createInfo,
-			const VmaAllocationCreateInfo& vmaCreateInfo
-		);
+			const VmaAllocationCreateInfo& vmaCreateInfo);
 
 		explicit GPUTextureAsset(GPUTextureRef texture)
 			: IUploadAsset(nullptr)

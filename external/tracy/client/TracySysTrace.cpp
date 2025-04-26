@@ -274,7 +274,7 @@ static void SetupVsync()
     EVENT_FILTER_EVENT_ID fe = {};
     fe.FilterIn = TRUE;
     fe.Count = 1;
-    fe.Events[0] = 0x0011;  // VSyncDPC_Info
+    fe.ChordEvent[0] = 0x0011;  // VSyncDPC_Info
 
     EVENT_FILTER_DESCRIPTOR desc = {};
     desc.Ptr = (ULONGLONG)&fe;

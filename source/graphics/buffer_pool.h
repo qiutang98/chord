@@ -129,6 +129,8 @@ namespace chord::graphics
 
 		friend PoolBuffer;
 
+		std::mutex m_mutex;
+
 		// Free frame count.
 		const uint64 m_freeFrameCount;
 

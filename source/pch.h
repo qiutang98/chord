@@ -5,8 +5,6 @@
 
 #include <volk/volk.h>
 #include <GLFW/glfw3.h>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
 #include <nameof/nameof.hpp>
 
 #define VMA_VULKAN_VERSION 1003000
@@ -14,6 +12,7 @@
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #include <vma/vk_mem_alloc.h>
 
+#include <random>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -39,6 +38,8 @@
 #include <atomic>
 #include <iostream>
 #include <fstream>
+#include <execution>
+#include <regex>
 
 // GLM math library config.
 // 0. glm force compute on radians.

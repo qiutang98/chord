@@ -59,7 +59,7 @@ public:
 	}
 
 	// On selection content change event.
-	chord::Events<Selection<T>, Selection<T>&> onChanged;
+	chord::ChordEvent<Selection<T>&> onChanged;
 
 private:
 	void sortSelection()

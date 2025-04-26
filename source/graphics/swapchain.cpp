@@ -5,16 +5,18 @@
 
 namespace chord::graphics
 {
-	static AutoCVar<uint32> cVarDesiredSwapchainBackBufferCount(
+	static uint32 sDesiredSwapchainBackBufferCount = 3;
+	static AutoCVarRef cVarDesiredSwapchainBackBufferCount(
 		"r.graphics.swapchain.desiredBackBufferCount",
-		3,
+		sDesiredSwapchainBackBufferCount,
 		"Desired swapchain back buffer count, default is 3.",
 		EConsoleVarFlags::None
 	);
 
-	static AutoCVar<uint32> cVarDesiredSwapchainPresentMode(
+	static uint32 sDesiredSwapchainPresentMode = 0;
+	static AutoCVarRef cVarDesiredSwapchainPresentMode(
 		"r.graphics.swapchain.desiredPresentMode",
-		0,
+		sDesiredSwapchainPresentMode,
 		"Desired swapchain present mode, 0 meaning use auto config, 1 is immediate, 2 is malibox, 3 is FIFO, 4 is FIFO relaxed.",
 		EConsoleVarFlags::None
 	);
@@ -29,7 +31,7 @@ namespace chord::graphics
 
 	static inline VkPresentModeKHR getPresentMode(const std::vector<VkPresentModeKHR>& presentModes)
 	{
-		const auto type = cVarDesiredSwapchainPresentMode.get();
+		const auto type = sDesiredSwapchainPresentMode;
 		auto isModeSupport = [&](VkPresentModeKHR mode)
 		{
 			for (const auto& availablePresentMode : presentModes)
@@ -279,7 +281,7 @@ namespace chord::graphics
 		}
 
 		// Backbuffer count clamp by hardware.
-		m_backbufferCount = std::clamp(cVarDesiredSwapchainBackBufferCount.get(), caps.minImageCount, caps.maxImageCount);
+		m_backbufferCount = std::clamp(sDesiredSwapchainBackBufferCount, caps.minImageCount, caps.maxImageCount);
 		m_pendingResources.resize(m_backbufferCount);
 
 		// Now create swapchain.

@@ -6,29 +6,27 @@
 
 #include <utils/noncopyable.h>
 #include <utils/utils.h>
-#include <utils/log.h>
 
 namespace chord
 {
-	template<typename Friend, typename... Args>
+	template<typename... Args>
 	class CallOnceEvents
 	{
-		friend Friend;
 	private:
 		std::shared_mutex m_lock;
 		std::vector<std::function<void(Args...)>> m_collections;
 
+	public:
 		void brocast(Args&&... args)
 		{
 			std::unique_lock<std::shared_mutex> lock(m_lock);
 			for (auto& func : m_collections)
 			{
-				if(func) { func(std::forward<Args>(args)...); }
+				if (func) { func(std::forward<Args>(args)...); }
 			}
 			m_collections.clear();
 		}
 
-	public:
 		void add(std::function<void(Args...)>&& func)
 		{
 			std::unique_lock<std::shared_mutex> lock(m_lock);
@@ -36,10 +34,9 @@ namespace chord
 		}
 	};
 
-	template<typename Friend, typename RetType, typename... Args>
+	template<typename RetType, typename... Args>
 	class Delegate : NonCopyable
 	{
-		friend Friend;
 	public:
 		using DelegateType = std::function<RetType(Args...)>;
 
@@ -60,7 +57,6 @@ namespace chord
 			m_lambda = nullptr; 
 		}
 
-	private:
 		CHORD_NODISCARD RetType execute(Args... args) const
 		{
 			return m_lambda(std::forward<Args>(args)...);
@@ -80,10 +76,9 @@ namespace chord
 	};
 
 	// 
-	template<typename Friend, typename RetType, typename... Args>
+	template<typename RetType, typename... Args>
 	class MultiDelegates : NonCopyable
 	{
-		friend Friend;
 	public:
 		//
 		using EventType = std::function<RetType(Args...)>;
@@ -91,7 +86,7 @@ namespace chord
 		CHORD_NODISCARD EventHandle add(EventType&& lambda)
 		{
 			// Input lambda can't be nullptr.
-			check(lambda != nullptr);
+			assert(lambda != nullptr);
 
 			//
 			std::unique_lock lock(m_mutex);
@@ -143,7 +138,7 @@ namespace chord
 				}), m_events.end());
 
 				m_invalidHandleCount = 0;
-				check(m_validHandleCount == m_events.size());
+				assert(m_validHandleCount == m_events.size());
 			}
 
 			return bSuccess;
@@ -175,7 +170,6 @@ namespace chord
 			return m_validHandleCount == 0;
 		}
 
-	protected:
 		template<typename OpType = size_t>
 		void broadcast(Args...args, std::function<void(const OpType&)>&& opResult = nullptr)
 		{
@@ -210,6 +204,6 @@ namespace chord
 		std::atomic<uint32> m_validHandleCount = 0;
 	};
 
-	template<typename Friend, typename...Args>
-	using Events = MultiDelegates<Friend, void, Args...>;
+	template<typename...Args>
+	using ChordEvent = MultiDelegates<void, Args...>;
 }

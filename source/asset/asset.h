@@ -130,13 +130,13 @@ namespace chord
 	using AssetRef = std::shared_ptr<IAsset>;
 
 	// Global events when asset mark dirty.
-	extern Events<IAsset, AssetRef> onAssetMarkDirtyEvents;
+	extern ChordEvent<AssetRef> onAssetMarkDirtyEvents;
 
 	// Global events when asset saved.
-	extern Events<IAsset, AssetRef> onAssetSavedEvents;
+	extern ChordEvent<AssetRef> onAssetSavedEvents;
 
 	// Global events when asset newly save to disk.
-	extern Events<IAsset, AssetRef> onAssetNewlySaveToDiskEvents;
+	extern ChordEvent<AssetRef> onAssetNewlySaveToDiskEvents;
 
 	// Engine asset manager.
 	class AssetManager : NonCopyable
@@ -246,7 +246,7 @@ namespace chord
 		std::map<std::string, std::set<uint64>> m_classifiedAssets; 
 	};
 
-	extern Events<AssetManager, AssetRef> onAssetRemoveEvents;
-	extern Events<AssetManager, AssetRef> onAssetInsertEvents;
+	extern ChordEvent<AssetRef> onAssetRemoveEvents;
+	extern ChordEvent<AssetRef> onAssetInsertEvents;
 }
 

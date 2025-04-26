@@ -145,6 +145,8 @@ int Flower::run(int argc, const char** argv)
 	
 	CVarSystem::get().getCVarCheck<u16str>("r.log.file.name")->set(u16str("flower/flower"));
 	CVarSystem::get().getCVarCheck<u16str>("r.ui.configPath")->set(u16str("config/flower"));
+	LoggerSystem::cleanDiskSavedLogFile(2);
+
 
 	Application::InitConfig config { };
 

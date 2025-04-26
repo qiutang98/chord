@@ -14,7 +14,7 @@
 #include <asset/asset_common.h>
 #include <graphics/uploader.h>
 #include <graphics/helper.h>
-
+#include <utils/job_system.h>
 
 namespace chord
 {
@@ -172,7 +172,6 @@ namespace chord
 
 			const auto buildBC = [&](const size_t loopStart, const size_t loopEnd)
 			{
-
 				std::array<uint8, kBCBlockSize* kComponentCount> block{ };
 				for (size_t taskIndex = loopStart; taskIndex < loopEnd; ++taskIndex)
 				{
@@ -210,7 +209,8 @@ namespace chord
 					functor(&compressMipData[bufferOffset], block.data());
 				}
 			};
-			Application::get().getThreadPool().parallelizeLoop(0, mipBlockWidth * mipBlockHeight, buildBC).wait();
+
+			jobsystem::parallelFor(EBusyWaitType::All, mipBlockWidth * mipBlockHeight, EJobFlags::Foreground, buildBC);
 		}
 
 		void mipmapCompressBC3(

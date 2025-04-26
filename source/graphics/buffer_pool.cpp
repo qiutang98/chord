@@ -10,11 +10,14 @@ namespace chord::graphics
 
 	GPUBufferPool::~GPUBufferPool()
 	{
+		std::lock_guard lock(m_mutex);
 		m_buffers.clear();
 	}
 
 	void GPUBufferPool::garbageCollected(const ApplicationTickData& tickData)
 	{
+		std::lock_guard lock(m_mutex);
+
 		// Update inner counter.
 		m_frameCounter = tickData.tickCount;
 
@@ -49,6 +52,8 @@ namespace chord::graphics
 	{
 		if (!buffers.empty())
 		{
+			// When this type of buffer reuse in current frame, it will have many chance to reuse in later.
+			// Keep it's life more frame.
 			for (auto& buffer : buffers)
 			{
 				buffer.freeFrame = math::max(buffer.freeFrame, m_frameCounter - m_freeFrameCount + 1);
@@ -58,7 +63,9 @@ namespace chord::graphics
 
 	PoolBufferRef GPUBufferPool::create(const std::string& name, const PoolBufferCreateInfo& inputInfo, bool bSameFrameReuse)
 	{
-		auto info = inputInfo;
+		std::lock_guard lock(m_mutex);
+
+		PoolBufferCreateInfo info = inputInfo;
 		info.size = divideRoundingUp(info.size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
 
 		const uint64 hashId = cityhash::cityhash64((const char*)&info, sizeof(info));
@@ -101,6 +108,10 @@ namespace chord::graphics
 		VkBufferCreateFlags flags,
 		bool bSameFrameReuse)
 	{
+		std::lock_guard lock(m_mutex);
+
+		
+
 		PoolBufferCreateInfo poolInfo{};
 		poolInfo.flags = flags;
 		poolInfo.size  = divideRoundingUp(size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
@@ -143,6 +154,8 @@ namespace chord::graphics
 		VmaAllocationCreateInfo vmaAllocationInfo,
 		VkBufferCreateFlags flags)
 	{
+		std::lock_guard lock(m_mutex);
+
 		PoolBufferCreateInfo poolInfo{};
 		poolInfo.flags = flags;
 		poolInfo.size = divideRoundingUp(data.size, kBufferSizeAllocRound) * kBufferSizeAllocRound;
@@ -204,6 +217,8 @@ namespace chord::graphics
 
 	GPUBufferPool::PoolBuffer::~PoolBuffer()
 	{
+		std::lock_guard lock(m_pool.m_mutex);
+
 		FreePoolBuffer freeBuffer;
 		freeBuffer.buffer = m_buffer;
 		freeBuffer.freeFrame = m_pool.m_frameCounter;

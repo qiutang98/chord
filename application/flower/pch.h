@@ -4,6 +4,7 @@
 #include <utils/noncopyable.h>
 #include <application/application.h>
 #include <utils/delegate.h>
+#include <utils/job_system.h>
 #include <iostream>
 #include <utils/cvar.h>
 #include <utils/log.h>

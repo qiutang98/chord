@@ -68,7 +68,7 @@ void exportGbuffer(in const TinyGBufferContext g, uint2 id)
     storeRWTexture2D_float4(pushConsts.vertexNormalRSId,      id, float4(g.vertexNormalRS * 0.5 + 0.5, 1.0f));
     storeRWTexture2D_float4(pushConsts.pixelNormalRSId,       id, float4(g.pixelNormalRS  * 0.5 + 0.5, 1.0f));
     storeRWTexture2D_float2(pushConsts.motionVectorId,        id, g.motionVector);
-    storeRWTexture2D_float4(pushConsts.aoRoughnessMetallicId, id, float4(1.0f, g.roughness, g.metallic, 0.0)); // g.materialAO
+    storeRWTexture2D_float4(pushConsts.aoRoughnessMetallicId, id, float4(g.materialAO, g.roughness, g.metallic, 0.0));
 #endif
 }
 

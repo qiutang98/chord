@@ -110,7 +110,7 @@ namespace chord
 			return *m_swapchain;
 		}
 
-		CallOnceEvents<ImGuiViewportData, const ApplicationTickData&, graphics::CommandList&> onTickWithCmds;
+		CallOnceEvents<const ApplicationTickData&, graphics::CommandList&> onTickWithCmds;
 
 		void tickWithCmds(const ApplicationTickData& data)
 		{

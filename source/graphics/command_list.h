@@ -207,7 +207,11 @@ namespace chord::graphics
 
 	public:
 		static void add(std::function<void(const ApplicationTickData&, graphics::GraphicsQueue&)>&& func);
+
+		// 
 		static void flush(const ApplicationTickData& tickData, graphics::GraphicsQueue& queue);
+
+		//
 		static void clean();
 	};
 }

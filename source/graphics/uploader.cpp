@@ -8,6 +8,7 @@ namespace chord::graphics
 	constexpr uint32 kAsyncStaticUploaderNum  = 2;
 	constexpr uint32 kAsyncDynamicUploaderNum = 1;
 
+	//
 	constexpr uint32 kUploadMemoryAlign = 16; // For BC.
 
 	static inline std::string getTransferBufferUniqueId()
@@ -95,21 +96,22 @@ namespace chord::graphics
 			check(requireSize > m_manager.getDynamicUploadMinSize());
 
 			const bool bShouldRecreate =
-				   (m_stageBuffer == nullptr)                    // No create yet.
-				|| (m_stageBuffer->getSize() < 1 * requireSize)  // Size no enough.
-				|| (m_stageBuffer->getSize() > 4 * requireSize); // Size too big, waste too much.
+				   (m_stageBuffer == nullptr)                          // No create yet.
+				|| (m_stageBuffer->get().getSize() < 1 * requireSize)  // Size no enough.
+				|| (m_stageBuffer->get().getSize() > 4 * requireSize); // Size too big, waste too much.
 			if (bShouldRecreate)
 			{
-				m_stageBuffer = getContext().createStageUploadBuffer(getTransferBufferUniqueId(), SizedBuffer(requireSize, nullptr));
+				// Use buffer pool.
+				m_stageBuffer = getContext().getBufferPool().createHostVisibleCopyUpload(getTransferBufferUniqueId(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, SizedBuffer(requireSize, nullptr));
 			}
 
 			startRecordAsync();
-			m_stageBuffer->map();
-			m_stageBuffer->invalidate();
-			m_processingTask->task(0, m_manager.getQueueFamily(), m_stageBuffer->getMapped(), m_commandBufferAsync, *m_stageBuffer);
-			m_stageBuffer->flush();
+			m_stageBuffer->get().map();
+			m_stageBuffer->get().invalidate();
+			m_processingTask->task(0, m_manager.getQueueFamily(), m_stageBuffer->get().getMapped(), m_commandBufferAsync, m_stageBuffer->get());
+			m_stageBuffer->get().flush();
 
-			m_stageBuffer->unmap();
+			m_stageBuffer->get().unmap();
 			endRecordAsync();
 
 			m_manager.pushSubmitFunctions(this);
@@ -183,9 +185,6 @@ namespace chord::graphics
 			// Do copy action here.
 			startRecordAsync();
 
-
-
-			
 			m_stageBuffer->map();
 			{
 				m_stageBuffer->invalidate();

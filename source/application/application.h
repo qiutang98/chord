@@ -8,7 +8,6 @@
 #include <utils/optional.h>
 #include <graphics/graphics.h>
 #include <utils/timer.h>
-#include <utils/threadpool.h>
 
 namespace chord
 {
@@ -79,8 +78,6 @@ namespace chord
 
 		Timer m_timer;
 
-		std::unique_ptr<ThreadPool> m_threadPool = nullptr;
-
 		// App asset manager.
 		std::unique_ptr<AssetManager> m_assetManager = nullptr;
 		std::unique_ptr<Engine> m_engine = nullptr;
@@ -97,11 +94,6 @@ namespace chord
 		const auto getRuntimePeriod() const
 		{
 			return m_runtimePeriod;
-		}
-
-		ThreadPool& getThreadPool() const
-		{
-			return *m_threadPool;
 		}
 
 		AssetManager& getAssetManager() const
@@ -188,13 +180,13 @@ namespace chord
 		void queryWindowSize(int32& width, int32& height) const;
 
 		// Application init delegates.
-		MultiDelegates<Application, bool> onInit;
+		MultiDelegates<bool> onInit;
 
 		// Return should exit or not value, if one delegate require continue(return false), the exit event will stop.
-		MultiDelegates<Application, bool> onShouldClosed;
+		MultiDelegates<bool> onShouldClosed;
 
 		// Application release events.
-		Events<Application> onRelease;
+		ChordEvent<> onRelease;
 
 	private:
 		// Application should be a singleton.

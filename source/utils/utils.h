@@ -34,7 +34,7 @@
 	#define CHORD_RESTRICT __restrict
 #else
 	#define CHORD_RESTRICT 
-#endif
+#endif 
 
 #ifdef ENABLE_LIKELY
 	#define CHORD_LIKELY [[likely]]
@@ -44,8 +44,8 @@
 	#define CHORD_UNLIKELY
 #endif // ENABLE_LIKELY
 
-#define CHORD_DEBUG_BREAK __debugbreak();
-#define CHORD_CRASH CHORD_DEBUG_BREAK ::abort();
+#define CHORD_DEBUG_BREAK chord::reportBreakpoint();
+#define CHORD_CRASH CHORD_DEBUG_BREAK chord::reportCrash();
 
 #ifdef ENABLE_LOG
 	#define chord_macro_sup_enableLogOnly(x) x
@@ -53,33 +53,35 @@
 	#define chord_macro_sup_enableLogOnly(x)
 #endif
 
+#define ASSERT_POWER_OF_TWO(c) assert(c && (!(c & (c-1))))
+
 #if CHORD_DEBUG
 	#define chord_macro_sup_debugOnly(x) x
 	#define chord_macro_sup_checkPrintContent(x, p) \
-	do { if(!(x)) { p("Check content '{3}' failed in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, #x); } } while(0)
+	do { if(!(x)) { p("Check '{3}' failed in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, #x); } } while(0)
 
 	#define chord_macro_sup_checkMsgfPrintContent(x, p, ...) \
-	do { if(!(x)) { p("Assert content '{4}' failed with message: '{3}' in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); } } while(0)
+	do { if(!(x)) { p("Assert '{4}' failed with message: '{3}' in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); } } while(0)
 #else
 	#define chord_macro_sup_debugOnly(x)
-	#define chord_macro_sup_checkPrintContent(x, p) do { if(!(x)) { p("Check content '{0}' failed.", #x); } } while(0)
-	#define chord_macro_sup_checkMsgfPrintContent(x, p, ...) do { if(!(x)) { p("Assert content '{0}' failed with message '{1}'.", #x, __VA_ARGS__); } } while(0)
+	#define chord_macro_sup_checkPrintContent(x, p) do { if(!(x)) { p("Check '{0}' failed.", #x); } } while(0)
+	#define chord_macro_sup_checkMsgfPrintContent(x, p, ...) do { if(!(x)) { p("Assert '{0}' failed with message '{1}'.", #x, __VA_ARGS__); } } while(0)
 #endif
 
 #define chord_macro_sup_ensureMsgfContent(x, p, ...) \
-do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure content '{4}' failed with message '{3}' in function '{1}' at line #{0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); CHORD_DEBUG_BREAK } } while(0)
+do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure '{4}' failed with message '{3}' in function '{1}' at line #{0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__, std::format(__VA_ARGS__), #x); CHORD_DEBUG_BREAK } } while(0)
 
 #define chord_macro_sup_checkEntryContent(x) x("Check entry in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__)
 #define chord_macro_sup_unimplementedContent(x) x("Unimplemented code entry in function '{1}' at line {0} on file '{2}'.", __LINE__, __FUNCTION__, __FILE__)
 
 // Operator enum flags support macro for enum class.
-#define ENUM_CLASS_FLAG_OPERATORS(T)                                              \
-    static inline T operator |(T a, T b) { return T(uint32_t(a) | uint32_t(b)); } \
-    static inline T operator &(T a, T b) { return T(uint32_t(a) & uint32_t(b)); } \
-    static inline T operator ~(T a     ) { return T(~uint32_t(a)); }              \
-    static inline bool operator  !(T  a) { return uint32_t(a) == 0; }             \
-    static inline bool operator ==(T a, uint32_t b) { return uint32_t(a) == b; }  \
-    static inline bool operator !=(T a, uint32_t b) { return uint32_t(a) != b; }
+#define ENUM_CLASS_FLAG_OPERATORS(T)                                                 \
+    constexpr inline T operator |(T a, T b) { return T(uint32_t(a) | uint32_t(b)); } \
+    constexpr inline T operator &(T a, T b) { return T(uint32_t(a) & uint32_t(b)); } \
+    constexpr inline T operator ~(T a     ) { return T(~uint32_t(a)); }              \
+    constexpr inline bool operator  !(T  a) { return uint32_t(a) == 0; }             \
+    constexpr inline bool operator ==(T a, uint32_t b) { return uint32_t(a) == b; }  \
+    constexpr inline bool operator !=(T a, uint32_t b) { return uint32_t(a) != b; }
 
 #define DECLARE_SUPER_TYPE(Parent) using Super = Parent
 
@@ -457,6 +459,13 @@ namespace chord
 	extern void namedThread(std::thread& t, const std::wstring& name);
 	extern void namedCurrentThread(const std::wstring& name);
 
+	extern void reportCrash();
+	extern void reportBreakpoint();
+
+	// 
+	extern bool isDebuggerAttach();
+	extern bool createDump(bool bFullDump, const std::wstring& dumpFilePath);
+
 	extern bool loadFile(const std::filesystem::path& path, std::vector<char>& binData, const char* mode);
 	extern bool storeFile(const std::filesystem::path& path, const uint8* ptr, uint32 size, const char* mode);
 
@@ -566,5 +575,40 @@ namespace chord
 	static inline bool isDigitString(const std::string& s)
 	{
 		return std::all_of(std::begin(s), std::end(s), [](unsigned char c) { return std::isdigit(c); });
+	}
+
+	static inline std::string formatTimestamp(const std::chrono::system_clock::time_point& time, const std::string& format = "_%Y_%m_%d_%H_%M_%S")
+	{
+		std::time_t tt = std::chrono::system_clock::to_time_t(time);
+		std::tm tm = *std::localtime(&tt);
+		std::stringstream ss;
+		ss << std::put_time(&tm, format.c_str());
+		return ss.str();
+	}
+
+	// ScopeExit use RAII to call a function when the object goes out of scope.
+	// Useful for cleanup code.
+	template<typename Callback>
+	class ScopeExit final
+	{
+		static_assert(std::is_invocable_v<Callback>, "Callback must be a function type.");
+	public:
+		~ScopeExit() { m_func(); }
+
+		explicit ScopeExit(Callback func)
+			: m_func(func)
+		{
+
+		}
+
+	private:
+		Callback m_func;
+	};
+
+	// Helper function to create a ScopeExit object.
+	template<typename Callback>
+	static inline ScopeExit<Callback> makeScopeExit(Callback func)
+	{
+		return ScopeExit(func);
 	}
 }
