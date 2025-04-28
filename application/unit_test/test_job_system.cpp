@@ -41,6 +41,15 @@ namespace chord::test::job_system
 				LOG_TRACE("Task C.");
 			}, taskBEvents);
 
+			for (int32 i = 0; i < 32; i++)
+			{
+				waitEvent = jobsystem::launch(EJobFlags::Foreground, [i]()
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(i));
+					LOG_TRACE("Sequential Task D#{}.", i);
+				}, { waitEvent });
+			}
+
 			waitEvent->wait(EBusyWaitType::All);
 		}
 

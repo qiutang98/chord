@@ -17,6 +17,7 @@ namespace chord
 	{
 		None = 0x0,
 		Foreground = 0x01 << 0,
+		RunOnMainThread = 0x01 << 1,
 	};
 	ENUM_CLASS_FLAG_OPERATORS(EJobFlags);
 }
@@ -217,6 +218,10 @@ namespace chord::jobsystem
 
 		for (auto& parent : parents)
 		{
+			if (parent == nullptr)
+			{
+				continue;
+			}
 			std::lock_guard lock(parent->mutex);
 			if (parent->bFinish)
 			{

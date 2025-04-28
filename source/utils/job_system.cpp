@@ -3,6 +3,7 @@
 #include <utils/mpmc_queue.h>
 #include <utils/tagged_ptr.h>
 #include <utils/allocator.h>
+#include <utils/thread.h>
 
 namespace chord::jobsystem
 {
@@ -93,8 +94,6 @@ namespace chord::jobsystem
 		}
 	};
 	static thread_local std::unique_ptr<PerThreadLocalData> tlsWorkerData = nullptr;
-
-
 
 	static inline bool isJobInQueues(bool bForeJob)
 	{
@@ -235,10 +234,7 @@ namespace chord::jobsystem
 		}
 	}
 
-	void chord::jobsystem::run(Job* job)
-	{
-		pushToQueue(job);
-	}
+
 
 	void assignDependencyToJob(Job& job, JobDependency& dependency)
 	{
@@ -286,7 +282,7 @@ namespace chord::jobsystem
 					// Current job already finish all dependency job, it's time to enqueue. 
 					if (oldDependencyCount == 1)
 					{
-						pushToQueue(job);
+						run(job);
 					}
 
 					// Iterate next child.
@@ -303,6 +299,21 @@ namespace chord::jobsystem
 		// Now current job can destroy.
 		job->jobState.store(EJobState::Garbage, std::memory_order_seq_cst);
 		delete job; // Job finish and collect it.
+	}
+
+	void chord::jobsystem::run(Job* job)
+	{
+		if (hasFlag(job->flags, EJobFlags::RunOnMainThread))
+		{
+			// Current job require run on main thread.
+			check(job->jobState == EJobState::Pending);
+			job->jobState = EJobState::Pushed;
+			ENQUEUE_MAIN_COMMAND([job]() { execute(job); });
+		}
+		else
+		{
+			pushToQueue(job);
+		}
 	}
 
 	static void reduceJobQueueCount(Job* job)
@@ -468,7 +479,7 @@ namespace chord::jobsystem
 			if (!bSuccess)
 			{
 				std::unique_lock lock(waitAtomicSignal.mutex);
-				while (!isJobInQueues(bForegroundWorker))
+				while (!isJobInQueues(bForegroundWorker) && !isJobSystemRequiredStop())
 				{
 					waitAtomicSignal.cv.wait(lock);
 				}

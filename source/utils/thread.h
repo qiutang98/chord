@@ -1,49 +1,16 @@
 #pragma once
 #include <utils/utils.h>
+#include <utils/mpsc_queue.h>
+#include <utils/job_system.h>
 
 namespace chord
 {
-	class ISyncCallback
-	{
-	public:
-		virtual void execute() = 0;
-	};
-
-	class SyncCallbackManager : NonCopyable
-	{
-	public:
-		explicit SyncCallbackManager();
-
-		void pushAnyThread(std::shared_ptr<ISyncCallback> task);
-		void pushAnyThread(std::function<void()>&& task);
-
-		// Insert end of frame.
-		void endOfFrame(uint64 frame);
-
-		// Flush current frame.
-		void flush(uint64 frame);
-
-		bool isEmpty() const;
-
-	private:
-		struct Callback 
-		{
-			uint64 frameCount = 0;
-
-			std::shared_ptr<ISyncCallback> object = nullptr;
-			std::function<void()> function = nullptr;
-		};
-
-		std::thread::id m_syncThreadId;
-
-		mutable std::mutex m_lock;
-		std::queue<Callback> m_callbacks;
-	};
-
 	class ThreadContext
 	{
 	private:
-		std::unique_ptr<SyncCallbackManager> m_syncManager;
+		using CallBackFunc = std::function<void()>;
+		MPSCQueue<CallBackFunc, MPSCQueueHeapAllocator<CallBackFunc>> m_callbacks;
+
 		std::wstring m_name;
 		std::thread::id m_thradId;
 
@@ -52,6 +19,8 @@ namespace chord
 		{
 
 		}
+
+		void flush();
 
 	public:
 		static ThreadContext& main();
@@ -64,8 +33,7 @@ namespace chord
 		bool isInThread(std::thread::id id);
 
 		// Push task need sync in tick.
-		void pushAnyThread(std::function<void()>&& task);
-		void pushAnyThread(std::shared_ptr<ISyncCallback> task);
+		void pushAnyThread(std::function<void()>&& task); 
 	};
 
 	// Main thread: Engine record vulkan command, submit, present thread.
