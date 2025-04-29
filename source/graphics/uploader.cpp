@@ -2,12 +2,10 @@
 #include <graphics/graphics.h>
 #include <graphics/helper.h>
 #include <utils/thread.h>
+#include <application/application.h>
 
 namespace chord::graphics
 {
-	constexpr uint32 kAsyncStaticUploaderNum  = 2;
-	constexpr uint32 kAsyncDynamicUploaderNum = 1;
-
 	//
 	constexpr uint32 kUploadMemoryAlign = 16; // For BC.
 
@@ -17,204 +15,195 @@ namespace chord::graphics
 		return "AsyncUploadBuffer_" + std::to_string(counter.fetch_add(1));
 	}
 
-	IAsyncUploader::IAsyncUploader(const std::string& name, AsyncUploaderManager& in)
-		: m_name(name), m_manager(in)
+	AsyncUploaderBase::AsyncUploaderBase(const std::string& name, AsyncUploaderManager& manager)
+		: m_name(name), m_manager(manager)
 	{
-		m_future = std::async(std::launch::async, [this]()
-		{
-			// Create fence of this uploader state.
-			m_fence = helper::createFence(0);
-
-			// Create async pool.
-			m_poolAsync = helper::createCommandPool(m_manager.getQueueFamily(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-			m_commandBufferAsync = helper::allocateCommandBuffer(m_poolAsync);
-
-			LOG_TRACE("Async uploader {0} create.", m_name);
-
-			while (m_bRun.load())
-			{
-				threadFunction();
-			}
-
-			// Before release you must ensure all work finish.
-			check(!working());
-
-			// Release command pool.
-			helper::destroyCommandPool(m_poolAsync);
-
-			// Fence release.
-			helper::destroyFence(m_fence);
-
-			LOG_TRACE("Async uploader {0} destroy.", m_name);
-		});
+		// Create async pool.
+		m_poolAsync = helper::createCommandPool(manager.getQueueFamily(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+		m_commandBufferAsync = helper::allocateCommandBuffer(m_poolAsync);
+		m_fence = helper::createFence(VK_FENCE_CREATE_SIGNALED_BIT);
 	}
 
-	void IAsyncUploader::startRecordAsync()
+	AsyncUploaderBase::~AsyncUploaderBase()
+	{
+		// Wait all processing task finish.
+		jobsystem::busyWaitUntil([this]() { return m_processingTasks.empty(); }, EBusyWaitType::All);
+
+		// Release command pool.
+		helper::destroyCommandPool(m_poolAsync);
+		helper::destroyFence(m_fence);
+	}
+
+	void AsyncUploaderBase::startRecordAsync() const
 	{
 		helper::resetCommandBuffer(m_commandBufferAsync);
 		helper::beginCommandBuffer(m_commandBufferAsync, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 	}
 
-	void IAsyncUploader::endRecordAsync()
+	void AsyncUploaderBase::endRecordAsync() const
 	{
 		helper::endCommandBuffer(m_commandBufferAsync);
 	}
 
-	void DynamicAsyncUploader::threadFunction()
+	bool AsyncUploaderBase::gpuTaskFinish() const
 	{
-		auto tickLogic = [&]()
+		return vkGetFenceStatus(getDevice(), m_fence) == VK_SUCCESS;
+	}
+
+	bool AsyncUploaderBase::allTaskFinish() const
+	{
+		bool bFinish = gpuTaskFinish() && m_processingTasks.empty();
+		if (m_dispatchJob)
 		{
-			check(!m_processingTask);
-			check(m_bWorking == false);
+			bFinish &= m_dispatchJob->bFinish;
+		}
 
-			// Get task from manager.
-			m_manager.dynamicTasksAction([&, this](std::queue<AsyncUploadTaskRef>& srcQueue)
+		return bFinish;
+	}
+
+	// Only execute on main thread.
+	void AsyncUploaderBase::triggleSubmitJob(bool bForceDispatch)
+	{
+		check(isInMainThread());
+		bool bDispatch = bForceDispatch ? true : (m_dispatchJob == nullptr || m_dispatchJob->bFinish);
+
+		if (!bDispatch)
+		{
+			return;
+		}
+
+		m_dispatchJob = jobsystem::launch(EJobFlags::None, [this]()
+		{
+			// Wait until all prev task job done.
+			jobsystem::busyWaitUntil([this]() { return gpuTaskFinish(); }, EBusyWaitType::All);
+
+			// Clean some finished job.
+			while (m_processingTasks.size() > 0)
 			{
-				if (srcQueue.size() == 0)
-				{
-					return;
-				}
-
-				if (srcQueue.size() > 0)
-				{
-					m_processingTask = srcQueue.front();
-					srcQueue.pop();
-				}
-			});
-
-			// May stole by other thread, release stage buffer and return.
-			if (!m_processingTask)
-			{
-				m_stageBuffer = nullptr;
-				return;
+				auto task = m_processingTasks.front().task;
+				ENQUEUE_MAIN_COMMAND([task]() { task->finishCallback(); });
+				m_processingTasks.pop();
 			}
 
-			// Now start working.
-			m_bWorking = true;
+			// Now GPU task finish, can start new task.
+			if (doTask())
+			{
+				checkVkResult(vkResetFences(getDevice(), 1, &m_fence));
 
-			const auto requireSize = m_processingTask->size;
+				const auto& copyQueues = getContext().getQueuesInfo().copyQueues;
+
+				VkSubmitInfo submitInfo{};
+				submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+				submitInfo.commandBufferCount = 1;
+				submitInfo.pCommandBuffers = &m_commandBufferAsync;
+				checkVkResult(vkQueueSubmit(copyQueues.at(0).queue, 1, &submitInfo, m_fence));
+			}
+
+			// 
+			if (!m_pendingTasks.isEmpty() || m_processingTasks.size() > 0)
+			{
+				ENQUEUE_MAIN_COMMAND([this]() { triggleSubmitJob(true); });
+			}
+		}, { m_dispatchJob });
+	}
+
+	void AsyncUploaderBase::addTask(AsyncUploadTaskRef task)
+	{
+		m_pendingTasks.enqueue(std::move(task));
+		ENQUEUE_MAIN_COMMAND([this]() { triggleSubmitJob(); });
+	}
+
+	void AsyncUploaderBase::pushTaskToProcessingQueue(AsyncUploadTaskRef task, GPUBufferRef buffer)
+	{
+		// Add to pending queue.
+		ExecutingTask executingTask;
+		executingTask.task = task;
+		executingTask.buffer = buffer;
+		m_processingTasks.push(executingTask);
+	}
+
+	bool StaticAsyncUploader::doTask()
+	{
+		bool bNeedSubmit = false;
+		if (!m_stageBuffer)
+		{
+			const auto baseBufferSize = static_cast<VkDeviceSize>(m_manager.getStaticUploadMaxSize());
+			m_stageBuffer = getContext().createStageUploadBuffer(getTransferBufferUniqueId(), SizedBuffer(baseBufferSize, nullptr));
+		}
+
+		startRecordAsync();
+		m_stageBuffer->map();
+		m_stageBuffer->invalidate();
+		{
+			uint32 totalSize = 0;
+			uint8* mapped = (uint8*)m_stageBuffer->getMapped();
+			while (true)
+			{
+				AsyncUploadTaskRef pendingTask = nullptr;
+				if (m_pendingTasks.getDequeue(pendingTask))
+				{
+					const auto taskSize = alignRoundingUp(pendingTask->size, kUploadMemoryAlign);
+					if (totalSize + taskSize < m_manager.getStaticUploadMaxSize())
+					{
+						check(m_pendingTasks.dequeue(pendingTask));
+
+						// Executing task.
+						pendingTask->task(totalSize, m_manager.getQueueFamily(), mapped, m_commandBufferAsync, *m_stageBuffer);
+						bNeedSubmit = true;
+
+						pushTaskToProcessingQueue(pendingTask, m_stageBuffer);
+
+						// Step next task.
+						totalSize += taskSize;
+						mapped = mapped + taskSize;
+						continue;
+					}
+				}
+				break;
+			}
+		}
+		m_stageBuffer->flush();
+		m_stageBuffer->unmap();
+		endRecordAsync();
+
+		return bNeedSubmit;
+	}
+
+	bool DynamicAsyncUploader::doTask()
+	{
+		bool bNeedSubmit = false;
+
+		AsyncUploadTaskRef pendingTask = nullptr;
+		if (m_pendingTasks.dequeue(pendingTask))
+		{
+			const auto requireSize = alignRoundingUp(pendingTask->size, kUploadMemoryAlign);
 			check(requireSize > m_manager.getDynamicUploadMinSize());
 
 			const bool bShouldRecreate =
 				   (m_stageBuffer == nullptr)                          // No create yet.
 				|| (m_stageBuffer->get().getSize() < 1 * requireSize)  // Size no enough.
 				|| (m_stageBuffer->get().getSize() > 4 * requireSize); // Size too big, waste too much.
+
 			if (bShouldRecreate)
 			{
-				// Use buffer pool.
 				m_stageBuffer = getContext().getBufferPool().createHostVisibleCopyUpload(getTransferBufferUniqueId(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, SizedBuffer(requireSize, nullptr));
 			}
 
 			startRecordAsync();
 			m_stageBuffer->get().map();
 			m_stageBuffer->get().invalidate();
-			m_processingTask->task(0, m_manager.getQueueFamily(), m_stageBuffer->get().getMapped(), m_commandBufferAsync, m_stageBuffer->get());
+			{
+				pendingTask->task(0, m_manager.getQueueFamily(), m_stageBuffer->get().getMapped(), m_commandBufferAsync, m_stageBuffer->get());
+				pushTaskToProcessingQueue(pendingTask, m_stageBuffer->getGPUBufferRef());
+			}
 			m_stageBuffer->get().flush();
-
 			m_stageBuffer->get().unmap();
 			endRecordAsync();
 
-			m_manager.pushSubmitFunctions(this);
-		};
-
-		if (!m_manager.dynamicLoadAssetTaskEmpty() && !working())
-		{
-			tickLogic();
+			bNeedSubmit = true;
 		}
-		else
-		{
-			std::unique_lock<std::mutex> lock(m_manager.getDynamicMutex());
-			m_manager.getDynamicCondition().wait(lock);
-		}
-	}
 
-	void StaticAsyncUploader::threadFunction()
-	{
-		auto tickLogic = [&]()
-		{
-			check(m_processingTasks.empty());
-			check(m_bWorking == false);
-
-			// Get static task from manager.
-			m_manager.staticTasksAction([&, this](std::queue<AsyncUploadTaskRef>& srcQueue)
-			{
-				// Empty already.
-				if (srcQueue.size() == 0)
-				{
-					return;
-				}
-
-				uint32 availableSize = m_manager.getStaticUploadMaxSize();
-				while (srcQueue.size() > 0)
-				{
-					AsyncUploadTaskRef processTask = srcQueue.front();
-
-					uint32 requireSize = processTask->size;
-					check(requireSize < m_manager.getDynamicUploadMinSize());
-
-					// Small buffer use static uploader.
-					if (availableSize > requireSize)
-					{
-						m_processingTasks.push_back(processTask);
-						availableSize -= requireSize;
-						srcQueue.pop();
-					}
-					else
-					{
-						// No enough space for new task, break task push.
-						break;
-					}
-				}
-			});
-
-			// May stole by other thread, no processing task, return.
-			if (m_processingTasks.size() <= 0)
-			{
-				return;
-			}
-
-			// Now can work.
-			m_bWorking = true;
-
-			if (!m_stageBuffer)
-			{
-				const auto baseBufferSize = static_cast<VkDeviceSize>(m_manager.getStaticUploadMaxSize());
-				m_stageBuffer = getContext().createStageUploadBuffer(getTransferBufferUniqueId(), SizedBuffer(baseBufferSize, nullptr));
-			}
-
-			// Do copy action here.
-			startRecordAsync();
-
-			m_stageBuffer->map();
-			{
-				m_stageBuffer->invalidate();
-				uint32 totalSize = 0;
-				uint8* mapped = (uint8*)m_stageBuffer->getMapped();
-				for (auto i = 0; i < m_processingTasks.size(); i++)
-				{
-					const auto taskSize = ((m_processingTasks[i]->size + kUploadMemoryAlign - 1) / kUploadMemoryAlign) * kUploadMemoryAlign;
-					m_processingTasks[i]->task(totalSize, m_manager.getQueueFamily(), mapped, m_commandBufferAsync, *m_stageBuffer);
-
-					totalSize += taskSize;
-					mapped = mapped + taskSize;
-				}
-				m_stageBuffer->flush();
-			}
-			m_stageBuffer->unmap();
-
-			endRecordAsync();
-			m_manager.pushSubmitFunctions(this);
-		};
-
-		if (!m_manager.staticLoadAssetTaskEmpty() && !working())
-		{
-			tickLogic();
-		}
-		else
-		{
-			std::unique_lock<std::mutex> lock(m_manager.getStaticMutex());
-			m_manager.getStaticCondition().wait(lock);
-		}
+		return bNeedSubmit;
 	}
 
 	AsyncUploaderManager::AsyncUploaderManager(uint32 staticUploaderMaxSize, uint32 dynamicUploaderMinSize)
@@ -222,19 +211,8 @@ namespace chord::graphics
 		, m_staticUploaderMaxSize(staticUploaderMaxSize * 1024 * 1024)
 		, m_queueFamily(getContext().getQueuesInfo().copyFamily.get())
 	{
-		for (size_t i = 0; i < kAsyncStaticUploaderNum; i++)
-		{
-			std::string name = "StaticAsyncUpload_" + std::to_string(i);
-			m_staticUploaders.push_back(
-				std::make_unique<StaticAsyncUploader>(name, *this));
-		}
-
-		for (size_t i = 0; i < kAsyncDynamicUploaderNum; i++)
-		{
-			std::string name = "DynamicAsyncUpload_" + std::to_string(i);
-			m_dynamicUploaders.push_back(
-				std::make_unique<DynamicAsyncUploader>(name, *this));
-		}
+		m_staticUploader = std::make_unique<StaticAsyncUploader>("StaticAsyncUpload", *this);
+		m_dynamicUploader = std::make_unique<DynamicAsyncUploader>("DynamicAsyncUpload", *this);
 	}
 
 	void AsyncUploaderManager::addTask(size_t requireSize, AsyncUploadTaskFunc&& func, AsyncUploadFinishFunc&& finishCallback)
@@ -246,188 +224,29 @@ namespace chord::graphics
 
 		if (requireSize >= getDynamicUploadMinSize())
 		{
-			dynamicTasksAction([&](auto& queue){ queue.push(taskRef); });
+			m_dynamicUploader->addTask(taskRef);
 		}
 		else
 		{
-			staticTasksAction([&](auto& queue){ queue.push(taskRef); });
-		}
-	}
-
-	bool AsyncUploaderManager::busy() const
-	{
-		if (!staticLoadAssetTaskEmpty())
-		{
-			return true;
-		}
-		if (!dynamicLoadAssetTaskEmpty())
-		{
-			return true;
-		}
-
-		for (size_t i = 0; i < m_staticUploaders.size(); i++)
-		{
-			if (m_staticUploaders[i]->working())
-			{
-				return true;
-			}
-		}
-		for (size_t i = 0; i < m_dynamicUploaders.size(); i++)
-		{
-			if (m_dynamicUploaders[i]->working())
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	void AsyncUploaderManager::submitObjects()
-	{
-		std::lock_guard<std::mutex> lock(m_submitObjectsMutex);
-		if (!m_submitObjects.empty())
-		{
-			size_t indexQueue = 0;
-
-			size_t maxIndex = getContext().getQueuesInfo().copyQueues.size();
-			check(maxIndex > 0);
-
-			for (auto* obj : m_submitObjects)
-			{
-				VkSubmitInfo submitInfo{};
-				submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-				submitInfo.commandBufferCount = 1;
-				submitInfo.pCommandBuffers = &obj->getCommandBuffer();
-
-				checkVkResult(vkQueueSubmit(getContext().getQueuesInfo().copyQueues.at(indexQueue).queue, 1, &submitInfo, obj->getFence()));
-
-				indexQueue ++;
-				if (indexQueue == maxIndex)
-				{
-					indexQueue = 0;
-				}
-
-				m_pendingObjects.push_back(obj);
-			}
-			m_submitObjects.clear();
-		}
-	}
-
-	void AsyncUploaderManager::syncPendingObjects()
-	{
-		std::lock_guard<std::mutex> lock(m_submitObjectsMutex);
-		std::erase_if(m_pendingObjects, [](auto* obj)
-		{
-			bool bResult = false;
-			if (vkGetFenceStatus(getDevice(), obj->getFence()) == VK_SUCCESS)
-			{
-				obj->onFinished();
-				bResult = true;
-			}
-			return bResult;
-		});
-	}
-
-	void AsyncUploaderManager::pushSubmitFunctions(IAsyncUploader* f)
-	{
-		std::lock_guard<std::mutex> lock(m_submitObjectsMutex);
-		m_submitObjects.push_back(f);
-	}
-
-	void AsyncUploaderManager::tick(const ApplicationTickData& tickData)
-	{
-		// Flush submit functions.
-		syncPendingObjects();
-		submitObjects();
-
-		if (!staticLoadAssetTaskEmpty())
-		{
-			getStaticCondition().notify_one();
-		}
-		if (!dynamicLoadAssetTaskEmpty())
-		{
-			getDynamicCondition().notify_one();
+			m_staticUploader->addTask(taskRef);
 		}
 	}
 
 	void AsyncUploaderManager::flushTask()
 	{
-		while (busy())
-		{
-			getStaticCondition().notify_all();
-			getDynamicCondition().notify_all();
+		check(isInMainThread());
 
-			submitObjects();
-			syncPendingObjects();
-		}
+		// 
+		m_staticUploader->triggleSubmitJob();
+		m_dynamicUploader->triggleSubmitJob();
+
+		//
+		jobsystem::busyWaitUntil([this]() { return !this->busy(); }, EBusyWaitType::All);
 	}
 
 	AsyncUploaderManager::~AsyncUploaderManager()
 	{
 		flushTask();
-		LOG_INFO("Start release async uploader threads...");
-
-		for (size_t i = 0; i < m_staticUploaders.size(); i++)
-		{
-			m_staticUploaders[i]->stop();
-		}
-		for (size_t i = 0; i < m_dynamicUploaders.size(); i++)
-		{
-			m_dynamicUploaders[i]->stop();
-		}
-		getStaticCondition().notify_all();
-		getDynamicCondition().notify_all();
-
-		// Wait all futures.
-		for (size_t i = 0; i < m_staticUploaders.size(); i++)
-		{
-			m_staticUploaders[i]->wait();
-			m_staticUploaders[i].reset();
-		}
-		for (size_t i = 0; i < m_dynamicUploaders.size(); i++)
-		{
-			m_dynamicUploaders[i]->wait();
-			m_dynamicUploaders[i].reset();
-		}
-		LOG_INFO("All async uploader threads release.");
-	}
-
-	void IAsyncUploader::onFinished()
-	{
-		check(m_bWorking);
-
-		m_bWorking = false;
-		checkVkResult(vkResetFences(getDevice(), 1, &m_fence));
-	}
-
-	void DynamicAsyncUploader::onFinished()
-	{
-		checkMsgf(m_processingTask, "Awake dynamic async loader but no task feed, fix me!");
-
-		if (m_processingTask->finishCallback)
-		{
-			m_processingTask->finishCallback();
-		}
-		m_processingTask = nullptr;
-
-		IAsyncUploader::onFinished();
-	}
-
-	void StaticAsyncUploader::onFinished()
-	{
-		check(!m_processingTasks.empty());
-
-		for (auto& uploadingTask : m_processingTasks)
-		{
-			if (uploadingTask->finishCallback)
-			{
-				uploadingTask->finishCallback();
-			}
-		}
-		m_processingTasks.clear();
-
-		IAsyncUploader::onFinished();
 	}
 
 	GPUTextureAsset::GPUTextureAsset(
@@ -472,9 +291,4 @@ namespace chord::graphics
 	{
 		return getReadyImage()->requireView(range, viewType, true, false).SRV.get();
 	}
-
-
 }
-
-
-

@@ -12,20 +12,8 @@
 	#error "Shader compiler current only support windows."
 #endif 
 
-#include <regex>
-
 namespace chord::graphics
 {
-	IPlatformShaderCompiler::IPlatformShaderCompiler()
-	{
-
-	}
-
-	IPlatformShaderCompiler::~IPlatformShaderCompiler()
-	{
-
-	}
-
 	constexpr const char* kDebugSourceArg    = "-fspv-debug=vulkan-with-source";
 	constexpr const char* kEnable16BitArg    = "-enable-16bit-types";
 	constexpr const char* kEnableRayQueryArg = "-fspv-extension=SPV_KHR_ray_query";

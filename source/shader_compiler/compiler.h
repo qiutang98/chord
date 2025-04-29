@@ -42,8 +42,8 @@ namespace chord::graphics
 	class IPlatformShaderCompiler : NonCopyable
 	{
 	public:
-		explicit IPlatformShaderCompiler();
-		virtual ~IPlatformShaderCompiler();
+		explicit IPlatformShaderCompiler() = default;
+		virtual ~IPlatformShaderCompiler() = default;
 
 		//
 		virtual void compileShader(

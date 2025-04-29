@@ -92,6 +92,21 @@ namespace chord
             return m_nodeCount == 0;
         }
 
+		// Get dequeue node data but not dequeue it.
+        bool getDequeue(T& output) const
+        {
+            Node* dequeueNode = m_dequeuePos;
+            Node* next = dequeueNode->next.load(std::memory_order_acquire);
+            if (next == nullptr)
+            {
+                // No update yet or empty.
+                return false;
+            }
+
+            output = next->data;
+            return true;
+        }
+
         bool dequeue(T& output) // Consumer thread.
         {
             Node* dequeueNode = m_dequeuePos;

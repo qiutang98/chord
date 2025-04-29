@@ -1043,7 +1043,6 @@ namespace chord::graphics
 	{
 		// 
 		m_shaderLibrary->tick(tickData);
-		m_asyncUploader->tick(tickData);
 
 		// Imgui new frame.
 		m_imguiManager->newFrame();

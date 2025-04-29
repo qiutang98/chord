@@ -7,10 +7,6 @@
 
 namespace chord::graphics
 {
-	// Static uploader: allocate static stage buffer and never release.
-	// Dynamic uploader: allocate dynamic stage buffer when need, and release when no task.
-
-	class AsyncUploaderManager;
 	using AsyncUploadTaskFunc = std::function<void(uint32 offset, uint32 queueFamily, void* mapped, VkCommandBuffer cmd, VkBuffer buffer)>;
 	using AsyncUploadFinishFunc = std::function<void()>;
 	struct AsyncUploadTask
@@ -20,98 +16,80 @@ namespace chord::graphics
 		AsyncUploadFinishFunc finishCallback = nullptr;
 	};
 	using AsyncUploadTaskRef = std::shared_ptr<AsyncUploadTask>;
+	
 
-	class IAsyncUploader : NonCopyable
+	class AsyncUploaderBase : NonCopyable
 	{
 	protected:
-		std::string m_name;
+		const std::string m_name;
 		AsyncUploaderManager& m_manager;
-		VkFence m_fence = VK_NULL_HANDLE;
 
-		std::future<void> m_future;
-		std::atomic<bool> m_bRun = true;
-		std::atomic<bool> m_bWorking = false;
+		// 
+		VkFence m_fence = VK_NULL_HANDLE;
 
 		// Pool and cmd buffer created and used in async thread.
 		VkCommandPool m_poolAsync = VK_NULL_HANDLE;
 		VkCommandBuffer m_commandBufferAsync = VK_NULL_HANDLE;
 
-	protected:
-		virtual void threadFunction() {}
+		//
+		using UploadTaskQueue = MPSCQueue<AsyncUploadTaskRef, MPSCQueueHeapAllocator<AsyncUploadTaskRef>>;
+		UploadTaskQueue m_pendingTasks;
+		JobDependencyRef m_dispatchJob = nullptr;
 
-		void startRecordAsync();
-		void endRecordAsync();
+		// 
+		struct ExecutingTask
+		{
+			GPUBufferRef buffer;
+			AsyncUploadTaskRef task;
+		};
+		std::queue<ExecutingTask> m_processingTasks;
+
+		void startRecordAsync() const;
+		void endRecordAsync() const;
+
+		void pushTaskToProcessingQueue(AsyncUploadTaskRef task, GPUBufferRef buffer);
+		virtual bool doTask() = 0;
 
 	public:
-		IAsyncUploader(const std::string& name, AsyncUploaderManager& in);
+		AsyncUploaderBase(const std::string& name, AsyncUploaderManager& manager);
+		virtual ~AsyncUploaderBase();
 
-		const VkFence& getFence() const 
-		{
-			return m_fence; 
-		}
+		// Add task from any thread.
+		void addTask(AsyncUploadTaskRef task);
 
-		const VkCommandBuffer& getCommandBuffer() const 
-		{ 
-			return m_commandBufferAsync; 
-		}
+		bool gpuTaskFinish() const;
+		bool allTaskFinish() const;
 
-		void wait() 
-		{ 
-			m_future.wait(); 
-		}
-
-		void stop() 
-		{ 
-			m_bRun.store(false); 
-		}
-
-		bool working() const 
-		{ 
-			return m_bWorking.load(); 
-		}
-
-		virtual void onFinished();
+		// Only execute on main thread.
+		void triggleSubmitJob(bool bForceDispatch = false);
 	};
 
-	class DynamicAsyncUploader : public IAsyncUploader
+	class DynamicAsyncUploader : public AsyncUploaderBase
 	{
-	private:
-		AsyncUploadTaskRef m_processingTask = nullptr;
-		PoolBufferHostVisible m_stageBuffer = nullptr;
-
 	protected:
-		virtual void threadFunction() override;
+		PoolBufferHostVisible m_stageBuffer = nullptr;
+		virtual bool doTask() override;
 
 	public:
 		DynamicAsyncUploader(const std::string& name, AsyncUploaderManager& in)
-			: IAsyncUploader(name, in)
+			: AsyncUploaderBase(name, in)
 		{
-
 		}
-
-		virtual ~DynamicAsyncUploader() { }
-
-		virtual void onFinished() override;
 	};
 
-	class StaticAsyncUploader : public IAsyncUploader
+	class StaticAsyncUploader : public AsyncUploaderBase
 	{
-	private:
-		std::vector<AsyncUploadTaskRef> m_processingTasks;
+	protected:
 		HostVisibleGPUBufferRef m_stageBuffer = nullptr;
-
-	private:
-		virtual void threadFunction() override;
+		virtual bool doTask() override;
 
 	public:
-		StaticAsyncUploader(const std::string& name, AsyncUploaderManager& in)
-			: IAsyncUploader(name, in)
+		StaticAsyncUploader(const std::string& name, AsyncUploaderManager& manager)
+			: AsyncUploaderBase(name, manager)
 		{
 		}
-		virtual ~StaticAsyncUploader() { }
-
-		virtual void onFinished() override;
 	};
+
 
 	class AsyncUploaderManager : NonCopyable
 	{
@@ -119,79 +97,45 @@ namespace chord::graphics
 		explicit AsyncUploaderManager(uint32 staticUploaderMaxSize, uint32 dynamicUploaderMinSize);
 		~AsyncUploaderManager();
 
-		void tick(const ApplicationTickData& tickData);
 		void addTask(size_t requireSize, AsyncUploadTaskFunc&& func, AsyncUploadFinishFunc&& finishCallback);
-		void pushSubmitFunctions(IAsyncUploader* f);
-
-	protected:
-		void submitObjects();
-		void syncPendingObjects();
 
 	public:
 		// Is uploader manager busy or not.
-		bool busy() const;
+		inline bool busy() const
+		{
+			return !m_staticUploader->allTaskFinish() || !m_dynamicUploader->allTaskFinish();
+		}
 
 		// Flush all task in uploader.
 		void flushTask();
 
 		// Get working queue family.
-		auto getQueueFamily() const{ return m_queueFamily;}
-
-		auto getStaticUploadMaxSize() const { return m_staticUploaderMaxSize; }
-		auto getDynamicUploadMinSize() const { return m_dynamicUploaderMinSize; }
-
-		auto& getStaticMutex() const { return m_staticContext.mutex; }
-		auto& getDynamicMutex() const { return m_dynamicContext.mutex; }
-
-		auto& getStaticCondition() const { return m_staticContext.cv; }
-		auto& getDynamicCondition() const { return m_dynamicContext.cv; }
-
-		bool staticLoadAssetTaskEmpty() const
-		{
-			std::lock_guard lock(m_staticContext.mutex);
-			return m_staticContext.tasks.empty();
-		}
-		bool dynamicLoadAssetTaskEmpty() const
-		{
-			std::lock_guard lock(m_dynamicContext.mutex);
-			return m_dynamicContext.tasks.empty();
+		inline auto getQueueFamily() const
+		{ 
+			return m_queueFamily;
 		}
 
-		void staticTasksAction(std::function<void(std::queue<AsyncUploadTaskRef>&)>&& func)
-		{
-			std::lock_guard lock(m_staticContext.mutex);
-			func(m_staticContext.tasks);
+		inline auto getStaticUploadMaxSize() const 
+		{ 
+			return m_staticUploaderMaxSize; 
 		}
-		void dynamicTasksAction(std::function<void(std::queue<AsyncUploadTaskRef>&)>&& func)
-		{
-			std::lock_guard lock(m_dynamicContext.mutex);
-			func(m_dynamicContext.tasks);
+
+		inline auto getDynamicUploadMinSize() const 
+		{ 
+			return m_dynamicUploaderMinSize; 
 		}
 
 	private:
-		// Async copy queue family.
-		const uint32 m_queueFamily;
-
-		// Task need to load use static stage buffer.
-		struct UploaderContext
-		{
-			mutable std::condition_variable cv;
-			mutable std::mutex mutex;
-			std::queue<AsyncUploadTaskRef> tasks;
-		};
-		UploaderContext m_staticContext;
-		UploaderContext m_dynamicContext;
-
-		std::vector<std::unique_ptr<StaticAsyncUploader>> m_staticUploaders;
-		std::vector<std::unique_ptr<DynamicAsyncUploader>> m_dynamicUploaders;
-
 		// Size threshold of uploader.
 		const uint32 m_staticUploaderMaxSize;
 		const uint32 m_dynamicUploaderMinSize;
 
-		mutable std::mutex m_submitObjectsMutex;
-		std::vector<IAsyncUploader*> m_submitObjects;
-		std::vector<IAsyncUploader*> m_pendingObjects;
+		// Async copy queue family.
+		const uint32 m_queueFamily;
+
+		// 
+		std::unique_ptr<StaticAsyncUploader> m_staticUploader = nullptr;
+		std::unique_ptr<DynamicAsyncUploader> m_dynamicUploader = nullptr;
 	};
 
 	class IUploadAsset : public IResource

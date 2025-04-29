@@ -234,8 +234,6 @@ namespace chord::jobsystem
 		}
 	}
 
-
-
 	void assignDependencyToJob(Job& job, JobDependency& dependency)
 	{
 		check(job.jobState == EJobState::Pending);

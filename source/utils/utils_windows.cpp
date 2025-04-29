@@ -43,15 +43,16 @@ void chord::setConsoleFont(const std::vector<ConsoleFontConfig>& fontTypes)
 #endif 
 }
 
-void chord::namedThread(std::thread& t, const std::wstring& name)
+static thread_local std::wstring sThreadName = L"Unnamed";
+
+const std::wstring& chord::getCurrentThreadName()
 {
-#if _WIN32
-	SetThreadDescription(t.native_handle(), name.c_str());
-#endif
+	return sThreadName;
 }
 
 void chord::namedCurrentThread(const std::wstring& name)
 {
+	sThreadName = sThreadName;
 #if _WIN32
 	SetThreadDescription(GetCurrentThread(), name.c_str());
 #endif
