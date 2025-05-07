@@ -14,6 +14,7 @@
 #include <project.h>
 #include <fontawsome/IconsFontAwesome6.h>
 #include <fontawsome/IconsFontAwesome6Brands.h>
+#include <ui/imgui/implot.h>
 
 namespace chord
 { 
@@ -602,6 +603,7 @@ namespace chord
 	{
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
+		ImPlot::CreateContext();
 
 		ImGuiIO& io = ImGui::GetIO();
 		{
@@ -774,6 +776,7 @@ namespace chord
 		ImGui_ImplGlfw_Shutdown();
 
 		// Final imgui destroy context.
+		ImPlot::DestroyContext();
 		ImGui::DestroyContext();
 	}
 

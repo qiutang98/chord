@@ -1,23 +1,13 @@
-#include <utils/profiler.h>
+#include <utils/profiler_cpu.h>
+#include <utils/thread.h>
 
 namespace chord::profiler_cpu
 {
-	struct PerThread
-	{
-		uint32 arrayIndex; // sAllThreads.perThreadData[arrayIndex]
+	constexpr uint64 kMaxRecordEventRing      = (1 << 20u); // Max 24 MB per thread
+	constexpr uint64 kBaseRecordEventRing     = (1 <<  8u);
+	constexpr uint64 kRecordEventRingGrowSize = (1 <<  2u);
 
-		std::vector<ProfilerEventCPU> events;
-		std::stack<uint32> eventIdStack;
-
-		std::atomic<bool> bPaused = false;
-
-		void clean()
-		{
-			events = {};
-			eventIdStack = {};
-			bPaused = false;
-		}
-	};
+	static std::chrono::time_point<std::chrono::system_clock> sApplicationBeginTime{ };
 
 	static thread_local std::unique_ptr<PerThread> tlsPerThreadData = nullptr;
 	struct
@@ -26,25 +16,30 @@ namespace chord::profiler_cpu
 		std::vector<PerThread*> perThreadData;
 	} sAllThreads;
 
+	std::vector<PerThread*>& chord::profiler_cpu::getAllThreads()
+	{
+		return sAllThreads.perThreadData; // Don't care multi thread here?
+	}
 
 	static PerThread* getOrCreateTLSIfNoExist()
 	{
-		if (tlsPerThreadData != nullptr)
+		if (tlsPerThreadData == nullptr)
 		{
-			return tlsPerThreadData.get();
-		}
+			tlsPerThreadData = std::make_unique<PerThread>();
+			{
+				std::lock_guard lock(sAllThreads.mutex);
 
-		tlsPerThreadData = std::make_unique<PerThread>();
-		{
-			std::lock_guard lock(sAllThreads.mutex);
+				tlsPerThreadData->arrayIndex = sAllThreads.perThreadData.size();
+				tlsPerThreadData->threadName = getCurrentThreadName();
+				tlsPerThreadData->persistentCacheEvents = CacheProfilerEventCPURing(
+					kBaseRecordEventRing, kRecordEventRingGrowSize, kMaxRecordEventRing);
 
-			tlsPerThreadData->arrayIndex = sAllThreads.perThreadData.size();
-			sAllThreads.perThreadData.push_back(tlsPerThreadData.get());
+				sAllThreads.perThreadData.push_back(tlsPerThreadData.get());
+			}
 		}
 
 		return tlsPerThreadData.get();
 	}
-
 
 	static void pausedSTAT()
 	{
@@ -55,7 +50,21 @@ namespace chord::profiler_cpu
 		}
 	}
 
-	static void release()
+	void profiler_cpu::cleanCache()
+	{
+		assert(isInMainThread());
+		for (auto* tls : sAllThreads.perThreadData)
+		{
+			tls->persistentCacheEvents.clear();
+		}
+	}
+
+	void profiler_cpu::init()
+	{
+		sApplicationBeginTime = std::chrono::system_clock::now();
+	}
+
+	void profiler_cpu::release()
 	{
 		std::lock_guard lock(sAllThreads.mutex);
 		for (auto* tls : sAllThreads.perThreadData)
@@ -64,7 +73,7 @@ namespace chord::profiler_cpu
 		}
 	}
 
-	static uint32 pushEvent(ProfilerNameType& name)
+	uint32 profiler_cpu::pushEvent(FName name)
 	{
 		PerThread* tls = getOrCreateTLSIfNoExist();
 		if (tls->bPaused)
@@ -73,28 +82,23 @@ namespace chord::profiler_cpu
 		}
 
 		ProfilerEventCPU newEvent { };
-		if constexpr (std::is_same_v<ProfilerNameType, const char*>)
-		{
-			newEvent.name = name;
-		}
-		else
-		{
-			newEvent.name = std::move(name);
-		}
-		
+		newEvent.name      = name;
 		newEvent.timeBegin = std::chrono::system_clock::now();
 		newEvent.depth     = tls->eventIdStack.size();
 		newEvent.threadId  = tls->arrayIndex;
 
-		tls->eventIdStack.push(tls->events.size());
+		uint32 result = tls->events.size();
+		tls->eventIdStack.push(result);
 		tls->events.push_back(std::move(newEvent));
+
+		return result;
 	}
 
-	static void popEvent(uint32 idx)
+	void profiler_cpu::popEvent(uint32 idx)
 	{
 		if (idx == ~0U)
 		{
-			return;
+			return; // Skip invalid idx.
 		}
 
 		PerThread* tls = getOrCreateTLSIfNoExist();
@@ -104,10 +108,35 @@ namespace chord::profiler_cpu
 		auto& event = tls->events.at(id);
 		event.timeEnd = std::chrono::system_clock::now();
 
-		// All task finish, send to counter.
+		// All task finish, send to buffer.
 		if (tls->eventIdStack.size() == 0)
 		{
+			std::vector<CacheProfilerEventCPU> submitCache{};
+			submitCache.reserve(tls->events.size());
+			for (const auto& event : tls->events)
+			{
+				CacheProfilerEventCPU submitEvent{};
+				submitEvent.name = event.name;
+				submitEvent.depth = event.depth;
+				submitEvent.threadId = event.threadId;
+				submitEvent.timeBeginPoint = std::chrono::duration_cast<std::chrono::microseconds>(event.timeBegin - sApplicationBeginTime).count();
+				submitEvent.timeSize = std::chrono::duration_cast<std::chrono::microseconds>(event.timeEnd - event.timeBegin).count();
+				
+				// Already sorted by time begin point natively.
+				submitCache.push_back(submitEvent);
+			}
 
+			// Reset temp events.
+			tls->events.clear(); 
+
+			// Send to main queue.
+			ENQUEUE_MAIN_COMMAND([submitCache = std::move(submitCache), tls]() mutable
+			{
+				for(auto& e : submitCache)
+				{
+					tls->persistentCacheEvents.push(std::move(e));
+				}
+			});
 		}
 	}
 }

@@ -232,8 +232,11 @@ namespace chord
             glfwPollEvents();
 
             const bool bFpsUpdatedPerSecond = m_timer.tick();
-
             sFrameCounter = m_tickData.tickCount;
+
+            // Flush sync event in main.
+            ThreadContext::main().tick(m_tickData.tickCount);
+
             m_windowData.bContinue &= m_engine->tick(m_tickData);
 
             // Graphics context tick.
@@ -256,9 +259,6 @@ namespace chord
                 // Reupdate window close state.
                 glfwSetWindowShouldClose(m_windowData.window, !m_windowData.bContinue);
             }
-
-            // Flush sync event in main.
-            ThreadContext::main().tick(m_tickData.tickCount);
 
             // Update tick count.
             m_tickData.tickCount = m_timer.getTickCount();

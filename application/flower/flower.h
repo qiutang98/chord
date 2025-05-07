@@ -17,6 +17,7 @@ class WidgetDetail;
 class UISceneContentManager;
 class WidgetOutliner;
 class WidgetSystem;
+class WidgetTimelineProfiler;
 
 class Flower
 {
@@ -116,6 +117,7 @@ private:
 	MainViewportDockspaceAndMenu* m_dockSpaceHandle = nullptr;
 	DownbarWidget* m_downbarHandle = nullptr;
 	WidgetConsole* m_consoleHandle = nullptr;
+	WidgetTimelineProfiler* m_widgetTimerlineProfilerHandle = nullptr;
 
 	// Views of project content.
 	std::array<WidgetContent*, kMultiWidgetMaxNum> m_contents;

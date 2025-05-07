@@ -456,7 +456,7 @@ namespace chord
 		return std::extent<T[N]>::value;
 	}
 
-	extern const std::wstring& getCurrentThreadName();
+	extern std::wstring_view getCurrentThreadName();
 	extern void namedCurrentThread(const std::wstring& name);
 
 	extern void reportCrash();

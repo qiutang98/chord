@@ -1,6 +1,7 @@
 #include "viewport.h"
 
 #include <ui/ui_helper.h>
+#include <utils/profiler_cpu.h>
 #include "../flower.h"
 
 using namespace chord::graphics;
@@ -135,6 +136,7 @@ void WidgetViewport::onRelease()
 
 void WidgetViewport::drawProfileViewer(uint32_t width, uint32_t height)
 {
+	CPU_SCOPE_PROFILER("WidgetViewport::drawProfileViewer");
 	ImGui::Indent(2.0f);
 	if (sEnableStatUnit > 0)
 	{
@@ -234,6 +236,8 @@ void WidgetViewport::drawProfileViewer(uint32_t width, uint32_t height)
 
 void ViewportCamera::updateCameraVectors()
 {
+	CPU_SCOPE_PROFILER("ViewportCamera::updateCameraVectors");
+
 	// Get front vector from yaw and pitch angel.
 	math::dvec3 front;
 

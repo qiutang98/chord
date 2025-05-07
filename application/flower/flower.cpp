@@ -12,6 +12,8 @@
 #include "widget/outliner.h"
 #include "widget/detail.h"
 #include "widget/system.h"
+#include "utils/profiler_cpu.h"
+#include "widget/timeline_profiler.h"
 
 using namespace chord;
 using namespace chord::graphics;
@@ -26,12 +28,13 @@ Flower& Flower::get()
 
 void Flower::init()
 {
+	profiler_cpu::init();
+
     m_hubHandle = m_widgetManager.addWidget<HubWidget>();
 	m_onTickHandle = getContext().onTick.add([this](const ApplicationTickData& tickData) { this->onTick(tickData); });
 
 	m_assetConfigWidgetManager = new AssetConfigWidgetManager();
 	m_builtinTextures.init();
-
 
 	m_onShouldClosedHandle = Application::get().onShouldClosed.add([this]() -> bool
 	{
@@ -41,6 +44,8 @@ void Flower::init()
 
 void Flower::onTick(const chord::ApplicationTickData& tickData)
 {
+	CPU_SCOPE_PROFILER("Flower::onTick");
+
 	// Generic widget tick.
 	m_widgetManager.tick(tickData);
 
@@ -74,6 +79,8 @@ void Flower::release()
 
 	check(getContext().onTick.remove(m_onTickHandle));
 	check(Application::get().onShouldClosed.remove(m_onShouldClosedHandle));
+
+	profiler_cpu::release();
 }
 
 void Flower::updateApplicationTitle()
@@ -168,7 +175,6 @@ int Flower::run(int argc, const char** argv)
 	{
 		// Init flower.
 		this->init();
-
 		// Main loop.
 		Application::get().loop();
 
@@ -215,6 +221,15 @@ void Flower::onProjectSetup()
 			{
 				WidgetInView consoleView = { .bMultiWindow = false, .widgets = { m_consoleHandle } };
 				m_dockSpaceHandle->widgetInView.add(consoleView);
+			}
+		}
+
+		{
+			m_widgetTimerlineProfilerHandle = m_widgetManager.addWidget<WidgetTimelineProfiler>();
+			// Register profiler in view.
+			{
+				WidgetInView profilerView = { .bMultiWindow = false, .widgets = { m_widgetTimerlineProfilerHandle } };
+				m_dockSpaceHandle->widgetInView.add(profilerView);
 			}
 		}
 

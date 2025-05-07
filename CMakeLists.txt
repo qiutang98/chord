@@ -12,13 +12,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED on)
 add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
-if(MSVC)
-    ## Glob all header and source files in project.
-    file(GLOB_RECURSE shaderHeaders CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/install/resource/shader/*.*")
-else()
-    file(GLOB_RECURSE shaderHeaders CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/install/resource/shader/*.h")
-endif()
-
+## Glob all header and source files in project.
+file(GLOB_RECURSE shaderHeaders CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/install/resource/shader/*.*")
 file(GLOB_RECURSE chordHeader CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/source/*.h")
 file(GLOB_RECURSE chordSource CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/source/*.cpp")
 
@@ -82,6 +77,12 @@ if(MSVC)
 
     ## Only include hlsl as text file.
     set_source_files_properties(${shaderHeaders} PROPERTIES HEADER_FILE_ONLY TRUE)
+
+    ## Natvis config.
+    set(natvisFiles "${PROJECT_SOURCE_DIR}/external/include/hlslpp/hlsl++.natvis")
+    target_sources(chord PRIVATE ${natvisFiles})
+    source_group("cmake" FILES ${natvisFiles})
+    set_source_files_properties(${natvisFiles} PROPERTIES VS_TOOL_OVERRIDE "natvis")
 
     add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
     add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")

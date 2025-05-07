@@ -81,7 +81,11 @@ namespace chord::graphics
 			while (m_processingTasks.size() > 0)
 			{
 				auto task = m_processingTasks.front().task;
-				ENQUEUE_MAIN_COMMAND([task]() { task->finishCallback(); });
+
+				static std::atomic<int32> sDebugTaskCount { 0 };
+				LOG_TRACE("Debug task count add {}.", sDebugTaskCount.fetch_add(1));
+				ENQUEUE_MAIN_COMMAND([task]() { LOG_TRACE("Debug task count sub {}.", sDebugTaskCount.fetch_sub(1)); task->finishCallback(); });
+				
 				m_processingTasks.pop();
 			}
 

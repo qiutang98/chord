@@ -56,6 +56,7 @@
 #include <glm/gtx/euler_angles.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/integer.hpp>
 
 // namespace alias to ensure all glm header under this file's macro control.
 namespace chord
