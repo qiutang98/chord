@@ -44,7 +44,7 @@ void Flower::init()
 
 void Flower::onTick(const chord::ApplicationTickData& tickData)
 {
-	CPU_SCOPE_PROFILER("Flower::onTick");
+	CPU_SCOPE_PROFILER_CONSTCHAR("Flower::onTick");
 
 	// Generic widget tick.
 	m_widgetManager.tick(tickData);

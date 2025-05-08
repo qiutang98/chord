@@ -72,17 +72,37 @@ namespace chord
 	class FName
 	{
 	private:
-		uint64 m_hashId;
-
-	public:
-		FName(std::string_view str)
-			: m_hashId(StringTable::get().update(str))
+		struct TaggedPtr
 		{
+			uintptr_t ptr : 48;
+			uintptr_t tag : 16;
+		};
 
+		union 
+		{
+			uint64 m_hashId;
+			TaggedPtr m_taggerPtr;
+		};
+		
+		static constexpr uintptr_t kRodataTag = 39;
+		static constexpr uintptr_t kUnvalidId = ~0;
+	public:
+		FName(std::string_view str, bool bRodata)
+		{
+			if (bRodata)
+			{
+				m_taggerPtr.tag = kRodataTag;
+				m_taggerPtr.ptr = reinterpret_cast<uintptr_t>(str.data());
+				assert(reinterpret_cast<const char*>(m_taggerPtr.ptr) == str.data());
+			}
+			else
+			{
+				m_hashId = StringTable::get().update(str);
+			}
 		}
 
 		FName()
-			: m_hashId(~0)
+			: m_hashId(kUnvalidId)
 		{
 
 		}
@@ -99,15 +119,23 @@ namespace chord
 			return *this;
 		}
 
-		FName& operator=(std::string_view str)
+		bool isRodata() const
 		{
-			*this = FName(str);
-			return *this;
+			return m_taggerPtr.tag == kRodataTag;
 		}
 
 		inline bool isValid() const
 		{
-			return m_hashId != ~0;
+			return m_hashId != kUnvalidId;
+		}
+
+		std::string_view string_view() const
+		{
+			if (isValid())
+			{
+				return "";
+			}
+			return isRodata() ? reinterpret_cast<const char*>(m_taggerPtr.ptr) : StringTable::get().getString(m_hashId);
 		}
 
 		inline bool operator==(const FName& rhs) const

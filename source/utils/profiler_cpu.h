@@ -124,7 +124,7 @@ namespace chord::profiler_cpu
 	struct ProfilerScopeObject : NonCopyable
 	{
 		uint32 idx;
-		explicit ProfilerScopeObject(std::string_view name)
+		explicit ProfilerScopeObject(FName name)
 		{
 			idx = pushEvent(name);
 		}
@@ -136,4 +136,4 @@ namespace chord::profiler_cpu
 	};
 }
 
-#define CPU_SCOPE_PROFILER(Name) chord::profiler_cpu::ProfilerScopeObject object_profiler_cpu(Name);
+#define CPU_SCOPE_PROFILER_CONSTCHAR(Name) chord::profiler_cpu::ProfilerScopeObject object_profiler_cpu(FName(Name, true));
