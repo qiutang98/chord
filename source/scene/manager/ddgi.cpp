@@ -1,5 +1,5 @@
 #include <scene/scene.h>
-#include <scene/system/ddgi.h>
+#include <scene/manager/ddgi.h>
 #include <fontawsome/IconsFontAwesome6.h>
 #include <ui/ui_helper.h>
 #include <renderer/renderer.h>
@@ -8,7 +8,7 @@
 namespace chord 
 {
 	DDGIManager::DDGIManager()
-		: ISceneSystem("DDGI", ICON_FA_LIGHTBULB + std::string("  DDGI"))
+		: ISceneManager("DDGI", ICON_FA_LIGHTBULB + std::string("  DDGI"))
 	{
 
 	}

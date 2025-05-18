@@ -1,3 +1,4 @@
+#if 0
 /*
  *  LZ4 - Fast LZ compression algorithm
  *  Header File
@@ -845,3 +846,5 @@ LZ4LIB_API void LZ4_resetStream (LZ4_stream_t* streamPtr);
 }
 
 #endif /* LZ4_H_98237428734687 */
+
+#endif 

@@ -210,7 +210,7 @@ namespace chord
 				}
 			};
 
-			jobsystem::parallelFor(EBusyWaitType::All, mipBlockWidth * mipBlockHeight, EJobFlags::Foreground, buildBC);
+			jobsystem::parallelFor("BC compression", EBusyWaitType::All, mipBlockWidth * mipBlockHeight, EJobFlags::Foreground, buildBC);
 		}
 
 		void mipmapCompressBC3(

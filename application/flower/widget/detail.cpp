@@ -151,7 +151,7 @@ void WidgetDetail::onVisibleTick(const ApplicationTickData& tickData)
 
 void WidgetDetail::drawComponent(std::shared_ptr<SceneNode> node)
 {
-	const auto& sceneManager = Application::get().getEngine().getSubsystem<SceneManager>();
+	const auto& sceneManager = Application::get().getEngine().getSubsystem<SceneSubSystem>();
 	const auto& detailMap = sceneManager.getUIComponentDrawDetailsMap();
 
 	if (ImGui::BeginTable("Add UIC##", 2))

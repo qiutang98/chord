@@ -1,7 +1,7 @@
 #include <utils/engine.h>
 #include <application/application.h>
 #include <graphics/graphics.h>
-#include <scene/scene_manager.h>
+#include <scene/scene_subsystem.h>
 
 namespace chord
 {
@@ -29,7 +29,7 @@ namespace chord
 		bool bResult = true;
 
 		// Register necessary manager.
-		if(bResult) { bResult &= registerSubsystem<SceneManager>(); }
+		if(bResult) { bResult &= registerSubsystem<SceneSubSystem>(); }
 
 		return bResult;
 	}

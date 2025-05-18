@@ -12,7 +12,7 @@
 #include <renderer/graphics_pass.h>
 #include <shader/base.h>
 #include <renderer/postprocessing/postprocessing.h>
-#include <scene/system/shadow.h>
+#include <scene/manager/shadow.h>
 #include <renderer/renderer.h>
 #include <shader/cascade_setup.hlsl>
 
@@ -339,6 +339,8 @@ chord::CascadeShadowContext chord::renderShadow(
     const float3& lightDirection,
     const HZBContext& hzbCtx)
 {
+    ZoneScoped;
+
     using namespace chord::graphics;
 
     if (!shouldRenderGLTF(renderCtx))

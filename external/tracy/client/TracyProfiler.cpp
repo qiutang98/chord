@@ -3543,8 +3543,8 @@ void Profiler::CalibrateDelay()
 #ifdef TRACY_DELAYED_INIT
     m_delay = m_resolution;
 #else
-    constexpr int ChordEvent = Iterations * 2;   // start + end
-    static_assert( ChordEvent < QueuePrealloc, "Delay calibration loop will allocate memory in queue" );
+    constexpr int Events = Iterations * 2;   // start + end
+    static_assert( Events < QueuePrealloc, "Delay calibration loop will allocate memory in queue" );
 
     static const tracy::SourceLocationData __tracy_source_location { nullptr, TracyFunction,  TracyFile, (uint32_t)TracyLine, 0 };
     const auto t0 = GetTime();
@@ -3564,10 +3564,10 @@ void Profiler::CalibrateDelay()
     }
     const auto t1 = GetTime();
     const auto dt = t1 - t0;
-    m_delay = dt / ChordEvent;
+    m_delay = dt / Events;
 
     moodycamel::ConsumerToken token( GetQueue() );
-    int left = ChordEvent;
+    int left = Events;
     while( left != 0 )
     {
         const auto sz = GetQueue().try_dequeue_bulk_single( token, [](const uint64_t&){}, [](QueueItem* item, size_t sz){} );

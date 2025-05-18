@@ -129,6 +129,11 @@ namespace chord
 			return m_hashId != kUnvalidId;
 		}
 
+		uint64 getHashId() const
+		{
+			return m_hashId;
+		}
+
 		std::string_view string_view() const
 		{
 			if (isValid())

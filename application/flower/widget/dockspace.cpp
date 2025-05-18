@@ -5,7 +5,7 @@
 
 #include <project.h>
 #include <asset/asset.h>
-#include <scene/scene_manager.h>
+#include <scene/scene_subsystem.h>
 #include <nfd.h>
 
 using namespace chord;
@@ -92,14 +92,14 @@ void MainViewportDockspaceAndMenu::drawDockspaceMenu()
                     check(!sceneAssetSave.afterEventAccept);
                     sceneAssetSave.afterEventAccept = []()
                     {
-                        auto& sceneManager = Application::get().getEngine().getSubsystem<SceneManager>();
+                        auto& sceneManager = Application::get().getEngine().getSubsystem<SceneSubSystem>();
                         sceneManager.releaseScene();
                     };
                 }
             }
             else
             {
-                Application::get().getEngine().getSubsystem<SceneManager>().releaseScene();
+                Application::get().getEngine().getSubsystem<SceneSubSystem>().releaseScene();
             }
         }
 
@@ -128,7 +128,6 @@ void MainViewportDockspaceAndMenu::drawDockspaceMenu()
 
     if (ImGui::BeginMenu("  EDIT  "))
     {
-
         ImGui::EndMenu();
     }
     ImGui::Separator(); 
@@ -199,7 +198,7 @@ SceneAssetSaveWidget::SceneAssetSaveWidget(const std::string& titleName)
 void SceneAssetSaveWidget::onDraw()
 {
     auto& projectContent = Flower::get().getContentManager();
-    auto& sceneManager = Application::get().getEngine().getSubsystem<SceneManager>();
+    auto& sceneManager = Application::get().getEngine().getSubsystem<SceneSubSystem>();
 
     auto scenes = projectContent.getDirtyAsset<Scene>();
 

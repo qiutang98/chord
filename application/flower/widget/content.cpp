@@ -516,13 +516,13 @@ void WidgetContent::drawItemSnapshot(float drawDimSize, ProjectContentEntryRef e
 								check(!Flower::get().getDockSpace().sceneAssetSave.afterEventAccept);
 								Flower::get().getDockSpace().sceneAssetSave.afterEventAccept = [copyPath]()
 								{
-									Application::get().getEngine().getSubsystem<SceneManager>().loadScene(copyPath);
+									Application::get().getEngine().getSubsystem<SceneSubSystem>().loadScene(copyPath);
 								};
 							}
 						}
 						else
 						{
-							Application::get().getEngine().getSubsystem<SceneManager>().loadScene(copyPath);
+							Application::get().getEngine().getSubsystem<SceneSubSystem>().loadScene(copyPath);
 						}
 					}
 					else

@@ -1,5 +1,5 @@
 #include <scene/scene.h>
-#include <scene/system/postprocessing.h>
+#include <scene/manager/postprocessing.h>
 #include <fontawsome/IconsFontAwesome6.h>
 #include <ui/ui_helper.h>
 #include <renderer/renderer.h>
@@ -8,7 +8,7 @@
 namespace chord
 {
 	PostProcessingManager::PostProcessingManager()
-		: ISceneSystem("PostProcessing", ICON_FA_STAR_HALF_STROKE + std::string("  PostProcessing"))
+		: ISceneManager("PostProcessing", ICON_FA_STAR_HALF_STROKE + std::string("  PostProcessing"))
 	{
 
 	}

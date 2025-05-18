@@ -40,6 +40,7 @@
 #include <fstream>
 #include <execution>
 #include <regex>
+#include <shared_mutex>
 
 // GLM math library config.
 // 0. glm force compute on radians.

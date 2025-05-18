@@ -5,9 +5,9 @@
 #include <shader/base.h>
 
 #include <renderer/atmosphere.h>
-#include <scene/system/shadow.h>
-#include <scene/system/ddgi.h>
-#include <scene/system/postprocessing.h>
+#include <scene/manager/shadow.h>
+#include <scene/manager/ddgi.h>
+#include <scene/manager/postprocessing.h>
 
 namespace chord
 {

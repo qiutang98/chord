@@ -17,7 +17,7 @@ WidgetSystem::WidgetSystem()
 
 void WidgetSystem::onInit()
 {
-	m_sceneManager = &Application::get().getEngine().getSubsystem<SceneManager>();
+	m_sceneManager = &Application::get().getEngine().getSubsystem<SceneSubSystem>();
 }
 
 void WidgetSystem::onTick(const chord::ApplicationTickData& tickData)

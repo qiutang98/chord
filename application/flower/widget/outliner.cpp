@@ -17,7 +17,7 @@ WidgetOutliner::WidgetOutliner()
 		combineIcon("Outliner", kIconOutlinerTitle).c_str(),
 		combineIcon("Outliner", kIconOutlinerTitle).c_str())
 {
-	m_sceneManager = &Application::get().getEngine().getSubsystem<SceneManager>();
+	m_sceneManager = &Application::get().getEngine().getSubsystem<SceneSubSystem>();
 	m_sceneManagerUI = &Flower::get().getUISceneContentManager();
 }
 

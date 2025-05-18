@@ -74,6 +74,8 @@ namespace chord::graphics
 
 		m_dispatchJob = jobsystem::launch(EJobFlags::None, [this]()
 		{
+			ZoneScoped;
+
 			// Wait until all prev task job done.
 			jobsystem::busyWaitUntil([this]() { return gpuTaskFinish(); }, EBusyWaitType::All);
 
@@ -128,6 +130,8 @@ namespace chord::graphics
 
 	bool StaticAsyncUploader::doTask()
 	{
+		ZoneScoped;
+
 		bool bNeedSubmit = false;
 		if (!m_stageBuffer)
 		{
@@ -175,6 +179,8 @@ namespace chord::graphics
 
 	bool DynamicAsyncUploader::doTask()
 	{
+		ZoneScoped;
+
 		bool bNeedSubmit = false;
 
 		AsyncUploadTaskRef pendingTask = nullptr;

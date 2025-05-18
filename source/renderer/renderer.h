@@ -9,7 +9,7 @@
 #include <graphics/buffer_pool.h>
 #include <renderer/postprocessing/postprocessing.h>
 #include <renderer/atmosphere.h>
-#include <scene/system/shadow.h>
+#include <scene/manager/shadow.h>
 
 namespace chord
 {
@@ -18,6 +18,8 @@ namespace chord
 	template<typename T>
 	static inline std::pair<graphics::PoolBufferHostVisible, uint32> uploadBufferToGPU(graphics::CommandList& cmd, const std::string& name, const T* data, uint32 count = 1)
 	{
+		ZoneScoped;
+
 		using namespace graphics;
 
 		VkBufferUsageFlags usageFlag = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;

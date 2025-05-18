@@ -1,5 +1,5 @@
 #include <scene/scene.h>
-#include <scene/system/shadow.h>
+#include <scene/manager/shadow.h>
 #include <fontawsome/IconsFontAwesome6.h>
 #include <ui/ui_helper.h>
 #include <renderer/renderer.h>
@@ -8,7 +8,7 @@
 namespace chord
 {
 	ShadowManager::ShadowManager()
-		: ISceneSystem("Shadow", ICON_FA_SUN + std::string("  Shadow"))
+		: ISceneManager("Shadow", ICON_FA_SUN + std::string("  Shadow"))
 	{
 
 	}

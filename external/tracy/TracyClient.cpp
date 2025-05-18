@@ -19,7 +19,8 @@
 #  pragma warning(push, 0)
 #endif
 
-#include "common/tracy_lz4.cpp"
+// We already exist lz4 lib.
+// #include "common/tracy_lz4.cpp"
 #include "client/TracyProfiler.cpp"
 #include "client/TracyCallstack.cpp"
 #include "client/TracySysTime.cpp"

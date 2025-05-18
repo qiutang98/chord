@@ -1,4 +1,4 @@
-#include <scene/scene_manager.h>
+#include <scene/scene_subsystem.h>
 #include <asset/asset.h>
 #include <project.h>
 #include <scene/component/gltf_mesh.h>
@@ -8,7 +8,7 @@
 
 namespace chord
 {
-	SceneManager::SceneManager()
+	SceneSubSystem::SceneSubSystem()
 		: ISubsystem("SceneManager") 
 	{ 
 		auto registerAsset = [this](const UIComponentDrawDetails& type, const std::string& name)
@@ -23,12 +23,12 @@ namespace chord
 		registerAsset(SkyComponent::kComponentUIDrawDetails, typeid(SkyComponent).name());
 	}
 
-	bool SceneManager::onInit()
+	bool SceneSubSystem::onInit()
 	{
 		return true;
 	}
 
-	bool SceneManager::onTick(const SubsystemTickData& tickData)
+	bool SceneSubSystem::onTick(const SubsystemTickData& tickData)
 	{
 		if (Project::get().isSetup())
 		{
@@ -38,17 +38,17 @@ namespace chord
 		return true;
 	}
 
-	void SceneManager::beforeRelease()
+	void SceneSubSystem::beforeRelease()
 	{
 
 	}
 
-	void SceneManager::onRelease()
+	void SceneSubSystem::onRelease()
 	{
 		releaseScene();
 	}
 
-	SceneRef SceneManager::getActiveScene()
+	SceneRef SceneSubSystem::getActiveScene()
 	{
 		if (!m_scene.lock())
 		{
@@ -65,7 +65,7 @@ namespace chord
 		return m_scene.lock();
 	}
 
-	void SceneManager::releaseScene()
+	void SceneSubSystem::releaseScene()
 	{
 		if (auto scene = m_scene.lock())
 		{
@@ -80,7 +80,7 @@ namespace chord
 		}
 	}
 
-	bool SceneManager::loadScene(const std::filesystem::path& loadPath)
+	bool SceneSubSystem::loadScene(const std::filesystem::path& loadPath)
 	{
 		if (m_scene.lock())
 		{

@@ -295,7 +295,7 @@ double3 chord::getCameraToEarthCenterKm(const double3 cameraPosition, double3& c
 }
 
 AtmosphereManager::AtmosphereManager()
-    : ISceneSystem("Atmosphere", ICON_FA_MOON + std::string("  Atmosphere"))
+    : ISceneManager("Atmosphere", ICON_FA_MOON + std::string("  Atmosphere"))
 {
 
 }

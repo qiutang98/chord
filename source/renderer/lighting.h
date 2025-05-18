@@ -8,7 +8,7 @@
 #include <renderer/visibility_tile.h>
 #include <renderer/render_textures.h>
 #include <renderer/mesh/gltf_rendering.h>
-#include <scene/system/ddgi.h>
+#include <scene/manager/ddgi.h>
 
 namespace chord
 {

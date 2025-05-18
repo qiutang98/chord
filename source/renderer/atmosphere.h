@@ -6,7 +6,7 @@
 #include <graphics/graphics.h>
 #include <renderer/compute_pass.h>
 #include <renderer/graphics_pass.h>
-#include <scene/scene_common.h>
+#include <scene/manager/scene_manager.h>
 
 namespace chord
 {
@@ -77,7 +77,7 @@ namespace chord
 		AtmosphereParameters buildAtmosphereParameters(const float3 lambdas, const AtmosphereConfig& config) const;
 	};
 
-	class AtmosphereManager : NonCopyable, public ISceneSystem
+	class AtmosphereManager : NonCopyable, public ISceneManager
 	{
 	public:
 		ARCHIVE_DECLARE;

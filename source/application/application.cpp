@@ -14,6 +14,7 @@
 #include <asset/gltf/gltf.h>
 #include <asset/gltf/gltf_helper.h>
 #include <utils/job_system.h>
+#include <utils/profiler.h>
 
 namespace chord
 {
@@ -267,6 +268,8 @@ namespace chord
             m_tickData.fpsUpdatedPerSecond  = m_timer.getFpsUpdatedPerSecond();
             m_tickData.fps       = m_timer.getFps();
             m_tickData.totalTime = m_timer.getRuntime();
+
+            FrameMark;
         }
     }
 

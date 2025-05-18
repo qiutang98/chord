@@ -6,9 +6,28 @@
 
 #include <utils/noncopyable.h>
 #include <utils/tagged_ptr.h>
+#include <utils/profiler.h>
 
 namespace chord
 {
+	static inline void* traceMalloc(std::size_t count)
+	{
+		void* ptr = std::malloc(count);
+		TracyAlloc(ptr, count);
+
+		return ptr;
+	}
+
+	static inline void traceFree(void* ptr)
+	{
+		TracyFree(ptr);
+		std::free(ptr);
+	}
+
+	#define TRACE_OP_NEW  void* operator new(std::size_t count) { void* ptr = std::malloc(count); TracyAlloc(ptr, count); return ptr; }
+	#define TRACE_OP_DELETE void operator delete(void* ptr) noexcept { TracyFree(ptr); std::free(ptr); }
+	#define TRACE_OP_NEW_AND_DELETE TRACE_OP_NEW; TRACE_OP_DELETE
+
 	// Lock free allocator, memory not continually.
 	template<typename T, int64 kMaxCacheObject = std::numeric_limits<int64>::max()>
 	class FreeListAllocator final : NonCopyable
@@ -49,13 +68,14 @@ namespace chord
 				do
 				{
 					next = node->next.load(std::memory_order_relaxed);
-					std::free(reinterpret_cast<void*>(node));
+					traceFree(reinterpret_cast<void*>(node));
+
 					node = next;
 					m_freeCount.fetch_sub(1, std::memory_order_relaxed);
 					m_allocatedCount.fetch_sub(1, std::memory_order_relaxed);
 				} while (node);
 			}
-			// Logic error if check fail.
+			// Logic error if assert fail.
 			assert(m_freeCount.load(std::memory_order_relaxed) == 0);
 
 			// Must ensure all allocate one free before allocator destroy.
@@ -81,7 +101,9 @@ namespace chord
 			}
 
 			m_allocatedCount.fetch_add(1, std::memory_order_acq_rel);
-			return std::malloc(sizeof(Node));
+
+			void* ptr = traceMalloc(sizeof(Node));
+			return ptr;
 		}
 
 		void free(void* ptr) // ptr->~T(); free(ptr);
@@ -89,7 +111,8 @@ namespace chord
 			Node* node = reinterpret_cast<Node*>(ptr);
 			if (m_freeCount.load(std::memory_order_relaxed) >= kMaxCacheObject)
 			{
-				std::free(reinterpret_cast<void*>(node));
+				traceFree(reinterpret_cast<void*>(node));
+				
 				m_allocatedCount.fetch_sub(1, std::memory_order_acq_rel);
 				return;
 			}
@@ -134,7 +157,7 @@ namespace chord
 	public:
 		explicit FreeListFixedArenaAllocator()
 		{
-			m_arena = std::malloc(kPageSize);
+			m_arena = traceMalloc(kPageSize);
 			m_freeCounter.store(kCapacity, std::memory_order_relaxed);
 
 			// 
@@ -160,7 +183,7 @@ namespace chord
 
 		~FreeListFixedArenaAllocator()
 		{
-			std::free(m_arena);
+			traceFree(m_arena);
 		}
 
 		//
@@ -170,7 +193,7 @@ namespace chord
 			if constexpr (CHORD_DEBUG)
 			{
 				ptrdiff_t ptrDiff = (castType - m_nodeArray);
-				check(ptrDiff >= 0 && ptrDiff < kCapacity);
+				assert(ptrDiff >= 0 && ptrDiff < kCapacity);
 			}
 			return int64(castType - m_nodeArray);
 		}
@@ -178,14 +201,14 @@ namespace chord
 		//
 		T* get(int64 index) const
 		{
-			check(index < kCapacity);
+			assert(index < kCapacity);
 			return reinterpret_cast<T*>(&m_nodeArray[index]);
 		}
 
 		void* allocate() // new allocate() T;
 		{
 			auto oldFreeCount = m_freeCounter.fetch_sub(1, std::memory_order_acq_rel);
-			check(oldFreeCount >= 1);
+			assert(oldFreeCount >= 1);
 
 			TPointer tagPtr = m_freeList.load(std::memory_order_relaxed);
 			while (!m_freeList.compare_exchange_weak(tagPtr, TPointer(tagPtr.getPointer()->next.load(std::memory_order_acquire), tagPtr.getTag() + 1),
@@ -244,7 +267,7 @@ namespace chord
 		{
 			assert(m_arenas.size() < kArenaMaxCount);
 
-			void* memory = std::malloc(kPageSize);
+			void* memory = traceMalloc(kPageSize);
 			m_arenas.push_back(memory);
 
 			Node* newBlob = reinterpret_cast<Node*>(memory);
@@ -264,7 +287,7 @@ namespace chord
 		{
 			for (void* arena : m_arenas)
 			{
-				std::free(arena);
+				traceFree(arena);
 			}
 		}
 
@@ -354,12 +377,12 @@ namespace chord
 		inline void* allocate() // new allocate() T;
 		{
 			m_counter.fetch_add(1, std::memory_order_acq_rel);
-			return reinterpret_cast<T*>(std::malloc(sizeof(T)));
+			return reinterpret_cast<T*>(traceMalloc(sizeof(T)));
 		}
 
 		inline void free(T* node) // ptr->~T(); free(ptr);
 		{
-			std::free(reinterpret_cast<void*>(node));
+			traceFree(reinterpret_cast<void*>(node));
 			m_counter.fetch_sub(1, std::memory_order_acq_rel);
 		}
 	};
@@ -386,12 +409,12 @@ namespace chord
 		{
 			if (m_size != size)
 			{
-				release();
+				free();
 
 				m_size = size;
 				if (size > kMaxStackSize)
 				{
-					pPtr = ::malloc(size);
+					pPtr = traceMalloc(size);
 					return pPtr;
 				}
 			}
@@ -399,11 +422,11 @@ namespace chord
 		}
 
 		// Free memory.
-		void release()
+		void free()
 		{
 			if (m_size > kMaxStackSize)
 			{
-				::free(pPtr);
+				traceFree(pPtr);
 			}
 			m_size = 0;
 		}
@@ -445,21 +468,21 @@ namespace chord
 		{
 			if (other.hasAllocation())
 			{
-				::memcpy(allocate(other.m_size), other.getAllocation(), other.m_size);
+				std::memcpy(allocate(other.m_size), other.getAllocation(), other.m_size);
 			}
 			m_size = other.m_size;
 		}
 
 		~SingleInlineAllocator() noexcept
 		{
-			release();
+			free();
 		}
 
 		SingleInlineAllocator& operator=(const SingleInlineAllocator& other)
 		{
 			if (other.hasAllocation())
 			{
-				::memcpy(allocate(other.m_size), other.getAllocation(), other.m_size);
+				std::memcpy(allocate(other.m_size), other.getAllocation(), other.m_size);
 			}
 			m_size = other.m_size;
 
@@ -479,14 +502,14 @@ namespace chord
 			else
 			{
 				// Stack memory use copy.
-				::memcpy(buffer, other.buffer, m_size);
+				std::memcpy(buffer, other.buffer, m_size);
 			}
 		}
 
 		// Move copy function.
 		SingleInlineAllocator& operator=(SingleInlineAllocator&& other) noexcept
 		{
-			release();
+			free();
 
 			m_size = other.m_size;
 			other.m_size = 0;
@@ -499,7 +522,7 @@ namespace chord
 			else
 			{
 				// Stack memory use copy.
-				::memcpy(buffer, other.buffer, m_size);
+				std::memcpy(buffer, other.buffer, m_size);
 			}
 			return *this;
 		}

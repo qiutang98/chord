@@ -2,7 +2,8 @@
 
 #include <utils/utils.h>
 #include <utils/noncopyable.h>
- 
+#include <utils/allocator.h>
+
 namespace chord 
 {
 	template<class T, class SizeT = int64>
@@ -11,6 +12,8 @@ namespace chord
 	private:
 		struct Node
 		{
+            TRACE_OP_NEW_AND_DELETE;
+
 			T data;
 			std::atomic<SizeT> seq;
 		};

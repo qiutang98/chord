@@ -3,6 +3,7 @@
 #include <utils/utils.h>
 #include <utils/work_stealing_queue.h>
 #include <utils/intrusive_ptr.h>
+#include <utils/profiler.h>
 
 namespace chord
 {
@@ -247,25 +248,40 @@ namespace chord::jobsystem
 	extern uint32 getUsableWorkerCount(bool bForeTask);
 
 	// [taskContext](const uint32 loopStart, const uint32 loopEnd) {}
-	inline void parallelFor(EBusyWaitType waitType, uint32 count, EJobFlags flags, 
-		std::function<void(const uint32 loopStart, const uint32 loopEnd)>&& function)
+	using ParallelForFunc = std::function<void(const uint32 loopStart, const uint32 loopEnd)>;
+	inline void parallelFor(const char* debugName, EBusyWaitType waitType, uint32 count, EJobFlags flags, 
+		ParallelForFunc&& function)
 	{
 		const bool bForeTask = hasFlag(flags, EJobFlags::Foreground);
 
+		// 
 		uint32 perWorkerJobCount = divideRoundingUp(count, uint32(waitType != EBusyWaitType::None) + getUsableWorkerCount(bForeTask));
 
 		uint32 dispatchTaskCount = 0;
 		std::vector<JobDependencyRef> futures{};
 		futures.reserve(perWorkerJobCount);
 
-		auto func = std::move(function);
+		struct LoopBody
+		{
+			ParallelForFunc func;
+			const char* debugName;
+		};
+
+		LoopBody body { };
+		body.debugName = debugName;
+		body.func = std::move(function);
+
 		while (dispatchTaskCount < count)
 		{
 			uint32 loopStart = dispatchTaskCount;
 			uint32 loopEnd = std::min(loopStart + perWorkerJobCount, count);
 
 			dispatchTaskCount += perWorkerJobCount;
-			futures.push_back(launch(flags, [loopStart, loopEnd, &func](){ func(loopStart, loopEnd); }));
+			futures.push_back(launch(flags, [loopStart, loopEnd, &body]()
+			{
+				ZoneScopedN(body.debugName);
+				body.func(loopStart, loopEnd);
+			}));
 		}
 
 		for (auto& future : futures)

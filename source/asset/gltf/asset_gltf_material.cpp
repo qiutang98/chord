@@ -367,7 +367,7 @@ namespace chord
 		std::unordered_map<int32, std::filesystem::path> compositedSaveImage;
 		std::mutex compositedSaveImage_mutex;
 		std::vector<std::filesystem::path> tempSavedCompositedImages;
-		jobsystem::parallelFor(EBusyWaitType::All, model.images.size(), EJobFlags::Foreground, 
+		jobsystem::parallelFor("Composition Textures", EBusyWaitType::All, model.images.size(), EJobFlags::Foreground, 
 			[&pendingCompositeImages = std::as_const(pendingCompositeImages),
 			&model = std::as_const(model),
 			&srcBaseDir = std::as_const(srcBaseDir),
@@ -479,7 +479,7 @@ namespace chord
 			}
 		});
 
-		jobsystem::parallelFor(EBusyWaitType::All, model.images.size(), EJobFlags::Foreground, [
+		jobsystem::parallelFor("Blit texture", EBusyWaitType::All, model.images.size(), EJobFlags::Foreground, [
 			&pendingCompositeImages = std::as_const(pendingCompositeImages),
 			&model = std::as_const(model),
 			&srcBaseDir = std::as_const(srcBaseDir),
@@ -608,7 +608,7 @@ namespace chord
 		});
 
 		// Delete temp saved composited images.
-		jobsystem::parallelFor(EBusyWaitType::Foreground, tempSavedCompositedImages.size(), EJobFlags::Foreground, 
+		jobsystem::parallelFor("Remove temp saved composited images", EBusyWaitType::Foreground, tempSavedCompositedImages.size(), EJobFlags::Foreground, 
 		[&tempSavedCompositedImages](const size_t loopStart, const size_t loopEnd)
 		{
 			for (size_t i = loopStart; i < loopEnd; ++i)

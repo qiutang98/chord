@@ -19,7 +19,7 @@ namespace chord
 			static_assert(std::is_constructible_v<T, const AssetSaveInfo&>);
 			static_assert(std::is_base_of_v<IAsset, T>);
 
-			T::kAssetTypeMeta;
+			T::kAssetTypeMeta; // All asset exist meta data.
 		}
 	}
 
@@ -40,13 +40,15 @@ namespace chord
 		// ~IAsset virtual function.
 		virtual bool onSave() = 0;
 		virtual void onUnload() = 0;
-
-
 		// ~IAsset virtual function.
 
 	public:
 		graphics::GPUTextureAssetRef getSnapshotImage();
 
+		// Save snapshot in disk, will change snapshot dimension.
+		bool saveSnapShot(const math::uvec2& snapshot, const std::vector<uint8>& datas);
+
+	public:
 		// Get shared ptr.
 		template<typename T> 
 		std::shared_ptr<T> ptr()
@@ -57,9 +59,6 @@ namespace chord
 
 		// Save asset.
 		bool save();
-
-		// Save snapshot in disk, will change snapshot dimension.
-		bool saveSnapShot(const math::uvec2& snapshot, const std::vector<uint8>& datas);
 
 	protected:
 		// ~IAsset virtual function.

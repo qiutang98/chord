@@ -17,7 +17,7 @@
 #include <graphics/resource.h>
 #include <utils/camera.h>
 #include <scene/scene.h>
-#include <scene/scene_manager.h>
+#include <scene/scene_subsystem.h>
 #include <scene/scene_node.h>
 #include <scene/component/gltf_mesh.h>
 #include <scene/component/transform.h>

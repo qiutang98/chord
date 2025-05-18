@@ -4,12 +4,12 @@
 #include <graphics/graphics.h>
 #include <renderer/compute_pass.h>
 #include <renderer/graphics_pass.h>
-#include <scene/scene_common.h>
+#include <scene/manager/scene_manager.h>
 #include <renderer/render_helper.h>
 
 namespace chord
 {
-	class DDGIManager : NonCopyable, public ISceneSystem
+	class DDGIManager : NonCopyable, public ISceneManager
 	{
 	public:
 		ARCHIVE_DECLARE;

@@ -38,7 +38,7 @@ private:
 
 private:
 	UISceneContentManager* m_sceneManagerUI;
-	chord::SceneManager* m_sceneManager;
+	chord::SceneSubSystem* m_sceneManager;
 
 	chord::EventHandle m_onSceneUnloadHandle;
 	chord::EventHandle m_onSceneLoadHandle;

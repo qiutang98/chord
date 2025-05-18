@@ -9,12 +9,13 @@
 #include <renderer/mesh/gltf_rendering.h>
 #include <application/application.h>
 #include <renderer/gpu_scene.h>
-#include <scene/scene_manager.h>
+#include <scene/scene_subsystem.h>
 #include <renderer/atmosphere.h>
 #include <renderer/visibility_tile.h>
 #include <scene/component/sky.h>
 #include <scene/scene.h>
 #include <renderer/lighting.h>
+#include <utils/profiler.h>
 
 namespace chord
 {
@@ -81,6 +82,8 @@ bool DeferredRenderer::updateDimension(
 	float renderScaleToPost,
 	float postScaleToOutput)
 {
+	ZoneScoped;
+
 	bool bChange = m_dimensionConfig.updateDimension(outputWidth, outputHeight, renderScaleToPost, postScaleToOutput);
 	if (bChange)
 	{
@@ -143,13 +146,15 @@ void DeferredRenderer::render(
 	graphics::CommandList& cmd,
 	ICamera* camera)
 {
+	ZoneScoped;
+
 	using namespace graphics;
 
 	const uint32 currentRenderWidth = m_dimensionConfig.getRenderWidth();
 	const uint32 currentRenderHeight = m_dimensionConfig.getRenderHeight();
 
-	auto* sceneManager = &Application::get().getEngine().getSubsystem<SceneManager>();
-	auto scene = sceneManager->getActiveScene();
+	auto* sceneSubSystem = &Application::get().getEngine().getSubsystem<SceneSubSystem>();
+	auto scene = sceneSubSystem->getActiveScene();
 
 	// Update atmosphere parameters.
 	auto atmosphereParam = scene->getAtmosphereManager().update(tickData);
@@ -502,6 +507,8 @@ void DeferredRenderer::render(
 
 GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
 {
+	ZoneScoped;
+
 	using namespace graphics;
 
 	GPUBasicData result { };
@@ -511,7 +518,7 @@ GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
 	// Fill atmosphere first.
 	result.atmosphere = atmosphere;
 
-	auto* sceneManager = &Application::get().getEngine().getSubsystem<SceneManager>();
+	auto* sceneManager = &Application::get().getEngine().getSubsystem<SceneSubSystem>();
 	auto  scene = sceneManager->getActiveScene();
 	const auto& GPUScene = Application::get().getGPUScene();
 

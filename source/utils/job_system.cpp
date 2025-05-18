@@ -230,7 +230,7 @@ namespace chord::jobsystem
 		// Can't push to local queue, then push to global queue.
 		uint32 globalQueueIndex = bForegroundJob ? kGlobalQueueForeTaskIndex : kGlobalQueueAnyTaskIndex;
 		{
-			pushToQueue(job, [globalQueueIndex](uint16 jobIndex) { sConfig.globalWorkQueues[globalQueueIndex]->enqueue(jobIndex); });
+			pushToQueue(job, [globalQueueIndex](uint16 jobIndex) { sConfig.globalWorkQueues[globalQueueIndex]->enqueue(std::move(jobIndex)); });
 		}
 	}
 

@@ -197,6 +197,8 @@ void chord::giUpdate(
 	bool bCameraCut,
 	RendererTimerLambda timer)
 {
+	ZoneScoped;
+
 	using namespace graphics;
 
 	if (!sEnableGI || !getContext().isRaytraceSupport())
