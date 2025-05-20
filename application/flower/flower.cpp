@@ -50,7 +50,7 @@ void Flower::onTick(const chord::ApplicationTickData& tickData)
 	m_assetConfigWidgetManager->tick(tickData);
 
 	// Some call once event tick.
-	onceEventAfterTick.brocast(tickData);
+	onceEventAfterTick.brocastAndFree(tickData);
 
 	updateApplicationTitle();
 	shortcutHandle();
@@ -196,7 +196,7 @@ void Flower::onProjectSetup()
 {
     check(m_hubHandle);
 
-    onceEventAfterTick.add([&](const chord::ApplicationTickData&)
+    onceEventAfterTick.push_back([this](const chord::ApplicationTickData&)
     {
 		getContext().waitDeviceIdle();
 

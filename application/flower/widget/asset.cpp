@@ -108,7 +108,7 @@ WidgetAssetConfig* AssetConfigWidgetManager::openWidget(const std::filesystem::p
 	}
 
 	const std::string widgetName = m_widgets[path]->getName().u8();
-	Flower::get().onceEventAfterTick.add([widgetName](const auto& tickData)
+	Flower::get().onceEventAfterTick.push_back([widgetName](const chord::ApplicationTickData& tickData)
 	{
 		ImGui::SetWindowFocus(widgetName.c_str());
 	});

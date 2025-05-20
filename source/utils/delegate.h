@@ -1,36 +1,64 @@
 #pragma once
 
-#include <functional>
-#include <vector>
-#include <shared_mutex>
-
-#include <utils/noncopyable.h>
-#include <utils/utils.h>
+#include <utils/mini_task.h>
+#include <utils/tagged_ptr.h>
 
 namespace chord
 {
 	template<typename... Args>
-	class CallOnceEvents
+	class CallOnceEvents : NonCopyable
 	{
 	private:
-		std::shared_mutex m_lock;
-		std::vector<std::function<void(Args...)>> m_collections;
+		using TaggedPtr = TaggedPointer<MiniTask>;
+		
+		//
+		mutable std::recursive_mutex m_mutex;
+		std::list<TaggedPtr> m_tasksTagged;
+
+		// 
+		uint16 m_brocastId = 0;
 
 	public:
-		void brocast(Args&&... args)
+		~CallOnceEvents()
 		{
-			std::unique_lock<std::shared_mutex> lock(m_lock);
-			for (auto& func : m_collections)
+			for (auto& taggedPtr : m_tasksTagged)
 			{
-				if (func) { func(std::forward<Args>(args)...); }
+				taggedPtr.getPointer()->free(); // free avoid memory leak.
 			}
-			m_collections.clear();
 		}
 
-		void add(std::function<void(Args...)>&& func)
+		void brocastAndFree(Args&&... args)
 		{
-			std::unique_lock<std::shared_mutex> lock(m_lock);
-			m_collections.push_back(func);
+			std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
+			auto taskTaggedIter = m_tasksTagged.begin();
+			while (taskTaggedIter != m_tasksTagged.end())
+			{
+				// Invoke marker step.
+				m_brocastId++;
+
+				//
+				TaggedPtr taggedPtr = *taskTaggedIter;
+				if (taggedPtr.getTag() == m_brocastId)
+				{
+					continue; // Reach newly add one, so start next time loop.
+				}
+				else
+				{
+					auto* task = taggedPtr.getPointer();
+					task->executeAndFree<void, Args...>(std::forward<Args>(args)...);
+					m_tasksTagged.erase(taskTaggedIter++);
+				}
+			}
+
+			assert(m_tasksTagged.empty());
+		}
+
+		template<typename Lambda>
+		void push_back(Lambda func)
+		{
+			std::lock_guard<std::recursive_mutex> lock(m_mutex);
+			m_tasksTagged.emplace_back(TaggedPtr(MiniTask::allocate(func), m_brocastId));
 		}
 	};
 
@@ -38,170 +66,226 @@ namespace chord
 	class Delegate : NonCopyable
 	{
 	public:
-		using DelegateType = std::function<RetType(Args...)>;
-
 		Delegate() = default;
-
-		void bind(DelegateType&& lambda)
+		~Delegate()
 		{
-			m_lambda = std::move(lambda);
+			clear();
+		}
+
+		template<typename Lambda>
+		void bind(Lambda func)
+		{
+			assert(!isBound());
+			auto* prev = m_task.exchange(MiniTask::allocate(std::move(func)), std::memory_order_seq_cst);
+			assert(prev == nullptr);
 		}
 
 		bool isBound() const
 		{
-			return m_lambda != nullptr;
+			return m_task.load(std::memory_order_acquire) != nullptr;
 		}
 
 		void clear() 
 		{ 
-			m_lambda = nullptr; 
+			if (isBound())
+			{
+				m_task->free(); // free avoid memory leak.
+			}
+			m_task = { nullptr };
 		}
 
 		CHORD_NODISCARD RetType execute(Args... args) const
 		{
-			return m_lambda(std::forward<Args>(args)...);
+			return m_task.load(std::memory_order_acquire)->execute<RetType, Args...>(std::forward<Args>(args)...);
 		}
 
 		CHORD_NODISCARD RetType executeIfBound(Args... args) const
 		{
 			if (isBound())
 			{
-				return m_lambda(std::forward<Args>(args)...);
+				return m_task.load(std::memory_order_acquire)->execute<RetType, Args...>(std::forward<Args>(args)...);
 			}
-			return { };
 		}
 
 	private:
-		DelegateType m_lambda = nullptr;
+		std::atomic<MiniTask*> m_task { nullptr };
+	};
+
+	using MultiDelegatesTaggedPtr = TaggedPointer<MiniTask>;
+
+	struct EventHandle
+	{
+		union 
+		{
+			uintptr_t handle = 39;
+			std::list<MultiDelegatesTaggedPtr>::iterator iter;
+		};
+
+		EventHandle()
+		{
+			handle = 39;
+		}
+
+		EventHandle(const EventHandle& rhs)
+		{
+			std::memcpy(this, &rhs, sizeof(EventHandle));
+		}
+
+		~EventHandle()
+		{
+
+		}
+
+		bool isValid() const
+		{
+			return handle != 39;
+		}
+
+		EventHandle& operator=(const EventHandle& other)
+		{
+			if (this == &other)
+			{
+				return *this;
+			}
+
+			std::memcpy(this, &other, sizeof(EventHandle));
+			return *this;
+		}
+
+		void markInvalid()
+		{
+			handle = 39;
+		}
 	};
 
 	// 
 	template<typename RetType, typename... Args>
 	class MultiDelegates : NonCopyable
 	{
-	public:
+		using TaggedPtr = MultiDelegatesTaggedPtr;
+	protected:
+		mutable std::recursive_mutex m_mutex;
+		std::list<TaggedPtr> m_tasksTagged;
+
 		//
-		using EventType = std::function<RetType(Args...)>;
+		uint16 m_brocastId = 0;
 
-		CHORD_NODISCARD EventHandle add(EventType&& lambda)
+	public:
+		~MultiDelegates()
 		{
-			// Input lambda can't be nullptr.
-			assert(lambda != nullptr);
+			for (auto& taggedPtr : m_tasksTagged)
+			{
+				taggedPtr.getPointer()->free(); // free avoid memory leak.
+			}
+		}
 
-			//
-			std::unique_lock lock(m_mutex);
+		template<typename Lambda> // RetType(Args...)
+		CHORD_NODISCARD EventHandle add(Lambda func)
+		{
+			std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
-			// Add a new element.
-			m_events.push_back(std::make_unique<EventType>(lambda));
-			m_validHandleCount++;
+			m_tasksTagged.emplace_back(TaggedPtr(MiniTask::allocate(func), m_brocastId));
 
-			// Return pointer as result.
-			return reinterpret_cast<EventHandle>(m_events.back().get());
+			EventHandle handle { };
+			auto lastOne = std::prev(m_tasksTagged.end());
+			std::memcpy(&handle.iter, &lastOne, sizeof(lastOne));
+			return std::move(handle);
 		}
 
 		// Remove event.
 		CHORD_NODISCARD bool remove(EventHandle& handle)
 		{
-			if (handle == nullptr)
+			if (!handle.isValid())
 			{
 				return false;
 			}
 
-			std::unique_lock lock(m_mutex);
+			std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
-			bool bSuccess = false;
-			const EventType* ptr = reinterpret_cast<EventType*>(handle);
-			for (auto index = 0; index < m_events.size(); index++)
+			auto taskTaggedIter = m_tasksTagged.begin();
+			while (taskTaggedIter != m_tasksTagged.end())
 			{
-				if (ptr == m_events[index].get())
+				if (taskTaggedIter == handle.iter)
 				{
-					// Reset handle.
-					handle = nullptr;
-					m_events[index] = nullptr;
-
-					// Update counter.
-					m_validHandleCount--;
-					m_invalidHandleCount++;
-
-					//
-					bSuccess = true;
-					break;
+					taskTaggedIter->getPointer()->free();
+					m_tasksTagged.erase(taskTaggedIter);
+					handle.markInvalid();
+					return true;
 				}
+				taskTaggedIter ++;
 			}
-
-			constexpr size_t kShrinkPercent = /* 1 / */ 4;
-			if (m_invalidHandleCount > (m_events.size() / kShrinkPercent))
-			{
-				m_events.erase(std::remove_if(m_events.begin(), m_events.end(), [&](const auto& x)
-				{
-					return x == nullptr;
-				}), m_events.end());
-
-				m_invalidHandleCount = 0;
-				assert(m_validHandleCount == m_events.size());
-			}
-
-			return bSuccess;
+			return false;
 		}
 
 		// Check event handle is bound or not.
 		CHORD_NODISCARD bool isBound(const EventHandle& handle) const
 		{
-			if (handle == nullptr)
+			if (!handle.isValid())
 			{
 				return false;
 			}
 
-			std::shared_lock lock(m_mutex);
+			std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
-			const EventType* ptr = reinterpret_cast<EventType*>(handle);
-			for (const auto& event : m_events)
+			auto taskTaggedIter = m_tasksTagged.begin();
+			while (taskTaggedIter != m_tasksTagged.end())
 			{
-				if (ptr == event.get())
+				if (taskTaggedIter == handle.iter)
 				{
 					return true;
 				}
+				taskTaggedIter++;
 			}
 			return false;
 		}
 
 		CHORD_NODISCARD const bool isEmpty() const
 		{
-			return m_validHandleCount == 0;
+			return m_tasksTagged.empty();
 		}
 
-		template<typename OpType = size_t>
-		void broadcast(Args...args, std::function<void(const OpType&)>&& opResult = nullptr)
+		template<typename OpResultLambda>
+		void broadcastOp(OpResultLambda opResultLambda, Args...args)
 		{
-			std::shared_lock<std::shared_mutex> lock(m_mutex);
-			for (const auto& event : m_events)
-			{
-				if (event == nullptr)
-				{
-					continue;
-				}
+			ZoneScoped;
+			std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
-				if constexpr (std::is_void_v<RetType>)
+			auto taskTaggedIter = m_tasksTagged.begin();
+			while (taskTaggedIter != m_tasksTagged.end())
+			{
+				// Invoke marker step.
+				m_brocastId++;
+
+				//
+				TaggedPtr taggedPtr = *taskTaggedIter;
+				if (taggedPtr.getTag() == m_brocastId)
 				{
-					(*event)(std::forward<Args>(args)...);
+					break;  // Newly add callback in the list back.
 				}
 				else
 				{
-					RetType result = (*event)(std::forward<Args>(args)...);
-					if (opResult != nullptr)
+					MiniTask* task = taggedPtr.getPointer();
+
+					if constexpr (std::is_same_v<decltype([](){}), OpResultLambda> || std::is_void_v<RetType>)
 					{
-						opResult(result);
+						task->execute<RetType, Args...>(std::forward<Args>(args)...);
 					}
+					else
+					{
+						RetType result = task->execute<RetType, Args...>(std::forward<Args>(args)...);
+						opResultLambda(result);
+					}
+
+					taggedPtr.setTag(m_brocastId);
+					taskTaggedIter++;
 				}
 			}
 		}
 
-	protected:
-		mutable std::shared_mutex m_mutex;
-		std::vector<std::unique_ptr<EventType>> m_events = { };
-
-		uint32 m_invalidHandleCount = 0;
-		std::atomic<uint32> m_validHandleCount = 0;
+		void broadcast(Args...args)
+		{
+			broadcastOp([](){}, std::forward<Args>(args)...);
+		}
 	};
 
 	template<typename...Args>

@@ -4,10 +4,8 @@
 #include <utils/noncopyable.h>
 #include <utils/delegate.h>
 #include <utils/thread.h>
-
-#include <mutex>
-#include <shared_mutex>
-
+#include <tsl/robin_map.h>
+#include <utils/cityhash.h>
 
 namespace chord
 {
@@ -36,8 +34,6 @@ namespace chord
 
 		}
 
-		virtual ~CVarStorage() = default;
-
 		EConsoleVarFlags getFlags() const { return m_flags; }
 		std::string_view getName() const { return m_name; }
 		std::string_view getDescription() const { return m_description; }
@@ -46,8 +42,8 @@ namespace chord
 	
 	private:
 		EConsoleVarFlags m_flags;
-		std::string m_name;
-		std::string m_description;
+		std::string_view m_name;
+		std::string_view m_description;
 	};
 
 	template <typename T>
@@ -59,8 +55,6 @@ namespace chord
 		{
 
 		}
-
-		virtual ~CVarStorageInterface() = default;
 
 		// Type match or not.
 		virtual bool isValueTypeMatch(const char* typeName) const override
@@ -118,8 +112,6 @@ namespace chord
 
 		}
 
-		virtual ~CVarStorageValue() = default;
-
 		// Callback when data change.
 		Delegate<void, const T&, T&> onValueChange { };
 
@@ -168,10 +160,8 @@ namespace chord
 
 		}
 
-		virtual ~CVarStorageRef() = default;
-
 		// Callback when data change.
-		Delegate<void, const T&, T&> onValueChange{ };
+		Delegate<void, const T& /*oldValue*/, T& /*storage*/> onValueChange{ };
 
 	private:
 		virtual const T& getImpl() const override 
@@ -220,14 +210,14 @@ namespace chord
 
 	class CVarSystem final : NonCopyable
 	{
-		template <typename T> friend class AutoCVar;
-		template <typename T> friend class AutoCVarRef;
+		template <typename T, typename Lambda> friend class AutoCVar;
+		template <typename T, typename Lambda> friend class AutoCVarRef;
 	public:
 		static CVarSystem& get();
 
 		CVarStorage* getCVarIfExistGeneric(std::string_view name) const
 		{
-			const size_t hashId = std::hash<std::string_view>()(name);
+			const size_t hashId = cityhash::cityhash64(name.data(), name.size());
 			if (!m_storages.contains(hashId))
 			{
 				return nullptr;
@@ -267,22 +257,33 @@ namespace chord
 		}
 
 	private:
-		CVarSystem() = default;
+		static constexpr size_t kCacheCommandsReserveSize = 1024;
+		CVarSystem()
+		{
+			m_cacheCommands.reserve(kCacheCommandsReserveSize);
+		}
+
+		void addCacheCommand(CacheCommand&& cmd);
 
 		template <typename T>
 		CVarStorageValue<T>* addCVar(EConsoleVarFlags flag, std::string_view name, std::string_view description, const T& v)
 		{
 			cVarDisableTypeCheck<T>();
 
-			const size_t hashId = std::hash<std::string_view>()(name);
+			std::lock_guard lock(m_mutex);
+
+			const size_t hashId = cityhash::cityhash64(name.data(), name.size());
 			assert(!m_storages.contains(hashId));
 
 			m_storages[hashId] = std::make_unique<CVarStorageValue<T>>(flag, name, description, v);
 
-			CacheCommand cacheCommand;
-			cacheCommand.name = m_storages[hashId]->getName();
-			cacheCommand.storage = m_storages[hashId].get();
-			m_cacheCommands.push_back(cacheCommand);
+			{
+				CacheCommand cacheCommand;
+				cacheCommand.name = m_storages[hashId]->getName();
+				cacheCommand.storage = m_storages[hashId].get();
+				addCacheCommand(std::move(cacheCommand));
+			}
+
 
 			return (CVarStorageValue<T>*)m_storages[hashId].get();
 		}
@@ -292,37 +293,44 @@ namespace chord
 		{
 			cVarDisableTypeCheck<T>();
 
-			const size_t hashId = std::hash<std::string_view>()(name);
+			std::lock_guard lock(m_mutex);
+
+			const size_t hashId = cityhash::cityhash64(name.data(), name.size());
 			assert(!m_storages.contains(hashId));
 
 			m_storages[hashId] = std::make_unique<CVarStorageRef<T>>(flag, name, description, v);
 
-			CacheCommand cacheCommand;
-			cacheCommand.name = m_storages[hashId]->getName();
-			cacheCommand.storage = m_storages[hashId].get();
-			m_cacheCommands.push_back(cacheCommand);
+			{
+				CacheCommand cacheCommand;
+				cacheCommand.name = m_storages[hashId]->getName();
+				cacheCommand.storage = m_storages[hashId].get();
+				addCacheCommand(std::move(cacheCommand));
+			}
 
 			return (CVarStorageRef<T>*)m_storages[hashId].get();
 		}
 
 	private:
-		mutable std::mutex m_lock;
-		std::unordered_map<size_t, std::unique_ptr<CVarStorage>> m_storages;
+		mutable std::mutex m_mutex;
+		tsl::robin_map<size_t, std::unique_ptr<CVarStorage>> m_storages;
 
 		//
 		std::vector<CacheCommand> m_cacheCommands;
 	};
 
-	template <typename T>
+	template <typename T, typename Lambda = decltype([](const T&, T&) {})>
 	class AutoCVar
 	{
 	public:
-		explicit AutoCVar(std::string_view name, const T& v,  std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None,
-			std::function<void(const T&/*old value*/, T&/*stored current data*/)>&& onValueChangeCallback = nullptr)
+		explicit AutoCVar(std::string_view name, const T& v,  std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None)
 		{
 			cVarDisableTypeCheck<T>();
-
 			m_ptr = CVarSystem::get().addCVar<T>(flag, name, description, v);
+		}
+
+		explicit AutoCVar(std::string_view name, const T& v, std::string_view description, EConsoleVarFlags flag, Lambda&& onValueChangeCallback) 
+			: AutoCVar(name, v, description, flag)
+		{
 			m_ptr->onValueChange.bind(std::move(onValueChangeCallback));
 		}
 
@@ -336,16 +344,19 @@ namespace chord
 		CVarStorageValue<T>* m_ptr;
 	};
 
-	template <typename T>
+	template <typename T, typename Lambda = decltype([](const T&, T&) {})>
 	class AutoCVarRef
 	{
 	public:
-		explicit AutoCVarRef(std::string_view name, T& v, std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None,
-			std::function<void(const T&/*old value*/, T&/*stored current data*/)>&& onValueChangeCallback = nullptr)
+		explicit AutoCVarRef(std::string_view name, T& v, std::string_view description, EConsoleVarFlags flag = EConsoleVarFlags::None)
 		{
 			cVarDisableTypeCheck<T>();
-
 			m_ptr = CVarSystem::get().addCVarRef<T>(flag, name, description, v);
+		}
+
+		explicit AutoCVarRef(std::string_view name, T& v, std::string_view description, EConsoleVarFlags flag, Lambda&& onValueChangeCallback)
+			: AutoCVarRef(name, v, description, flag)
+		{
 			m_ptr->onValueChange.bind(std::move(onValueChangeCallback));
 		}
 

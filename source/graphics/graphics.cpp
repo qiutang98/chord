@@ -12,6 +12,7 @@
 #include <graphics/buffer_pool.h>
 #include <graphics/uploader.h>
 #include <asset/gltf/gltf_helper.h>
+#include <utils/profiler.h>
 
 namespace chord::graphics
 {
@@ -1047,7 +1048,11 @@ namespace chord::graphics
 		// Imgui new frame.
 		m_imguiManager->newFrame();
 
-		onTick.broadcast(tickData);
+		{
+			ZoneScopedN("Context::tick.onTick");
+			onTick.broadcast(tickData);
+		}
+
 
 		// ImGui prepare render data.
 		m_imguiManager->render(tickData);

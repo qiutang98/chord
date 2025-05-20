@@ -63,7 +63,7 @@ namespace chord
 						if (vrd->shouldPushTickCmds(tickData.tickCount))
 						{
 							std::weak_ptr<IWidget> widget = shared_from_this();
-							vrd->onTickWithCmds.add([widget](const ApplicationTickData& tickData, graphics::CommandList& commandList)
+							vrd->onTickWithCmds.push_back([widget](const ApplicationTickData& tickData, graphics::CommandList& commandList)
 							{
 								if (auto ptr = widget.lock())
 								{

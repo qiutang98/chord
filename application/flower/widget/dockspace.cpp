@@ -393,7 +393,7 @@ void ContentAssetImportWidget::onDrawState()
     {
         m_bImporting = true;
         {
-            check(!m_importProgress.logHandle);
+            check(!m_importProgress.logHandle.isValid());
             {
                 m_importProgress.logHandle = LoggerSystem::get().pushCallback([&](const std::string& info, ELogLevel type)
                 {
@@ -506,7 +506,7 @@ void ContentAssetImportWidget::onDrawImporting()
 
         // Clean state.
         m_bImporting = false;
-        if (m_importProgress.logHandle)
+        if (m_importProgress.logHandle.isValid())
         {
             LoggerSystem::get().popCallback(m_importProgress.logHandle);
             m_importProgress.logHandle = {};

@@ -81,8 +81,6 @@ namespace chord::jobsystem
 		void  operator delete(void* rawMemory);
 	};
 
-
-
 	struct JobDependency : NonCopyable
 	{
 		// Current job is finish or not?

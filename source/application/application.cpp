@@ -191,7 +191,7 @@ namespace chord
         // Broadcast init events if engine succeed init.
         if (m_bInit)
         {
-            onInit.broadcast<bool>([&](const bool& bResult) { m_bInit &= bResult; });
+            onInit.broadcastOp([&](const bool& bResult) { m_bInit &= bResult; });
         }
 
         m_timer.init();
@@ -251,7 +251,7 @@ namespace chord
                 if (!onShouldClosed.isEmpty())
                 {
                     // On closed event intercept action and broadcast again.
-                    onShouldClosed.broadcast<bool>([&](const bool& bExit)
+                    onShouldClosed.broadcastOp([&](const bool& bExit)
                     {
                         m_windowData.bContinue |= (!bExit);
                     });
@@ -288,7 +288,10 @@ namespace chord
         m_runtimePeriod = ERuntimePeriod::Releasing;
 
         // Broadcast release event.
-        onRelease.broadcast();
+        {
+            ZoneScopedN("Application::onRelease.broadcast()");
+            onRelease.broadcast();
+        }
 
         m_engine.reset();
 

@@ -87,7 +87,7 @@ do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure '{4}' failed wi
 
 #define ARCHIVE_DECLARE                                                                  \
 	friend class cereal::access;                                                         \
-	template<class Ar>                                                              \
+	template<class Ar>                                                                   \
 	void serialize(Ar& ar, std::uint32_t const version);
 
 #define ARCHIVE_NVP_DEFAULT(Member) ar(cereal::make_nvp(#Member, Member))
@@ -101,14 +101,14 @@ do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure '{4}' failed wi
 #define registerClassMemberInherit(AssetNameXX, AssetNamePP)                             \
 	ASSET_ARCHIVE_IMPL_BASIC(AssetNameXX, chord::kAssetVersion);                         \
 	CEREAL_REGISTER_POLYMORPHIC_RELATION(chord::AssetNamePP, chord::AssetNameXX)         \
-	template<class Ar>                                                              \
-	void chord::AssetNameXX::serialize(Ar& ar, std::uint32_t const version) {  \
+	template<class Ar>                                                                   \
+	void chord::AssetNameXX::serialize(Ar& ar, std::uint32_t const version) {            \
 	ar(cereal::base_class<chord::AssetNamePP>(this));
 
 // Baisc class.
 #define registerClassMember(AssetNameXX)                                                 \
 	ASSET_ARCHIVE_IMPL_BASIC(AssetNameXX, chord::kAssetVersion);                         \
-	template<class Ar>                                                              \
+	template<class Ar>                                                                   \
 	void chord::AssetNameXX::serialize(Ar& ar, std::uint32_t const version)
 
 // Achive enum class type.
@@ -119,7 +119,7 @@ do { static bool b = false; if(!b && !(x)) { b = true; p("Ensure '{4}' failed wi
 
 #define registerPODClassMember(AssetNameXX)                                              \
 	CEREAL_CLASS_VERSION(chord::AssetNameXX, chord::kAssetVersion);                      \
-	template<class Ar>                                                              \
+	template<class Ar>                                                                   \
 	void chord::AssetNameXX::serialize(Ar& ar, std::uint32_t const version)
 
 #define REGISTER_BODY_DECLARE(...)  \
@@ -158,9 +158,6 @@ namespace chord
 
 	// Asset version control all asset.
 	extern const uint32 kAssetVersion;
-
-	// Now event handle just a pointer.
-	using EventHandle = void*;
 
 	class ApplicationTickData
 	{
@@ -611,4 +608,46 @@ namespace chord
 	{
 		return ScopeExit(func);
 	}
+
+	// Boost function_traits
+	template <typename T>
+	struct function_traits;
+
+	template <typename Ret, typename... Args>
+	struct function_traits<Ret(Args...)>
+	{
+		using return_type = Ret;
+		using args_tuple = std::tuple<Args...>;
+		static constexpr size_t arity = sizeof...(Args);
+
+		template <size_t N>
+		struct argument
+		{
+			static_assert(N < arity, "Index out of range");
+			using type = std::tuple_element_t<N, args_tuple>;
+		};
+	};
+
+	// Generic function.
+	template <typename Ret, typename... Args>
+	struct function_traits<Ret(*)(Args...)> : function_traits<Ret(Args...)> {};
+
+	// Class member function.
+	template <typename ClassType, typename Ret, typename... Args>
+	struct function_traits<Ret(ClassType::*)(Args...)> : function_traits<Ret(Args...)> {};
+
+	// Class const member function.
+	template <typename ClassType, typename Ret, typename... Args>
+	struct function_traits<Ret(ClassType::*)(Args...) const> : function_traits<Ret(Args...)> {};
+
+	// Callable object.
+	template <typename T>
+	struct function_traits : function_traits<decltype(&T::operator())> {};
+
+	// Alias.
+	template <typename T>
+	using function_return_t = typename function_traits<T>::return_type;
+
+	template <typename T, size_t N>
+	using function_argument_t = typename function_traits<T>::template argument<N>::type;
 }

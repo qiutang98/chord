@@ -118,7 +118,7 @@ namespace chord
 			graphics::CallOnceInOneFrameEvent::flush(data, m_swapchain->getCommandList().getGraphicsQueue());
 
 			m_lastBroadcastFrame = data.tickCount;
-			onTickWithCmds.brocast(data, m_swapchain->getCommandList());
+			onTickWithCmds.brocastAndFree(data, m_swapchain->getCommandList());
 		}
 
 		bool shouldPushTickCmds(uint64 data) const

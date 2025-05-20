@@ -40,9 +40,10 @@ namespace chord
 		void addLog(const std::string& loggerName, const std::string& message, ELogLevel level);
 
 		// Push callback to logger sink.
-		CHORD_NODISCARD EventHandle pushCallback(std::function<void(const std::string&, ELogLevel)>&& callback)
+		template<typename Lambda>
+		CHORD_NODISCARD EventHandle pushCallback(Lambda func)
 		{
-			return m_logCallback.add(std::move(callback));
+			return std::move(m_logCallback.add(func));
 		}
 
 		// Pop callback from logger sink.

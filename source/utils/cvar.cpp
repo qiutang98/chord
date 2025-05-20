@@ -20,7 +20,7 @@ namespace chord
 			}
 
 			// Lock now.
-			std::lock_guard lock(m_lock);
+			std::lock_guard lock(m_mutex);
 
 			if (storage->isValueTypeMatch(getTypeName<float>()))
 			{
@@ -135,5 +135,14 @@ namespace chord
 		}
 
 		return {};
+	}
+
+	void CVarSystem::addCacheCommand(CacheCommand&& cmd)
+	{
+		m_cacheCommands.push_back(cmd);
+		if (m_cacheCommands.size() > kCacheCommandsReserveSize)
+		{
+			LOG_WARN("Current cache command size already reach {}! Increase reserve size for best performance.", m_cacheCommands.size());
+		}
 	}
 }

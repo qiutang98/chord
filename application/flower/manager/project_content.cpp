@@ -213,13 +213,17 @@ ProjectContentManager::ProjectContentManager()
 	m_assetTree.build();
 
 	// Call event after build.
-	onTreeUpdate.broadcast(m_assetTree);
+	{
+		ZoneScopedN("ProjectContentManager::onTreeUpdate");
+		onTreeUpdate.broadcast(m_assetTree);
+	}
+
 
 	auto* ptr = this;
 	m_onAssetNewlySavedHandle = onAssetNewlySaveToDiskEvents.add([ptr](AssetRef asset)
 	{
 		ptr->m_assetTree.getClosetFolder(asset)->markDirty();
-		Flower::get().onceEventAfterTick.add([ptr](const chord::ApplicationTickData&)
+		Flower::get().onceEventAfterTick.push_back([ptr](const chord::ApplicationTickData&)
 		{ 
 			ptr->m_assetTree.update(); 
 		});

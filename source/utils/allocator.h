@@ -278,9 +278,12 @@ namespace chord
 		}
 
 	public:
-		explicit FreeListArenaAllocator()
+		explicit FreeListArenaAllocator(bool bCreateArenaWhenInit = true)
 		{
-			createArena();
+			if (bCreateArenaWhenInit)
+			{
+				createArena();
+			}
 		}
 
 		~FreeListArenaAllocator()
