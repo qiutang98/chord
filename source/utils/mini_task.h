@@ -57,23 +57,6 @@ namespace chord
 			}
 		}
 
-		template<typename RetType, typename... Args>
-		RetType executeAndFree(Args&&... args)
-		{
-			auto function = reinterpret_cast<TaskFunction<RetType, Args...>>(anyFuncPtr);
-			if constexpr (std::is_void_v<RetType>)
-			{
-				function(storage, std::tuple<Args...>(std::forward<Args>(args)...));
-				free();
-			}
-			else
-			{
-				RetType result = function(storage, std::tuple<Args...>(std::forward<Args>(args)...));
-				free();
-				return std::move(result);
-			}
-		}
-
 		void free()
 		{
 			delete this;

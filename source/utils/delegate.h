@@ -46,7 +46,8 @@ namespace chord
 				else
 				{
 					auto* task = taggedPtr.getPointer();
-					task->executeAndFree<void, Args...>(std::forward<Args>(args)...);
+					task->execute<void, Args...>(std::forward<Args>(args)...);
+					task->free();
 					m_tasksTagged.erase(taskTaggedIter++);
 				}
 			}
@@ -87,11 +88,10 @@ namespace chord
 
 		void clear() 
 		{ 
-			if (isBound())
+			if (auto* prev = m_task.exchange(nullptr, std::memory_order_seq_cst))
 			{
-				m_task->free(); // free avoid memory leak.
+				prev->free();
 			}
-			m_task = { nullptr };
 		}
 
 		CHORD_NODISCARD RetType execute(Args... args) const

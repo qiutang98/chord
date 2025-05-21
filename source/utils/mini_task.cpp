@@ -4,17 +4,16 @@
 namespace chord
 {
 	using MiniTaskAllocator = FreeListArenaAllocator<MiniTask, 16 * 1024>;
-	static MiniTaskAllocator* sMiniTaskAllocator = new MiniTaskAllocator(false);
+	static MiniTaskAllocator sMiniTaskAllocator { false };
 
 	void* MiniTask::operator new(size_t size)
 	{
-		assert(sMiniTaskAllocator && size == sizeof(MiniTask));
-		return sMiniTaskAllocator->allocate();
+		assert(size == sizeof(MiniTask));
+		return sMiniTaskAllocator.allocate();
 	}
 
 	void MiniTask::operator delete(void* rawMemory)
 	{
-		assert(sMiniTaskAllocator);
-		sMiniTaskAllocator->free(rawMemory);
+		sMiniTaskAllocator.free(rawMemory);
 	}
 }
