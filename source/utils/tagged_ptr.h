@@ -46,6 +46,11 @@ namespace chord
 			T* ptr = getPointer();
 			set(ptr, tag);
 		}
+
+		bool operator==(const TaggedPointer& other) const 
+		{
+			return m_ptr == other.m_ptr && m_tag == other.m_tag;
+		}
 	};
 }
 

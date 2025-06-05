@@ -118,7 +118,7 @@ namespace chord
 		union 
 		{
 			uintptr_t handle = 39;
-			std::list<MultiDelegatesTaggedPtr>::iterator iter;
+			MultiDelegatesTaggedPtr* target;
 		};
 
 		EventHandle()
@@ -186,10 +186,10 @@ namespace chord
 
 			m_tasksTagged.emplace_back(TaggedPtr(MiniTask::allocate(func), m_brocastId));
 
-			EventHandle handle { };
-			auto lastOne = std::prev(m_tasksTagged.end());
-			std::memcpy(&handle.iter, &lastOne, sizeof(lastOne));
-			return std::move(handle);
+			EventHandle result { };
+			result.target = &m_tasksTagged.back();
+
+			return std::move(result);
 		}
 
 		// Remove event.
@@ -205,7 +205,7 @@ namespace chord
 			auto taskTaggedIter = m_tasksTagged.begin();
 			while (taskTaggedIter != m_tasksTagged.end())
 			{
-				if (taskTaggedIter == handle.iter)
+				if ((*taskTaggedIter) == (*handle.target))
 				{
 					taskTaggedIter->getPointer()->free();
 					m_tasksTagged.erase(taskTaggedIter);
@@ -230,7 +230,7 @@ namespace chord
 			auto taskTaggedIter = m_tasksTagged.begin();
 			while (taskTaggedIter != m_tasksTagged.end())
 			{
-				if (taskTaggedIter == handle.iter)
+				if ((*taskTaggedIter) == (*handle.target))
 				{
 					return true;
 				}

@@ -22,7 +22,7 @@ namespace chord
 			// Lock now.
 			std::lock_guard lock(m_mutex);
 
-			if (storage->isValueTypeMatch(getTypeName<float>()))
+			if (storage->isValueTypeMatch(getTypeName<float>())) CHORD_LIKELY
 			{
 				try
 				{
@@ -34,13 +34,13 @@ namespace chord
 					LOG_ERROR("Can't convert input param '{}' to float.", value);
 				}
 			}
-			else if (storage->isValueTypeMatch(getTypeName<u16str>()))
+			else if (storage->isValueTypeMatch(getTypeName<u16str>())) CHORD_UNLIKELY
 			{
 				// String is utf8 encode.
 				((CVarStorageInterface<u16str>*)storage)->set(u16str(value));
 				return true;
 			}
-			else if (storage->isValueTypeMatch(getTypeName<double>()))
+			else if (storage->isValueTypeMatch(getTypeName<double>())) CHORD_UNLIKELY
 			{
 				try
 				{
@@ -52,7 +52,7 @@ namespace chord
 					LOG_ERROR("Can't convert input param '{}' to double.", value);
 				}
 			}
-			else if (storage->isValueTypeMatch(getTypeName<int32>()))
+			else if (storage->isValueTypeMatch(getTypeName<int32>())) CHORD_LIKELY
 			{
 				if (isDigitString(value))
 				{
@@ -64,7 +64,7 @@ namespace chord
 					LOG_ERROR("Input param '{}' can't convert to digit format.", value);
 				}
 			}
-			else if (storage->isValueTypeMatch(getTypeName<uint32>()))
+			else if (storage->isValueTypeMatch(getTypeName<uint32>())) CHORD_LIKELY
 			{
 				if (isDigitString(value))
 				{
@@ -76,7 +76,7 @@ namespace chord
 					LOG_ERROR("Input param '{}' can't convert to digit format.", value);
 				}
 			}
-			else if (storage->isValueTypeMatch(getTypeName<bool>()))
+			else if (storage->isValueTypeMatch(getTypeName<bool>())) CHORD_UNLIKELY
 			{
 				const bool bTrue  = (value == "true")  || (value == "1");
 				const bool bFalse = (value == "false") || (value == "0");

@@ -89,16 +89,18 @@ namespace chord
 					uint32 freeSize = arena->totalSize - arena->usedNum;
 
 					// Floor down log2
-					int32 freeBaseId = math::clamp(int32(math::log2(freeSize)) - kBasePowOf2, 0, kMaxArenaFreeSplit - 1);
+					int32 freeBaseId = math::min(int32(math::log2(freeSize)) - kBasePowOf2, kMaxArenaFreeSplit - 1);
 					if (freeBaseId < 0 && freeSize > 0)
 					{
 						m_garbageMemorySize += freeSize;
 					}
-
-					while (freeBaseId >= 0)
+					else
 					{
-						m_freeStringArena[freeBaseId].push(arena);
-						freeBaseId--;
+						while (freeBaseId >= 0)
+						{
+							m_freeStringArena[freeBaseId].push(arena);
+							freeBaseId--;
+						}
 					}
 
 					m_validUsedMemory += str.size();
