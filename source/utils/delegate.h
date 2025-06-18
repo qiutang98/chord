@@ -2,6 +2,7 @@
 
 #include <utils/mini_task.h>
 #include <utils/tagged_ptr.h>
+#include <utils/profiler.h>
 
 namespace chord
 {

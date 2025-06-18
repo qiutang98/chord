@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#include <utils/utils.h>
-
 #define TRACY_ENABLE
 
 /**
@@ -19,10 +17,10 @@
 #define TRACY_NO_BROADCAST
 
 // MSVC /ZI build can't treat __LINE__ as a constexpr.
-#if defined(_MSC_VER) && CHORD_DEBUG
-	#define TracyConstExpr const
-#endif 
+#ifndef TracyConstExpr
+	#if defined(_MSC_VER) && (defined(_DEBUG) || defined(DEBUG))
+		#define TracyConstExpr const
+	#endif 
+#endif // !TracyConstExpr
 
-#ifndef ENGINE_TRACY_CPP__FILE
-	#include <tracy/Tracy.hpp>
-#endif
+#include <tracy/Tracy.hpp>

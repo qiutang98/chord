@@ -14,8 +14,6 @@ namespace chord
 		mutable std::shared_mutex m_mutex;
 		tsl::robin_map<uint64, StringViewType> m_map;
 
-
-
 		// Grow string arena.
 		struct StringArena : NonCopyable
 		{
@@ -32,7 +30,7 @@ namespace chord
 
 			~StringArena()
 			{
-				traceFree(memory);
+				traceFree(memory, totalSize);
 			}
 		};
 		std::vector<std::unique_ptr<StringArena>> m_stringArena;

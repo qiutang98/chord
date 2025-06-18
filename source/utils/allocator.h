@@ -4,26 +4,14 @@
 #include <cstdint>
 #include <vector>
 
+#include <utils/memory.h>
+
 #include <utils/noncopyable.h>
 #include <utils/tagged_ptr.h>
 #include <utils/profiler.h>
 
 namespace chord
 {
-	static inline void* traceMalloc(std::size_t count)
-	{
-		void* ptr = std::malloc(count);
-		TracyAlloc(ptr, count);
-
-		return ptr;
-	}
-
-	static inline void traceFree(void* ptr)
-	{
-		TracyFree(ptr);
-		std::free(ptr);
-	}
-
 	#define TRACE_OP_NEW  void* operator new(std::size_t count) { void* ptr = std::malloc(count); TracyAlloc(ptr, count); return ptr; }
 	#define TRACE_OP_DELETE void operator delete(void* ptr) noexcept { TracyFree(ptr); std::free(ptr); }
 	#define TRACE_OP_NEW_AND_DELETE TRACE_OP_NEW; TRACE_OP_DELETE
@@ -68,7 +56,7 @@ namespace chord
 				do
 				{
 					next = node->next.load(std::memory_order_relaxed);
-					traceFree(reinterpret_cast<void*>(node));
+					traceFree(reinterpret_cast<void*>(node), sizeof(Node));
 
 					node = next;
 					m_freeCount.fetch_sub(1, std::memory_order_relaxed);
@@ -111,7 +99,7 @@ namespace chord
 			Node* node = reinterpret_cast<Node*>(ptr);
 			if (m_freeCount.load(std::memory_order_relaxed) >= kMaxCacheObject)
 			{
-				traceFree(reinterpret_cast<void*>(node));
+				traceFree(reinterpret_cast<void*>(node), sizeof(Node));
 				
 				m_allocatedCount.fetch_sub(1, std::memory_order_acq_rel);
 				return;
@@ -183,7 +171,7 @@ namespace chord
 
 		~FreeListFixedArenaAllocator()
 		{
-			traceFree(m_arena);
+			traceFree(m_arena, kPageSize);
 		}
 
 		//
@@ -290,7 +278,7 @@ namespace chord
 		{
 			for (void* arena : m_arenas)
 			{
-				traceFree(arena);
+				traceFree(arena, kPageSize);
 			}
 		}
 
@@ -385,7 +373,7 @@ namespace chord
 
 		inline void free(T* node) // ptr->~T(); free(ptr);
 		{
-			traceFree(reinterpret_cast<void*>(node));
+			traceFree(reinterpret_cast<void*>(node), sizeof(T));
 			m_counter.fetch_sub(1, std::memory_order_acq_rel);
 		}
 	};
@@ -429,7 +417,7 @@ namespace chord
 		{
 			if (m_size > kMaxStackSize)
 			{
-				traceFree(pPtr);
+				traceFree(pPtr, m_size);
 			}
 			m_size = 0;
 		}
