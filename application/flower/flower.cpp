@@ -13,6 +13,8 @@
 #include "widget/detail.h"
 #include "widget/system.h"
 #include "utils/profiler.h"
+#include "widget/hierarchy.h"
+#include "manager/world_ui_context.h"
 
 using namespace chord;
 using namespace chord::graphics;
@@ -259,11 +261,18 @@ void Flower::onProjectSetup()
 		// Outliner and detail.
 		{
 			m_sceneContentManager = new UISceneContentManager();
+			m_worldContentManager = new UIWorldContentManager();
 
 			m_widgetOutlineHandle = m_widgetManager.addWidget<WidgetOutliner>();
 			{
 				WidgetInView outlineView = { .bMultiWindow = false, .widgets = { m_widgetOutlineHandle } };
 				m_dockSpaceHandle->widgetInView.add(outlineView);
+			}
+
+			m_widgetHierarchyHandle = m_widgetManager.addWidget<WidgetHierarchy>();
+			{
+				WidgetInView hierarchyView = { .bMultiWindow = false, .widgets = { m_widgetHierarchyHandle } };
+				m_dockSpaceHandle->widgetInView.add(hierarchyView);
 			}
 
 			WidgetInView detailView = { .bMultiWindow = true };

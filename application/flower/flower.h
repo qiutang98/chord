@@ -15,7 +15,9 @@ class WidgetContent;
 class WidgetViewport;
 class WidgetDetail;
 class UISceneContentManager;
+class UIWorldContentManager;
 class WidgetOutliner;
+class WidgetHierarchy;
 class WidgetSystem;
 
 class Flower
@@ -78,6 +80,16 @@ public:
 		return *m_sceneContentManager;
 	}
 
+	const UIWorldContentManager& getUIWorldContentManager() const
+	{
+		return *m_worldContentManager;
+	}
+
+	UIWorldContentManager& getUIWorldContentManager()
+	{
+		return *m_worldContentManager;
+	}
+
 	const auto* getActiveViewportCamera() const { return m_activeViewportCamera; }
 	void setActiveViewportCamera(const chord::ICamera* in) { m_activeViewportCamera = in; }
 
@@ -131,6 +143,9 @@ private:
 	UISceneContentManager* m_sceneContentManager = nullptr;
 	WidgetOutliner* m_widgetOutlineHandle = nullptr;
 	std::array<WidgetDetail*, kMultiWidgetMaxNum> m_details;
+
+	UIWorldContentManager* m_worldContentManager = nullptr;
+	WidgetHierarchy* m_widgetHierarchyHandle = nullptr;
 
 
 	const chord::ICamera* m_activeViewportCamera = nullptr;

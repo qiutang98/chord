@@ -2,6 +2,7 @@
 #include <application/application.h>
 #include <graphics/graphics.h>
 #include <scene/scene_subsystem.h>
+#include <world/world_subsystem.h>
 
 namespace chord
 {
@@ -29,7 +30,8 @@ namespace chord
 		bool bResult = true;
 
 		// Register necessary manager.
-		if(bResult) { bResult &= registerSubsystem<SceneSubSystem>(); }
+		if (bResult) { bResult &= registerSubsystem<SceneSubSystem>(); }
+		if (bResult) { bResult &= registerSubsystem<WorldSubSystem>(); }
 
 		return bResult;
 	}

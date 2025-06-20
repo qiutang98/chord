@@ -369,7 +369,4 @@ namespace chord
 	private:
 		CVarStorageRef<T>* m_ptr;
 	};
-
-	// Cmd must name start with "cmd.", and type always is bool type.
-
 }

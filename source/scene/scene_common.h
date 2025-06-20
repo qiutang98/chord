@@ -4,6 +4,7 @@
 #include <application/application.h>
 #include <shader/base.h>
 #include <utils/camera.h>
+#include <scene/ecs.h>
 
 namespace chord
 {

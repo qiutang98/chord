@@ -31,4 +31,7 @@
 #include <scene/component/gltf_material.h>
 #include <scene/component/sky.h>
 
+#include <world/world.h>
+#include <world/world_subsystem.h>
+
 constexpr chord::uint32 kMultiWidgetMaxNum = 4;
