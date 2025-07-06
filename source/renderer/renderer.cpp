@@ -12,7 +12,7 @@
 #include <scene/scene_subsystem.h>
 #include <renderer/atmosphere.h>
 #include <renderer/visibility_tile.h>
-#include <scene/component/sky.h>
+#include <scene/component/component_sky.h>
 #include <scene/scene.h>
 #include <renderer/lighting.h>
 #include <utils/profiler.h>
@@ -216,24 +216,19 @@ void DeferredRenderer::render(
 	auto finalOutput = getOutput();
 
 	// Now collect perframe camera.
-	PerframeCollected perframe { };
+	const PerframeCollected* perframe = sceneSubSystem->getPerframeCollected(camera);
 	uint gltfBufferId = ~0;
 	uint gltfObjectCount = 0;
 	uint32 viewGPUId;
 	uint32 mainViewInstanceCullingInfoId;
 	{
-		perframe.debugLineCtx = &debugLineCtx;
-
-		// Collected.
-		scene->perviewPerframeCollect(perframe, m_perframeCameraView, camera);
-
 		// Update gltf object count.
-		gltfObjectCount = perframe.gltfPrimitives.size();
+		gltfObjectCount = perframe->gltfPrimitives.size();
 
 		uint gltfBufferId = ~0;
 		if (gltfObjectCount > 0)
 		{
-			gltfBufferId = uploadBufferToGPU(cmd, "GLTFObjectInfo-" + m_name, perframe.gltfPrimitives.data(), gltfObjectCount).second;
+			gltfBufferId = uploadBufferToGPU(cmd, "GLTFObjectInfo-" + m_name, perframe->gltfPrimitives.data(), gltfObjectCount).second;
 		}
 
 		// GLTF object.
@@ -286,7 +281,7 @@ void DeferredRenderer::render(
 		m_rendererTimer.getTimeStamp(queue.getActiveCmd()->commandBuffer, label.c_str());
 	};
 
-	GLTFRenderContext gltfRenderCtx(&perframe, gltfObjectCount, gltfBufferId, viewGPUId);
+	GLTFRenderContext gltfRenderCtx(perframe, gltfObjectCount, gltfBufferId, viewGPUId);
 	gltfRenderCtx.timerLambda = [&](const std::string& label, GraphicsOrComputeQueue& queue) { insertTimer(label, queue); };
 
 	debugLineCtx.prepareForRender(graphics);
@@ -298,12 +293,12 @@ void DeferredRenderer::render(
 
 	// Async TLAS build.
 	{
-		m_bTLASValidCurrentFrame = perframe.asInstances.isExistInstance();
+		m_bTLASValidCurrentFrame = perframe->asInstances.isExistInstance();
 		if (m_bTLASValidCurrentFrame)
 		{
 			asyncCompute.beginCommand({ asyncComputeTimeline, graphicsTimeline });
 
-			m_tlas.buildTlas(asyncCompute, perframe.asInstances.asInstances, false, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+			m_tlas.buildTlas(asyncCompute, perframe->asInstances.asInstances, false, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 
 			asyncComputeTimeline = asyncCompute.endCommand(VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);
 			insertTimer("TLAS", graphics);
@@ -447,10 +442,10 @@ void DeferredRenderer::render(
 			insertTimer("Nanite visualize", graphics);
 		}
 
-		if (!perframe.builtinMeshInstances.empty())
+		if (!perframe->builtinMeshInstances.empty())
 		{
 			debugDrawBuiltinMesh(graphics,
-				perframe.builtinMeshInstances,
+				perframe->builtinMeshInstances,
 				viewGPUId,
 				gbuffers.depthStencil,
 				gbuffers.color);

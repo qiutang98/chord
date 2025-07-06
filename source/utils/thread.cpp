@@ -6,24 +6,31 @@ namespace chord
 {
 	bool chord::isInMainThread()
 	{
-		return ThreadContext::main().isInThread(std::this_thread::get_id());
+		return MainThread::get().isInThread(std::this_thread::get_id());
 	}
 
-	ThreadContext& ThreadContext::main()
+	bool chord::isInRenderThread()
 	{
-		static ThreadContext mainThrad(L"MainThread");
+		return RenderThread::get().isInThread(std::this_thread::get_id());
+	}
+
+	MainThread& MainThread::get()
+	{
+		static MainThread mainThrad(L"MainThread");
 		return mainThrad;
+	}
+
+
+	RenderThread& RenderThread::get()
+	{
+		static RenderThread renderThread(L"RenderThread");
+		return renderThread;
 	}
 
 	void ThreadContext::init()
 	{
 		m_thradId = std::this_thread::get_id();
 		namedCurrentThread(m_name);
-	}
-
-	void ThreadContext::tick(uint64 frameIndex)
-	{
-		flush();
 	}
 
 	void ThreadContext::beforeRelease()
@@ -33,34 +40,80 @@ namespace chord
 
 	void ThreadContext::release()
 	{
-		check(m_callbacks.isEmpty());
+		check(m_queue.isEmpty());
 	}
 
-	bool ThreadContext::isInThread(std::thread::id id)
+	bool ThreadContext::isInThread(std::thread::id id) const
 	{
 		return m_thradId == id;
-	}
-
-	void ThreadContext::pushAnyThread(std::function<void()>&& task)
-	{
-		m_callbacks.enqueue(std::move(task));
 	}
 
 	void ThreadContext::flush()
 	{
 		check(std::this_thread::get_id() == m_thradId);
-		while (!m_callbacks.isEmpty())
+
+		m_producingId ++;
+		m_consumingId ++;
+
+		TaggedTask task;
+		while (!m_queue.isEmpty())
 		{
-			CallBackFunc func;
-			if (m_callbacks.dequeue(func))
+			if (m_queue.getDequeue(task))
 			{
-				func();
+				if (task.getTag() == m_consumingId)
+				{
+					check(m_queue.dequeue(task));
+
+					task.getPointer()->execute<void>();
+					task.getPointer()->free();
+				}
+				else
+				{
+					// Already reach frame bound.
+					check(task.getTag() == m_producingId);
+					break;
+				}
 			}
 			else
 			{
-				break;
+				std::this_thread::yield();
 			}
 		}
+	}
+
+	void MainThread::waitForRenderThreadFinish() const
+	{
+		RenderThread& RT = RenderThread::get();
+		while (RT.getFrameId() + 1 < m_mainThreadFrameId)
+		{
+			std::this_thread::yield();
+		}
+	}
+
+	void RenderThread::waitForMainThreadTask() const
+	{
+		MainThread& mainT = MainThread::get();
+		while (mainT.getFrameId() <= m_renderThreadFrameId)
+		{
+			std::this_thread::yield();
+		}
+
+	}
+
+	void MainThread::tick()
+	{
+		// waitForRenderThreadFinish();
+		
+
+		flush();
+		// m_mainThreadFrameId++;
+	}
+
+	void RenderThread::tick()
+	{
+		waitForMainThreadTask();
+		flush();
+		m_renderThreadFrameId ++;
 	}
 }
 

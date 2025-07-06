@@ -93,6 +93,7 @@ namespace chord::graphics
 
 	PoolTextureRef GPUTexturePool::create(const std::string& name, const PoolTextureCreateInfo& createInfo, bool bSameFrameReuse)
 	{
+		ZoneScoped;
 		std::lock_guard lock(m_mutex);
 
 		const uint64 hashId = cityhash::cityhash64((const char*)&createInfo, sizeof(createInfo));

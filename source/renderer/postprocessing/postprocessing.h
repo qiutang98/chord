@@ -55,7 +55,7 @@ namespace chord
 
 	extern void debugDrawBuiltinMesh(
 		graphics::GraphicsQueue& queue,
-		std::vector<BuiltinMeshDrawInstance>& instances,
+		const std::vector<BuiltinMeshDrawInstance>& instances,
 		uint32 cameraViewId,
 		graphics::PoolTextureRef depthImage,
 		graphics::PoolTextureRef outImage);

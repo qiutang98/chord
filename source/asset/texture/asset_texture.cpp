@@ -1,4 +1,4 @@
-#include <asset/texture/texture.h>
+#include <asset/texture/asset_texture.h>
 #include <asset/serialize.h>
 #include <graphics/helper.h>
 
@@ -35,7 +35,8 @@ namespace chord
 
 	bool TextureAsset::isGPUTextureStreamingReady() const
 	{
-		if (auto cache = m_gpuTexture.lock())
+		std::lock_guard lock(anyThread.mutex);
+		if (auto cache = anyThread.gpuTexture.lock())
 		{
 			return cache->isReady();
 		}
@@ -45,8 +46,8 @@ namespace chord
 	graphics::GPUTextureAssetRef TextureAsset::getGPUTexture(std::function<void(graphics::GPUTextureAssetRef)>&& afterLoadingCallback)
 	{
 		using namespace graphics;
-
-		if (auto cache = m_gpuTexture.lock())
+		std::lock_guard lock(anyThread.mutex);
+		if (auto cache = anyThread.gpuTexture.lock())
 		{
 			return cache;
 		}
@@ -147,7 +148,7 @@ namespace chord
 				}
 			});
 
-		m_gpuTexture = newGPUTexture;
+		anyThread.gpuTexture = newGPUTexture;
 		return newGPUTexture;
 	}
 }

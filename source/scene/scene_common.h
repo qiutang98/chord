@@ -4,7 +4,6 @@
 #include <application/application.h>
 #include <shader/base.h>
 #include <utils/camera.h>
-#include <scene/ecs.h>
 
 namespace chord
 {
@@ -33,6 +32,12 @@ namespace chord
         {
             return !asInstances.empty();
         }
+
+        void clear()
+        {
+            bTLASFullyRebuild = false;
+            asInstances.clear();
+        }
     };
 
     struct BuiltinMeshDrawInstance
@@ -51,8 +56,6 @@ namespace chord
         std::atomic_uint32_t gltfLod0MeshletCount  = 0;
         std::atomic_uint32_t gltfMeshletGroupCount = 0;
         std::vector<GPUObjectGLTFPrimitive> gltfPrimitives;
-
-        DebugLineCtx* debugLineCtx = nullptr;
         AccelerationStructureInstanceCollector asInstances;
 
         // Collect builtin mesh instances.
@@ -60,6 +63,16 @@ namespace chord
 
         // 
         void drawLowSphere(const ICamera* camera, const double3& position, float scale, const float3& color);
+
+        // 
+        void clear()
+        {
+            gltfLod0MeshletCount = 0;
+            gltfMeshletGroupCount = 0;
+            gltfPrimitives.clear();
+            asInstances.clear();
+            builtinMeshInstances.clear();
+        }
     };
 
     class UIComponentDrawDetails

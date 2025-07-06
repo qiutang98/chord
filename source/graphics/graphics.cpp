@@ -11,7 +11,7 @@
 #include <graphics/texture_pool.h>
 #include <graphics/buffer_pool.h>
 #include <graphics/uploader.h>
-#include <asset/gltf/gltf_helper.h>
+#include <asset/gltf/asset_gltf_helper.h>
 #include <utils/profiler.h>
 
 namespace chord::graphics

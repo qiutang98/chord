@@ -1,8 +1,8 @@
-#include <asset/gltf/gltf_material.h>
-#include <asset/texture/helper.h>
-#include <asset/texture/texture.h>
+#include <asset/gltf/asset_gltf_material.h>
+#include <asset/texture/asset_texture_helper.h>
+#include <asset/texture/asset_texture.h>
 #include <application/application.h>
-#include <asset/gltf/gltf.h>
+#include <asset/gltf/asset_gltf.h>
 #include <utils/job_system.h>
 
 namespace chord

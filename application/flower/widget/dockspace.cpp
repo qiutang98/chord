@@ -411,8 +411,9 @@ void ContentAssetImportWidget::onDrawState()
             {
 				for (uint32 i = 0; i < importConfigs.size(); i++)
 				{
-                    m_executeFutures.add(chord::jobsystem::launch(EJobFlags::None, [meta, config = importConfigs[i]]()
+                    m_executeFutures.add(chord::jobsystem::launch("ImportAssetFromConfig", EJobFlags::None, [meta, config = importConfigs[i]]()
                     {
+                        ZoneScopedN("ImportAssetFromConfig");
                         if (!meta->importConfig.importAssetFromConfig(config))
                         {
                             LOG_ERROR("Import asset from '{}' to '{}' failed.",

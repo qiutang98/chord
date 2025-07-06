@@ -47,6 +47,10 @@ namespace chord::graphics
 
 	bool AsyncUploaderBase::gpuTaskFinish() const
 	{
+		if (Application::get().getRuntimePeriod() >= ERuntimePeriod::BeforeReleasing)
+		{
+			return true;
+		}
 		return vkGetFenceStatus(getDevice(), m_fence) == VK_SUCCESS;
 	}
 
@@ -72,9 +76,9 @@ namespace chord::graphics
 			return;
 		}
 
-		m_dispatchJob = jobsystem::launch(EJobFlags::None, [this]()
+		m_dispatchJob = jobsystem::launch("AsyncUpload", EJobFlags::None, [this]()
 		{
-			ZoneScoped;
+			ZoneScopedN("AsyncUpload");
 
 			// Wait until all prev task job done.
 			jobsystem::busyWaitUntil([this]() { return gpuTaskFinish(); }, EBusyWaitType::All);

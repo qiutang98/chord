@@ -3,6 +3,8 @@
 #include <utils/mini_task.h>
 #include <utils/tagged_ptr.h>
 #include <utils/profiler.h>
+#include <utils/allocator.h>
+#include <utils/mpsc_queue.h>
 
 namespace chord
 {
@@ -11,56 +13,67 @@ namespace chord
 	{
 	private:
 		using TaggedPtr = TaggedPointer<MiniTask>;
+		using JobQueueType = MPSCQueue<TaggedPtr, MPSCQueueFreeListAllocator<TaggedPtr>>;
 		
 		//
-		mutable std::recursive_mutex m_mutex;
-		std::list<TaggedPtr> m_tasksTagged;
-
-		// 
+		JobQueueType m_queue;
 		uint16 m_brocastId = 0;
 
 	public:
 		~CallOnceEvents()
 		{
-			for (auto& taggedPtr : m_tasksTagged)
+			ZoneScoped;
+			TaggedPtr taggedPtr;
+			while (!m_queue.isEmpty())
 			{
-				taggedPtr.getPointer()->free(); // free avoid memory leak.
+				if (m_queue.dequeue(taggedPtr))
+				{
+					taggedPtr.getPointer()->free();
+				}
+				else
+				{
+					std::this_thread::yield();
+				}
 			}
 		}
 
 		void brocastAndFree(Args&&... args)
 		{
-			std::lock_guard<std::recursive_mutex> lock(m_mutex);
-
-			auto taskTaggedIter = m_tasksTagged.begin();
-			while (taskTaggedIter != m_tasksTagged.end())
+			ZoneScoped;
+			TaggedPtr taggedPtr;
+			while (!m_queue.isEmpty())
 			{
-				// Invoke marker step.
-				m_brocastId++;
-
-				//
-				TaggedPtr taggedPtr = *taskTaggedIter;
-				if (taggedPtr.getTag() == m_brocastId)
+				if (m_queue.getDequeue(taggedPtr))
 				{
-					continue; // Reach newly add one, so start next time loop.
+					if (taggedPtr.getTag() == m_brocastId)
+					{
+						// Reach newly add one, so start next time loop.
+						m_brocastId ++;
+						continue; 
+					}
+					else
+					{
+						assert(taggedPtr.getTag() + uint16(1) == m_brocastId);
+						assert(m_queue.dequeue(taggedPtr));
+
+						auto* task = taggedPtr.getPointer();
+						task->execute<void, Args...>(std::forward<Args>(args)...);
+						task->free();
+					}
 				}
 				else
 				{
-					auto* task = taggedPtr.getPointer();
-					task->execute<void, Args...>(std::forward<Args>(args)...);
-					task->free();
-					m_tasksTagged.erase(taskTaggedIter++);
+					std::this_thread::yield();
 				}
 			}
 
-			assert(m_tasksTagged.empty());
+			assert(m_queue.isEmpty());
 		}
 
 		template<typename Lambda>
 		void push_back(Lambda func)
 		{
-			std::lock_guard<std::recursive_mutex> lock(m_mutex);
-			m_tasksTagged.emplace_back(TaggedPtr(MiniTask::allocate(func), m_brocastId));
+			m_queue.enqueue(TaggedPtr(MiniTask::allocate(func), m_brocastId));
 		}
 	};
 
@@ -174,6 +187,7 @@ namespace chord
 	public:
 		~MultiDelegates()
 		{
+			ZoneScoped;
 			for (auto& taggedPtr : m_tasksTagged)
 			{
 				taggedPtr.getPointer()->free(); // free avoid memory leak.
@@ -183,6 +197,7 @@ namespace chord
 		template<typename Lambda> // RetType(Args...)
 		CHORD_NODISCARD EventHandle add(Lambda func)
 		{
+			ZoneScoped;
 			std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
 			m_tasksTagged.emplace_back(TaggedPtr(MiniTask::allocate(func), m_brocastId));
@@ -196,6 +211,7 @@ namespace chord
 		// Remove event.
 		CHORD_NODISCARD bool remove(EventHandle& handle)
 		{
+			ZoneScoped;
 			if (!handle.isValid())
 			{
 				return false;
@@ -221,6 +237,7 @@ namespace chord
 		// Check event handle is bound or not.
 		CHORD_NODISCARD bool isBound(const EventHandle& handle) const
 		{
+			ZoneScoped;
 			if (!handle.isValid())
 			{
 				return false;

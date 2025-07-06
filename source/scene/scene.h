@@ -5,9 +5,9 @@
 #include <shader/base.h>
 
 #include <renderer/atmosphere.h>
-#include <scene/manager/shadow.h>
-#include <scene/manager/ddgi.h>
-#include <scene/manager/postprocessing.h>
+#include <scene/manager/manager_shadow.h>
+#include <scene/manager/manager_ddgi.h>
+#include <scene/manager/manager_postprocessing.h>
 
 namespace chord
 {
@@ -41,9 +41,6 @@ namespace chord
 	public:
 		// Tick every frame.
 		void tick(const ApplicationTickData& tickData);
-
-		// Perview perframe collect.
-		void perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera);
 
 		// Get root node.
 		SceneNodeRef getRootNode() const

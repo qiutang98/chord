@@ -1,4 +1,4 @@
-#include "pmx.h"
+#include "asset_pmx.h"
 
 namespace chord
 {

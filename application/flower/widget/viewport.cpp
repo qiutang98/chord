@@ -2,6 +2,7 @@
 
 #include <ui/ui_helper.h>
 #include <utils/profiler.h>
+
 #include "../flower.h"
 
 using namespace chord::graphics;
@@ -44,6 +45,7 @@ void WidgetViewport::onInit()
 {
 	// Camera prepare.
 	m_camera = std::make_unique<ViewportCamera>(this);
+	Application::get().getEngine().getSubsystem<chord::SceneSubSystem>().registerCameraView(m_camera.get());
 
 	// Viewport renderer.
 	m_deferredRenderer = std::make_unique<DeferredRenderer>(std::format("Viewport#{} DeferredRenderer", m_index));
@@ -131,7 +133,21 @@ void WidgetViewport::onAfterTick(const ApplicationTickData& tickData)
 
 void WidgetViewport::onRelease()
 {
+	Application::get().getEngine().getSubsystem<chord::SceneSubSystem>().unregisterCameraView(m_camera.get());
 	m_deferredRenderer.reset();
+}
+
+
+// Event on widget visible state change from show to hide. sync on tick function first.
+void WidgetViewport::onHide(const chord::ApplicationTickData& tickData)
+{
+	m_camera->markInvisible();
+}
+
+// Event on widget show state change from hide to show.
+void WidgetViewport::onShow(const chord::ApplicationTickData& tickData)
+{
+	m_camera->markVisible();
 }
 
 void WidgetViewport::drawProfileViewer(uint32_t width, uint32_t height)

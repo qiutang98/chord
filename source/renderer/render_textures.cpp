@@ -19,6 +19,7 @@ namespace chord
 
     GBufferTextures chord::allocateGBufferTextures(uint32 width, uint32 height)
     {
+        ZoneScopedN("allocateGBufferTextures");
         using namespace graphics;
 
         GBufferTextures result { };

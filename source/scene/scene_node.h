@@ -1,7 +1,7 @@
 #pragma once
 
 #include <scene/scene_common.h>
-#include <scene/component/transform.h>
+#include <scene/component/component_transform.h>
 #include <utils/camera.h>
 
 namespace chord
@@ -18,9 +18,9 @@ namespace chord
 
         static SceneNodeRef create(const size_t id, const u16str& name, SceneRef scene);
         void tick(const ApplicationTickData& tickData);
-        void perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const;
+        void perviewPerframeCollect(PerframeCollected& collector, const ICamera* camera);
 
-        GPUObjectBasicData getObjectBasicData(const PerframeCameraView& cameraView, const ICamera* camera) const;
+
 
     public:
         const auto& getId() const { return m_id; }
@@ -68,7 +68,10 @@ namespace chord
         void setVisibility(bool bState) { setVisibilityImpl(bState, false); }
         void setStatic(bool bState) { setStaticImpl(bState, false); }
 
+        const GPUObjectBasicData& getActiveViewGPUObjectBasicData() const { return viewRelative.objectData; }
+
     private:
+        GPUObjectBasicData getObjectBasicData(const ICamera* camera) const;
         void addChild(SceneNodeRef child);
 
         void removeChild(SceneNodeRef o);
@@ -95,6 +98,13 @@ namespace chord
         void setStaticImpl(bool bState, bool bForce);
 
         void postLoad();
+
+    private:
+        struct
+        {
+            // Store view relative object basic data.
+            GPUObjectBasicData objectData;
+        } viewRelative;
 
     private:
         // This node visibility state.

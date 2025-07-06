@@ -199,8 +199,9 @@ namespace chord::graphics
 			tasks->batches.push_back(std::move(compileBatch));
 		}
 
-		compilerFutures.add(jobsystem::launch(EJobFlags::Foreground, [tasks]()
+		compilerFutures.add(jobsystem::launch("ShaderCompiler", EJobFlags::Foreground, [tasks]()
 		{
+			ZoneScopedN("ShaderCompiler");
 			const auto& platformCompiler = getContext().getShaderCompiler().getPlatformCompiler();
 			std::vector<char> shaderSrcFileData {};
 			for (auto& batch : tasks->batches)

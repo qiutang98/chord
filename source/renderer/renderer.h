@@ -9,7 +9,7 @@
 #include <graphics/buffer_pool.h>
 #include <renderer/postprocessing/postprocessing.h>
 #include <renderer/atmosphere.h>
-#include <scene/manager/shadow.h>
+#include <scene/manager/manager_shadow.h>
 
 namespace chord
 {

@@ -1,8 +1,8 @@
 #include <ui/ui_helper.h>
 #include <ui/imgui/imgui_internal.h>
 #include <asset/asset_common.h>
-#include <asset/texture/helper.h>
-#include <asset/texture/texture.h>
+#include <asset/texture/asset_texture_helper.h>
+#include <asset/texture/asset_texture.h>
 #include <graphics/graphics.h>
 
 namespace chord::ui
@@ -33,7 +33,8 @@ namespace chord::ui
 		return ImGui::TreeNodeBehavior(window->GetID(idLabel), flags, showlabel, NULL);
 	}
 
-	bool ui::drawDVector3(const std::string& label, math::dvec3& values, const math::dvec3& resetValue, float labelWidth)
+	template<typename T>
+	bool drawTVector3(const std::string& label, T& values, const T& resetValue, float labelWidth)
 	{
 		constexpr const char* kResetIcon = ICON_FA_REPLY;
 		const auto srcData = values;
@@ -78,7 +79,7 @@ namespace chord::ui
 				ImGui::SameLine();
 				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
 
-		
+
 				ImGui::DragScalar("##X", ImGuiDataType_Double, &values.x, 0.1f, nullptr, nullptr, "%.2f");
 				ImGui::PopItemWidth();
 
@@ -87,7 +88,7 @@ namespace chord::ui
 			ImGui::TableNextColumn();
 			// Y
 			{
-				
+
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.3f, 0.6f, 0.2f, 0.15f });
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.3f, 0.6f, 0.2f, 1.0f });
 				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.9f, 0.9f, 0.9f, 1.0f });
@@ -142,6 +143,16 @@ namespace chord::ui
 		ImGui::PopID();
 
 		return srcData != values;
+	}
+
+	bool ui::drawDVector3(const std::string& label, math::dvec3& values, const math::dvec3& resetValue, float labelWidth)
+	{
+		return drawTVector3<math::dvec3>(label, values, resetValue, labelWidth);
+	}
+
+	bool drawVector3(const std::string& label, math::vec3& values, const math::vec3& resetValue, float labelWidth)
+	{
+		return drawTVector3<math::vec3>(label, values, resetValue, labelWidth);
 	}
 
 	void ui::helpMarker(const char* desc)

@@ -126,6 +126,12 @@ protected:
 	// event release.
 	virtual void onRelease() override;
 
+	// Event on widget visible state change from show to hide. sync on tick function first.
+	virtual void onHide(const chord::ApplicationTickData& tickData) override;
+
+	// Event on widget show state change from hide to show.
+	virtual void onShow(const chord::ApplicationTickData& tickData) override;
+
 public:
 	// Get renderer dimension.
 	float getRenderWidth() const 

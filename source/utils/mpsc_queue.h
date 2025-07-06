@@ -65,7 +65,7 @@ namespace chord
         ~MPSCQueue()
         {
             T temp;
-            while (dequeue(temp)) { }
+            while (dequeue(temp)) {}
 
             assert(m_enqueuePos.load(std::memory_order_relaxed) == m_dequeuePos);
             freeNode(m_dequeuePos);

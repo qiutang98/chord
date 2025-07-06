@@ -2,7 +2,7 @@
 
 #include <utils/utils.h>
 #include <asset/meshoptimizer/meshoptimizer.h>
-#include <asset/gltf/gltf.h>
+#include <asset/gltf/asset_gltf.h>
 #include <shader/gltf.h>
 
 namespace chord::nanite

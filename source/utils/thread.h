@@ -2,44 +2,91 @@
 #include <utils/utils.h>
 #include <utils/mpsc_queue.h>
 #include <utils/job_system.h>
+#include <utils/mini_task.h>
 
 namespace chord
 {
 	class ThreadContext
 	{
-	private:
-		using CallBackFunc = std::function<void()>;
-		MPSCQueue<CallBackFunc, MPSCQueueHeapAllocator<CallBackFunc>> m_callbacks;
+	protected:
+		using TaggedTask = TaggedPointer<MiniTask>;
+		using JobQueueType = MPSCQueue<TaggedTask, MPSCQueueFreeListAllocator<TaggedTask>>;
 
+		JobQueueType m_queue;
 		std::wstring m_name;
-		std::thread::id m_thradId;
 
+		std::atomic<uint16> m_producingId =  0;
+		std::atomic<uint16> m_consumingId = -1;
+
+		std::thread::id m_thradId;
+		void flush();
 		ThreadContext(const std::wstring& name)
 			: m_name(name)
 		{
 
 		}
 
-		void flush();
-
 	public:
-		static ThreadContext& main();
+		static constexpr uint32 kPersistentHighLevelThreadCount = 2; // MainThread + RenderThread
 
 		void init();
-		void tick(uint64 frameIndex);
 		void beforeRelease();
 		void release();
 
-		bool isInThread(std::thread::id id);
+		bool isInThread(std::thread::id id) const;
 
 		// Push task need sync in tick.
-		void pushAnyThread(std::function<void()>&& task); 
+		template<typename Lambda>
+		void pushAnyThread(Lambda&& task)
+		{
+			m_queue.enqueue(TaggedTask(MiniTask::allocate(task), m_producingId));
+		}
 	};
 
-	// Main thread: Engine record vulkan command, submit, present thread.
-	//              Almost vulkan operation work here.
+	class MainThread : public ThreadContext
+	{
+	private:
+		std::atomic<uint64> m_mainThreadFrameId = 0;
+
+		MainThread(const std::wstring& name)
+			: ThreadContext(name)
+		{
+
+		}
+
+		void waitForRenderThreadFinish() const;
+	public:
+		static MainThread& get();
+
+		uint64 getFrameId() const { return m_mainThreadFrameId; }
+		void tick();
+	};
+
+	class RenderThread : public ThreadContext
+	{
+	private:
+		uint64 m_renderThreadFrameId = 0;
+		std::vector<ResourceRef> m_pendingRenderingResource[2];
+
+		RenderThread(const std::wstring& name)
+			: ThreadContext(name)
+		{
+
+		}
+
+		void waitForMainThreadTask() const;
+
+
+	public:
+		static RenderThread& get();
+
+		void tick();
+		uint64 getFrameId() const { return m_renderThreadFrameId; }
+	};
+
 	extern bool isInMainThread();
+	extern bool isInRenderThread();
 
 	// Enqueue one command in main thread, execute in next tick.
-	#define ENQUEUE_MAIN_COMMAND(...) ThreadContext::main().pushAnyThread(__VA_ARGS__)
+	#define ENQUEUE_MAIN_COMMAND(...) MainThread::get().pushAnyThread(__VA_ARGS__)
 }

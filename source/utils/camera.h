@@ -89,7 +89,13 @@ namespace chord
 
 		const auto& getFront() const { return m_front; }
 
+		void markVisible() { m_bVisible = true; }
+		void markInvisible() { m_bVisible = false; }
+		bool isVisible() const { return m_bVisible; }
+
 	protected:
+		bool m_bVisible = false;
+
 		// world space position.
 		math::dvec3 m_position = { 25.0f, 25.0f, 25.0f };
 		math::dvec3 m_positionLast = { 25.0f, 25.0f, 25.0f };

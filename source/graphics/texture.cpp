@@ -28,6 +28,7 @@ namespace chord::graphics
 		: GPUResource(name, 0)
 		, m_createInfo(createInfo)
 	{
+		ZoneScoped;
 		VmaAllocationCreateInfo copyVMAInfo = vmaCreateInfo;
 		copyVMAInfo.pUserData = (void*)getName().c_str();
 

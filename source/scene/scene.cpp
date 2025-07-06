@@ -3,8 +3,7 @@
 #include <asset/asset.h>
 #include <asset/asset_common.h>
 #include <asset/serialize.h>
-
-
+#include <scene/scene_subsystem.h>
 
 namespace chord
 {
@@ -107,21 +106,38 @@ namespace chord
 
 	void Scene::tick(const ApplicationTickData& tickData)
 	{
+		ZoneScopedN("Scene Tick");
+
+		auto& sceneSubSystem = Application::get().getEngine().getSubsystem<SceneSubSystem>();
 		m_atmosphereManager->update(tickData);
 
+		// Pre nodes tick
+		sceneSubSystem.loopRegisterCamera([](const ICamera* camera, PerframeCollected& collector)
+		{
+			collector.clear();
+		});
+
 		// All node tick.
-		loopNodeTopToDown([tickData](SceneNodeRef node)
+		loopNodeTopToDown([tickData, &sceneSubSystem](SceneNodeRef node)
 		{
 			node->tick(tickData);
+			sceneSubSystem.loopRegisterCamera([node](const ICamera* camera, PerframeCollected& collector)
+			{
+				node->perviewPerframeCollect(collector, camera);
+			});
 		}, m_root);
-	}
 
-	void Scene::perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera)
-	{
-		loopNodeTopToDown([&](SceneNodeRef node)
+		// Post node tick.
+		sceneSubSystem.loopRegisterCamera([](const ICamera* camera, PerframeCollected& collector)
 		{
-			node->perviewPerframeCollect(collector, cameraView, camera);
-		}, m_root);
+			if(collector.builtinMeshInstances.size() > 1)
+			{
+				std::ranges::sort(collector.builtinMeshInstances, [](const auto& a, const auto& b)
+				{
+					return a.mesh->meshTypeUniqueId < b.mesh->meshTypeUniqueId;
+				});
+			}
+		});
 	}
 
 	void Scene::deleteNode(SceneNodeRef node)

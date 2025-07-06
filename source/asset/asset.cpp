@@ -1,8 +1,8 @@
 #include <asset/asset.h>
 #include <project.h>
-#include <asset/texture/texture.h>
+#include <asset/texture/asset_texture.h>
 #include <asset/serialize.h>
-#include <asset/gltf/gltf.h>
+#include <asset/gltf/asset_gltf.h>
 
 namespace chord
 {

@@ -1,6 +1,6 @@
 #pragma once
 #include <graphics/common.h>
-#include <list>
+#include <utils/mpsc_queue.h>
 #include <graphics/resource.h>
 #include <graphics/buffer_pool.h>
 #include <graphics/texture_pool.h>

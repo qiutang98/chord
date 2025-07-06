@@ -19,19 +19,16 @@
 #include <scene/scene.h>
 #include <scene/scene_subsystem.h>
 #include <scene/scene_node.h>
-#include <scene/component/gltf_mesh.h>
-#include <scene/component/transform.h>
+#include <scene/component/component_gltf_mesh.h>
+#include <scene/component/component_transform.h>
 #include <project.h>
-#include <asset/pmx/pmx_importer.h>
-#include <asset/gltf/gltf.h>
-#include <asset/gltf/gltf_helper.h>
-#include <asset/texture/texture.h>
+#include <asset/pmx/asset_pmx_importer.h>
+#include <asset/gltf/asset_gltf.h>
+#include <asset/gltf/asset_gltf_helper.h>
+#include <asset/texture/asset_texture.h>
 #include <renderer/renderer.h>
 #include <utils/allocator.h>
-#include <scene/component/gltf_material.h>
-#include <scene/component/sky.h>
-
-#include <world/world.h>
-#include <world/world_subsystem.h>
+#include <scene/component/component_gltf_material.h>
+#include <scene/component/component_sky.h>
 
 constexpr chord::uint32 kMultiWidgetMaxNum = 4;

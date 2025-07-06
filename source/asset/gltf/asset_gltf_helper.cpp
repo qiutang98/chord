@@ -1,5 +1,5 @@
-#include <asset/gltf/gltf_helper.h>
-#include <asset/gltf/gltf.h>
+#include <asset/gltf/asset_gltf_helper.h>
+#include <asset/gltf/asset_gltf.h>
 #include <asset/asset_common.h>
 
 #include <asset/asset.h>
@@ -19,7 +19,7 @@
 #include <utils/cityhash.h>
 
 #include <asset/nanite_builder.h>
-#include <asset/gltf/gltf_material.h>
+#include <asset/gltf/asset_gltf_material.h>
 
 namespace chord
 {

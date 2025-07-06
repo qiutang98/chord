@@ -30,20 +30,20 @@ namespace chord
         }
     }
 
-    void SceneNode::perviewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const
+    void SceneNode::perviewPerframeCollect(PerframeCollected& collector, const ICamera* camera)
     {
+        viewRelative.objectData = getObjectBasicData(camera);
         for (auto& comp : m_components)
         {
-            comp.second->onPerViewPerframeCollect(collector, cameraView, camera);
+            comp.second->onPerViewPerframeCollect(collector, camera);
         }
     }
 
-    GPUObjectBasicData SceneNode::getObjectBasicData(const PerframeCameraView& cameraView, const ICamera* camera) const
+    GPUObjectBasicData SceneNode::getObjectBasicData(const ICamera* camera) const
     {
         GPUObjectBasicData data { };
 
         math::dmat4 localToWorld = getTransform()->getWorldMatrix();
-
 
         // Local2TranslatedWorld
         {

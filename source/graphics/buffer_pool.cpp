@@ -108,6 +108,7 @@ namespace chord::graphics
 		VkBufferCreateFlags flags,
 		bool bSameFrameReuse)
 	{
+		ZoneScopedN("CreateGPUOnlyPoolBuffer");
 		std::lock_guard lock(m_mutex);
 
 		

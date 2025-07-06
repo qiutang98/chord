@@ -12,7 +12,7 @@
 #include <renderer/graphics_pass.h>
 #include <shader/base.h>
 #include <renderer/postprocessing/postprocessing.h>
-#include <scene/manager/shadow.h>
+#include <scene/manager/manager_shadow.h>
 #include <renderer/renderer.h>
 #include <shader/cascade_setup.hlsl>
 

@@ -1,5 +1,5 @@
-#include <asset/gltf/gltf.h>
-#include <asset/gltf/gltf_helper.h>
+#include <asset/gltf/asset_gltf.h>
+#include <asset/gltf/asset_gltf_helper.h>
 #include <asset/serialize.h>
 #include <renderer/gpu_scene.h>
 #include <shader/base.h>
@@ -16,7 +16,8 @@ namespace chord
 
 	bool GLTFAsset::isGPUPrimitivesStreamingReady() const
 	{
-		if (auto cache = m_gpuPrimitives.lock())
+		std::lock_guard lock(anyThread.mutex);
+		if (auto cache = anyThread.gpuPrimitives.lock())
 		{
 			return cache->isReady();
 		}
@@ -28,7 +29,9 @@ namespace chord
 	{
 		using namespace graphics;
 
-		if (auto cache = m_gpuPrimitives.lock())
+		std::lock_guard lock(anyThread.mutex);
+
+		if (auto cache = anyThread.gpuPrimitives.lock())
 		{
 			return cache;
 		}
@@ -209,7 +212,7 @@ namespace chord
 				newGPUPrimitives->buildBLAS();
 			});
 
-		m_gpuPrimitives = newGPUPrimitives;
+		anyThread.gpuPrimitives = newGPUPrimitives;
 		return newGPUPrimitives;
 	}
 
@@ -252,7 +255,8 @@ namespace chord
 
 	GLTFMaterialProxyRef GLTFMaterialAsset::getProxy()
 	{
-		if (auto proxy = m_proxy.lock())
+		std::lock_guard lock(anyThread.mutex);
+		if (auto proxy = anyThread.proxy.lock())
 		{
 			return proxy;
 		}
@@ -261,7 +265,7 @@ namespace chord
 		auto proxy = std::make_shared<GLTFMaterialProxy>(assetPtr);
 		GLTFMaterialProxy::init(proxy);
 
-		m_proxy = proxy;
+		anyThread.proxy = proxy;
 		return proxy;
 	}
 

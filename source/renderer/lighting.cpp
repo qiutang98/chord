@@ -7,7 +7,7 @@
 #include <renderer/lighting.h>
 #include <shader/lighting.hlsl>
 #include <shader/pcss.hlsl>
-#include <scene/manager/shadow.h>
+#include <scene/manager/manager_shadow.h>
 #include <shader/blur3x3.hlsl>
 #include <shader/half_downsample.hlsl>
 #include <shader/disocclusion_mask.hlsl>

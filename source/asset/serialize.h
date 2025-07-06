@@ -1,15 +1,15 @@
 #pragma once
 
 #include <asset/asset.h>
-#include <asset/texture/texture.h>
+#include <asset/texture/asset_texture.h>
 
 #include <scene/scene.h>
 #include <scene/component.h>
 #include <scene/scene_node.h>
-#include <asset/gltf/gltf.h>
-#include <scene/component/gltf_mesh.h>
-#include <scene/component/gltf_material.h>
-#include <scene/component/sky.h>
+#include <asset/gltf/asset_gltf.h>
+#include <scene/component/component_gltf_mesh.h>
+#include <scene/component/component_gltf_material.h>
+#include <scene/component/component_sky.h>
 #include <shader/base.h>
 #include <renderer/atmosphere.h>
 

@@ -10,7 +10,7 @@ namespace chord::test::job_system
 	{
 		jobsystem::init();
 
-		jobsystem::launchSilently(
+		jobsystem::launchSilently("HelloWorld",
 			EJobFlags::Foreground, []()
 			{
 				LOG_TRACE("Job system say hello world!");
@@ -20,7 +20,7 @@ namespace chord::test::job_system
 		{
 
 
-			auto taskEventA = jobsystem::launch(EJobFlags::Foreground, []()
+			auto taskEventA = jobsystem::launch("A", EJobFlags::Foreground, []()
 			{
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				LOG_TRACE("Task A.");
@@ -29,21 +29,21 @@ namespace chord::test::job_system
 			std::vector<JobDependencyRef> taskBEvents { };
 			for (int32 i = 0; i < 10; i++)
 			{
-				taskBEvents.push_back(jobsystem::launch(EJobFlags::Foreground, [i]()
+				taskBEvents.push_back(jobsystem::launch("B", EJobFlags::Foreground, [i]()
 				{
 					std::this_thread::sleep_for(std::chrono::milliseconds(i * 10));
 					LOG_TRACE("Task B#{}.", i);
 				}, { taskEventA }));
 			}
 
-			auto waitEvent = jobsystem::launch(EJobFlags::Foreground, []()
+			auto waitEvent = jobsystem::launch("C", EJobFlags::Foreground, []()
 			{
 				LOG_TRACE("Task C.");
 			}, taskBEvents);
 
 			for (int32 i = 0; i < 32; i++)
 			{
-				waitEvent = jobsystem::launch(EJobFlags::Foreground, [i]()
+				waitEvent = jobsystem::launch("D", EJobFlags::Foreground, [i]()
 				{
 					std::this_thread::sleep_for(std::chrono::milliseconds(i));
 					LOG_TRACE("Sequential Task D#{}.", i);

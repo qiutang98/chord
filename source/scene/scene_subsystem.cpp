@@ -1,10 +1,10 @@
 #include <scene/scene_subsystem.h>
 #include <asset/asset.h>
 #include <project.h>
-#include <scene/component/gltf_mesh.h>
-#include <scene/component/transform.h>
-#include <scene/component/gltf_material.h>
-#include <scene/component/sky.h>
+#include <scene/component/component_gltf_mesh.h>
+#include <scene/component/component_transform.h>
+#include <scene/component/component_gltf_material.h>
+#include <scene/component/component_sky.h>
 
 namespace chord
 {

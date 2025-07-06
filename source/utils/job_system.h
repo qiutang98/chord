@@ -4,6 +4,9 @@
 #include <utils/work_stealing_queue.h>
 #include <utils/intrusive_ptr.h>
 #include <utils/profiler.h>
+#include <utils/thread.h>
+
+#define JOB_SYSTEM_DEBUG_NAME CHORD_DEBUG
 
 namespace chord
 {
@@ -55,6 +58,9 @@ namespace chord::jobsystem
 		std::atomic<uint16> parentCounter;       // 2  ... 62
 		std::atomic<EJobState> jobState;         // 1  ... 63
 		EJobFlags flags;                         // 1  ... 64
+	#if JOB_SYSTEM_DEBUG_NAME
+		const char* debugName;
+	#endif 
 
 		explicit Job(EJobFlags inFlags)
 		{
@@ -70,7 +76,6 @@ namespace chord::jobsystem
 		void* operator new(size_t size);
 		void  operator delete(void* rawMemory);
 	};
-	static_assert(sizeof(Job) == kCpuCachelineSize);
 
 	struct JobChildLinkList : NonCopyable
 	{
@@ -180,14 +185,18 @@ namespace chord::jobsystem
 		return job;
 	}
 
-	template<typename Lambda>
-	inline void launchSilently(EJobFlags flags, Lambda function, const std::vector<JobDependencyRef>& parents = {})
+	static inline void runJobWithDependency(Job* job, const std::vector<JobDependencyRef>& parents)
 	{
-		Job* job = createJob<Lambda>(flags, std::move(function));
 		for (auto& parent : parents)
 		{
-			std::lock_guard lock(parent->mutex);
-			if (parent->bFinish)
+			if (parent == nullptr) { continue; }
+			parent->mutex.lock();
+		}
+
+		bool bExistParent = false;
+		for (auto& parent : parents)
+		{
+			if (!parent || parent->bFinish)
 			{
 				continue;
 			}
@@ -199,47 +208,43 @@ namespace chord::jobsystem
 
 			// New parent.
 			job->parentCounter.fetch_add(1, std::memory_order_seq_cst);
+			bExistParent = true;
 		}
 
-		if (job->parentCounter == 0)
+		for (auto& parent : parents)
+		{
+			if (parent == nullptr) { continue; }
+			parent->mutex.unlock();
+		}
+
+		if (!bExistParent)
 		{
 			run(job);
 		}
 	}
 
 	template<typename Lambda>
-	inline JobDependencyRef launch(EJobFlags flags, Lambda function, const std::vector<JobDependencyRef>& parents = {})
+	inline void launchSilently(const char* debugName, EJobFlags flags, Lambda function, const std::vector<JobDependencyRef>& parents = {})
 	{
 		Job* job = createJob<Lambda>(flags, std::move(function));
+	#if JOB_SYSTEM_DEBUG_NAME
+		job->debugName = debugName;
+	#endif 
+
+		runJobWithDependency(job, parents);
+	}
+
+	template<typename Lambda>
+	inline JobDependencyRef launch(const char* debugName, EJobFlags flags, Lambda function, const std::vector<JobDependencyRef>& parents = {})
+	{
+		Job* job = createJob<Lambda>(flags, std::move(function));
+	#if JOB_SYSTEM_DEBUG_NAME
+		job->debugName = debugName;
+	#endif 
 		JobDependencyRef eventRef = JobDependencyRef::create();
 		eventRef->intrusive_ptr_counter_addRef();
 		assignDependencyToJob(*job, *eventRef);
-
-		for (auto& parent : parents)
-		{
-			if (parent == nullptr)
-			{
-				continue;
-			}
-			std::lock_guard lock(parent->mutex);
-			if (parent->bFinish)
-			{
-				continue;
-			}
-
-			JobChildLinkList* child = new JobChildLinkList();
-			child->job = job;
-			child->next = parent->children;
-			parent->children = child;
-
-			// New parent.
-			job->parentCounter.fetch_add(1, std::memory_order_seq_cst);
-		}
-
-		if (job->parentCounter == 0)
-		{
-			run(job);
-		}
+		runJobWithDependency(job, parents);
 		return eventRef;
 	}
 
@@ -275,9 +280,8 @@ namespace chord::jobsystem
 			uint32 loopEnd = std::min(loopStart + perWorkerJobCount, count);
 
 			dispatchTaskCount += perWorkerJobCount;
-			futures.push_back(launch(flags, [loopStart, loopEnd, &body]()
+			futures.push_back(launch(debugName, flags, [loopStart, loopEnd, &body]()
 			{
-				ZoneScopedN(body.debugName);
 				body.func(loopStart, loopEnd);
 			}));
 		}

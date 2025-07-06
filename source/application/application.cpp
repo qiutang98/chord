@@ -11,8 +11,8 @@
 #include <asset/asset.h>
 #include <graphics/uploader.h>
 #include <renderer/gpu_scene.h>
-#include <asset/gltf/gltf.h>
-#include <asset/gltf/gltf_helper.h>
+#include <asset/gltf/asset_gltf.h>
+#include <asset/gltf/asset_gltf_helper.h>
 #include <utils/job_system.h>
 #include <utils/profiler.h>
 
@@ -107,7 +107,7 @@ namespace chord
         check(!m_bInit);
         m_runtimePeriod = ERuntimePeriod::Initing;
 
-        ThreadContext::main().init();
+        MainThread::get().init();
 
         // GLFW init.
         if (glfwInit() != GLFW_TRUE)
@@ -161,7 +161,7 @@ namespace chord
         };
         setConsoleFont(fontTypes);
 
-        constexpr int32 kLeftFreeCore = 1;
+        constexpr int32 kLeftFreeCore = ThreadContext::kPersistentHighLevelThreadCount;
         jobsystem::init(kLeftFreeCore);
 
         // Create main window.
@@ -236,7 +236,7 @@ namespace chord
             sFrameCounter = m_tickData.tickCount;
 
             // Flush sync event in main.
-            ThreadContext::main().tick(m_tickData.tickCount);
+            MainThread::get().tick();
 
             m_windowData.bContinue &= m_engine->tick(m_tickData);
 
@@ -283,7 +283,7 @@ namespace chord
         m_context.beforeRelease();
 
         // Flush sync event in main thread.
-        ThreadContext::main().beforeRelease();
+        MainThread::get().beforeRelease();
 
         m_runtimePeriod = ERuntimePeriod::Releasing;
 
@@ -302,7 +302,7 @@ namespace chord
         m_context.release();
 
         // Flush sync event in main.
-        ThreadContext::main().release();
+        MainThread::get().release();
 
         // Destroy window.
         glfwDestroyWindow(m_windowData.window);

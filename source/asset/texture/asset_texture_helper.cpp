@@ -1,7 +1,7 @@
 #include <asset/serialize.h>
-#include <asset/texture/helper.h>
+#include <asset/texture/asset_texture_helper.h>
 #include <ui/ui_helper.h>
-#include <asset/texture/texture.h>
+#include <asset/texture/asset_texture.h>
 #include <asset/asset.h>
 #include <application/application.h>
 #include <project.h>

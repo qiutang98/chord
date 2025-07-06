@@ -12,7 +12,7 @@
 #include <renderer/graphics_pass.h>
 #include <shader/base.h>
 #include <renderer/postprocessing/postprocessing.h>
-#include <scene/manager/shadow.h> 
+#include <scene/manager/manager_shadow.h> 
 #include <renderer/renderer.h>
 #include <shader/builtin_mesh_draw.hlsl>
 
@@ -27,7 +27,7 @@ namespace chord
 
 	void chord::debugDrawBuiltinMesh(
 		graphics::GraphicsQueue& queue, 
-		std::vector<BuiltinMeshDrawInstance>& instances, 
+		const std::vector<BuiltinMeshDrawInstance>& instances, 
 		uint32 cameraViewId,
 		graphics::PoolTextureRef depthImage, 
 		graphics::PoolTextureRef outImage)
@@ -35,11 +35,6 @@ namespace chord
 		using namespace graphics;
 
 		ScopePerframeMarker marker(queue, "BuiltinInstanceMeshDraw");
-
-		std::ranges::sort(instances, [](const auto& a, const auto& b)
-		{
-			return a.mesh->meshTypeUniqueId < b.mesh->meshTypeUniqueId;
-		});
 
 		BuiltinMeshDrawPushConst pushConsts{};
 		pushConsts.cameraViewId = cameraViewId;

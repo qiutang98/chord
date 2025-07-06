@@ -5,7 +5,7 @@
 #include <graphics/buffer_pool.h>
 
 #include <shader/gltf.h>
-#include <asset/gltf/gltf.h>
+#include <asset/gltf/asset_gltf.h>
 
 #include <renderer/render_helper.h>
 

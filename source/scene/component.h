@@ -27,7 +27,7 @@ namespace chord
 		virtual void postLoad() { }
 
 		// Perview collect.
-		virtual void onPerViewPerframeCollect(PerframeCollected& collector, const PerframeCameraView& cameraView, const ICamera* camera) const { }
+		virtual void onPerViewPerframeCollect(PerframeCollected& collector, const ICamera* camera) const { }
 		// ~Component Interface.
 		
 		// Change owner node.
