@@ -241,6 +241,7 @@ namespace chord
         graphics::PoolBufferGPUOnlyRef inCmdBuffer, 
         CountAndCmdBuffer& outBuffer)
     {
+        ZoneScoped;
         using namespace graphics;
 
         const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;

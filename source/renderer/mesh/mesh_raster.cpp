@@ -169,6 +169,7 @@ namespace chord::graphics
         PoolBufferGPUOnlyRef inCmdBuffer,
         PoolBufferGPUOnlyRef inCountBuffer)
     {
+        ZoneScoped;
         auto& pool = getContext().getBufferPool();
         const uint lod0MeshletCount = renderCtx.perframeCollect->gltfLod0MeshletCount;
 
@@ -367,6 +368,7 @@ chord::CascadeShadowContext chord::renderShadow(
 
     auto updateCascade = [&](int32 cascadeId)
     {
+        ZoneScopedN("UpdateCascade");
         if (bCacheValid)
         {
             resultCtx.depths[cascadeId] = cascadeHistory.depths[cascadeId];
@@ -445,6 +447,7 @@ chord::CascadeShadowContext chord::renderShadow(
     int32 prevCascadeId;
     for (int32 cascadeId = config.cascadeConfig.cascadeCount - 1; cascadeId >= 0; cascadeId--)
     {
+        ZoneScopedN("RenderCascade");
         if (!isCascadeCacheValidGPU(cascadeId))
         {
             chord::CountAndCmdBuffer countAndCmdBuffers = {};

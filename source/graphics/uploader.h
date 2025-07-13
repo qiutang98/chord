@@ -157,9 +157,11 @@ namespace chord::graphics
 		bool isReady()   const { return !m_bLoading; }
 
 		// Set async load state.
-		void setLoadingState(bool bState)
+		void setLoadingReady()
 		{
-			m_bLoading = bState;
+			check(m_bLoading == true);
+			m_bLoading = false;
+
 		}
 
 		template<typename T>
@@ -201,7 +203,7 @@ namespace chord::graphics
 			, m_texture(texture)
 		{
 			// Set loading state ready.
-			setLoadingState(false);
+			setLoadingReady();
 		}
 
 		virtual ~GPUTextureAsset();

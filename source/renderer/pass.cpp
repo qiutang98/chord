@@ -18,6 +18,7 @@ namespace chord
 		RenderTargets RTs, 
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		ZoneScoped;
 		using namespace graphics;
 
 		auto& cmd = queue.getActiveCmd()->commandBuffer;
@@ -42,6 +43,7 @@ namespace chord
 		math::uvec3 dispatchParameter,
 		std::function<void(graphics::GraphicsOrComputeQueue& queue, graphics::ComputePipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		ZoneScoped;
 		using namespace graphics;
 
 		queue.checkRecording();
@@ -62,6 +64,7 @@ namespace chord
 		VkDeviceSize offset,
 		std::function<void(graphics::GraphicsOrComputeQueue& queue, graphics::ComputePipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		ZoneScoped;
 		using namespace graphics;
 
 		queue.checkRecording();
@@ -83,6 +86,7 @@ namespace chord
 		RenderTargets& RTs, 
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		ZoneScoped;
 		using namespace graphics;
 
 		queue.checkRecording();
@@ -110,6 +114,7 @@ namespace chord
 		uint32 drawCount,
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		ZoneScoped;
 		using namespace graphics;
 
 		queue.checkRecording();
@@ -140,6 +145,7 @@ namespace chord
 		uint32_t stride, 
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		ZoneScoped;
 		using namespace graphics;
 
 		queue.checkRecording();
@@ -167,6 +173,7 @@ namespace chord
 		uint32_t maxDrawCount, uint32_t stride,
 		std::function<void(graphics::GraphicsQueue& queue, graphics::GraphicsPipelineRef pipe, VkCommandBuffer cmd)>&& lambda)
 	{
+		ZoneScoped;
 		using namespace graphics;
 
 		queue.checkRecording();

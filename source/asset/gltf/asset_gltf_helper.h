@@ -4,6 +4,7 @@
 #include <asset/asset_common.h>
 #include <shader/gltf.h>
 #include <graphics/helper.h>
+#include <scene/scene_common.h>
 
 namespace chord
 {
@@ -45,6 +46,8 @@ namespace chord
 			return (uint64(meshId) << 32) | uint64(primitiveId);
 		}
 	};
+
+	class GLTFAsset;
 
 	// Mesh primitive asset upload to gpu. Remap to GLTFPrimitiveDatasBuffer.
 	// GPU proxy of gltf primitive.
@@ -90,13 +93,19 @@ namespace chord
 
 		bool isBLASInit() const 
 		{ 
-			return m_blasBuilder.isInit(); 
+			return m_blasBuilder.isInit() && (!m_cacheBLASInstances.empty());
 		}
 
 		// Return BLAS cache, if it unbuild, will insert one build task to GPU, which need flush GPU.
 		const VkDeviceAddress getBLASDeviceAddress(uint32 meshId, uint32 primitiveId) const;
 
 		void buildBLAS();
+		void buildCacheBLASInstances(std::shared_ptr<GLTFAsset> asset);
+
+		const AccelerationStructureInstanceCollector& getBLASInstanceCollector(size_t meshId) const
+		{
+			return m_cacheBLASInstances.at(meshId);
+		}
 
 	private:		
 		uint32 m_gpuSceneGLTFPrimitiveAssetId = -1;
@@ -108,6 +117,9 @@ namespace chord
 		// Every mesh asset hold one bottom level accelerate structure.
 		graphics::helper::BLASBuilder m_blasBuilder;
 		std::unordered_map<uint64, uint32> m_meshPrimIdMap;
+
+		//
+		std::vector<AccelerationStructureInstanceCollector> m_cacheBLASInstances;
 	};
 	using GPUGLTFPrimitiveAssetWeak = std::weak_ptr<GPUGLTFPrimitiveAsset>;
 	using GPUGLTFPrimitiveAssetRef  = std::shared_ptr<GPUGLTFPrimitiveAsset>;

@@ -140,7 +140,7 @@ namespace chord
 			},
 			[newGPUTexture, afterLoadingCallback]()
 			{
-				newGPUTexture->setLoadingState(false);
+				newGPUTexture->setLoadingReady();
 
 				if (afterLoadingCallback)
 				{

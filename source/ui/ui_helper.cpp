@@ -33,7 +33,7 @@ namespace chord::ui
 		return ImGui::TreeNodeBehavior(window->GetID(idLabel), flags, showlabel, NULL);
 	}
 
-	template<typename T>
+	template<typename T, ImGuiDataType DataType>
 	bool drawTVector3(const std::string& label, T& values, const T& resetValue, float labelWidth)
 	{
 		constexpr const char* kResetIcon = ICON_FA_REPLY;
@@ -80,7 +80,7 @@ namespace chord::ui
 				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
 
 
-				ImGui::DragScalar("##X", ImGuiDataType_Double, &values.x, 0.1f, nullptr, nullptr, "%.2f");
+				ImGui::DragScalar("##X", DataType, &values.x, 0.1f, nullptr, nullptr, "%.2f");
 				ImGui::PopItemWidth();
 
 			}
@@ -101,7 +101,7 @@ namespace chord::ui
 
 				ImGui::SameLine();
 				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
-				ImGui::DragScalar("##Y", ImGuiDataType_Double, &values.y, 0.1f, nullptr, nullptr, "%.2f");
+				ImGui::DragScalar("##Y", DataType, &values.y, 0.1f, nullptr, nullptr, "%.2f");
 				ImGui::PopItemWidth();
 				ImGui::SameLine();
 			}
@@ -120,7 +120,7 @@ namespace chord::ui
 
 				ImGui::SameLine();
 				ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
-				ImGui::DragScalar("##Z", ImGuiDataType_Double, &values.z, 0.1f, nullptr, nullptr, "%.2f");
+				ImGui::DragScalar("##Z", DataType, &values.z, 0.1f, nullptr, nullptr, "%.2f");
 				ImGui::PopItemWidth();
 				ImGui::SameLine();
 			}
@@ -147,12 +147,12 @@ namespace chord::ui
 
 	bool ui::drawDVector3(const std::string& label, math::dvec3& values, const math::dvec3& resetValue, float labelWidth)
 	{
-		return drawTVector3<math::dvec3>(label, values, resetValue, labelWidth);
+		return drawTVector3<math::dvec3, ImGuiDataType_Double>(label, values, resetValue, labelWidth);
 	}
 
 	bool drawVector3(const std::string& label, math::vec3& values, const math::vec3& resetValue, float labelWidth)
 	{
-		return drawTVector3<math::vec3>(label, values, resetValue, labelWidth);
+		return drawTVector3<math::vec3, ImGuiDataType_Float>(label, values, resetValue, labelWidth);
 	}
 
 	void ui::helpMarker(const char* desc)

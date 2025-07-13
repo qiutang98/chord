@@ -5,7 +5,7 @@
 #include <graphics/helper.h>
 #include <renderer/fullscreen.h>
 #include <renderer/render_helper.h>
-#include <renderer/atmosphere.h>
+#include <scene/manager/manager_atmosphere.h>
 
 struct LineDrawVertex;
 

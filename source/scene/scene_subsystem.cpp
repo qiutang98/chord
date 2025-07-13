@@ -3,8 +3,6 @@
 #include <project.h>
 #include <scene/component/component_gltf_mesh.h>
 #include <scene/component/component_transform.h>
-#include <scene/component/component_gltf_material.h>
-#include <scene/component/component_sky.h>
 
 namespace chord
 {
@@ -19,8 +17,6 @@ namespace chord
 
 		registerAsset(Transform::kComponentUIDrawDetails, typeid(Transform).name());
 		registerAsset(GLTFMeshComponent::kComponentUIDrawDetails, typeid(GLTFMeshComponent).name());
-		registerAsset(GLTFMaterialComponent::kComponentUIDrawDetails, typeid(GLTFMaterialComponent).name());
-		registerAsset(SkyComponent::kComponentUIDrawDetails, typeid(SkyComponent).name());
 	}
 
 	bool SceneSubSystem::onInit()

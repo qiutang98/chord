@@ -342,16 +342,6 @@ void WidgetOutliner::popupMenu()
 			ImGui::EndPopup();
 			return;
 		}
-
-		static const std::string kSkyName = combineIcon("Sky", ICON_FA_SUN);
-		if (ImGui::MenuItem(kSkyName.c_str()))
-		{
-			auto newNode = activeScene->createNode(m_sceneManagerUI->addUniqueIdForName(u16str("Sky")), selectedOneNode);
-
-			newNode->getScene()->addComponent<SkyComponent>(std::make_shared<SkyComponent>(), newNode);
-			newNode->getTransform()->setTranslation(relativeCameraPos);
-			newNode->getTransform()->setRotation(math::vec3(-0.7854f, 0.0f, 0.0f));
-		}
 	}
 
 	ImGui::Separator();
@@ -452,16 +442,12 @@ void WidgetOutliner::acceptDragdrop(bool bRoot)
 										activeScene->addComponent<GLTFMeshComponent>(gltfMeshComp, newSceneNode);
 										gltfMeshComp->setGLTFMesh(gltfRef->getSaveInfo(), activeGLTFNode.mesh);
 
-										auto gltfMaterialComp = 
-											std::dynamic_pointer_cast<GLTFMaterialComponent>(GLTFMaterialComponent::kComponentUIDrawDetails.factory());
-										activeScene->addComponent<GLTFMaterialComponent>(gltfMaterialComp, newSceneNode);
-
 										std::vector<AssetSaveInfo> materials{};
 										for (auto& primitive : gltfMeshes[activeGLTFNode.mesh].primitives)
 										{
 											materials.push_back(primitive.material);
 										}
-										gltfMaterialComp->setGLTFMaterial(materials);
+										gltfMeshComp->setGLTFMaterial(materials);
 									}
 									
 

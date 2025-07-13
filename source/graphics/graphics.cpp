@@ -280,7 +280,7 @@ namespace chord::graphics
 
 	void Context::setPerfMarkerBegin(VkCommandBuffer cmdBuf, const char* name, const math::vec4& color) const
 	{
-		if (!bGraphicsDebugMarkerEnable)
+		if (!bGraphicsDebugMarkerEnable || !getContext().isEnableDebugUtils())
 		{
 			return;
 		}
@@ -297,7 +297,7 @@ namespace chord::graphics
 
 	void Context::setPerfMarkerEnd(VkCommandBuffer cmdBuf) const
 	{
-		if (!bGraphicsDebugMarkerEnable)
+		if (!bGraphicsDebugMarkerEnable || !getContext().isEnableDebugUtils())
 		{
 			return;
 		}
@@ -1280,7 +1280,7 @@ namespace chord::graphics
 
 	void setResourceName(VkObjectType objectType, uint64 handle, const char* name)
 	{
-		if (!bGraphicsDebugMarkerEnable)
+		if (!bGraphicsDebugMarkerEnable || !getContext().isEnableDebugUtils())
 		{
 			return;
 		}

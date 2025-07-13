@@ -6,8 +6,6 @@
 
 namespace chord
 {
-
-
 	// There are three type asset.
 	//	#0. Temp: newly created, no save in disk yet.
 	//  #1. Builtin: engine builtin asset, also is temp asset.

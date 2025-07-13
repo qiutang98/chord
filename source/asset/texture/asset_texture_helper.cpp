@@ -886,7 +886,7 @@ namespace chord
 			},
 			[textureAsset]() // Finish loading.
 			{
-				textureAsset->setLoadingState(false);
+				textureAsset->setLoadingReady();
 			});
 
 		// Add in weak ptr.

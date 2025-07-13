@@ -11,14 +11,14 @@
 namespace chord
 {
 	static uint32 sCrashOutputFullDump = 1;
-	static AutoCVarRef cVarCrashOutputFullDump(
+	static AutoCVarRef<uint32> cVarCrashOutputFullDump(
 		"r.crash.fulldump",
 		sCrashOutputFullDump,
 		"Output fulldump when crash or not."
 	);
 
 	static u16str sCrashFileOutputFolder = u16str("save/crash");
-	static AutoCVarRef cVarCrashFileOutputFolder(
+	static AutoCVarRef<u16str> cVarCrashFileOutputFolder(
 		"r.crash.folder",
 		sCrashFileOutputFolder,
 		"Save folder path of dump file.",

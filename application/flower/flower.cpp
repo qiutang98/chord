@@ -161,8 +161,8 @@ int Flower::run(int argc, const char** argv)
 	config.height = 900u;
 
 	// Graphics config.
-	config.graphicsConfig.bDebugUtils = true;
-	config.graphicsConfig.bValidation = true;
+	config.graphicsConfig.bDebugUtils = false;
+	config.graphicsConfig.bValidation = false;
 	config.graphicsConfig.bRaytracing = true;
 	config.graphicsConfig.bHDR        = false;
 

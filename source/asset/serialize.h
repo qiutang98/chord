@@ -8,10 +8,8 @@
 #include <scene/scene_node.h>
 #include <asset/gltf/asset_gltf.h>
 #include <scene/component/component_gltf_mesh.h>
-#include <scene/component/component_gltf_material.h>
-#include <scene/component/component_sky.h>
 #include <shader/base.h>
-#include <renderer/atmosphere.h>
+#include <scene/manager/manager_atmosphere.h>
 
 registerPODClassMember(AtmosphereConfig)
 {
@@ -167,16 +165,7 @@ registerClassMemberInherit(Transform, Component)
 registerClassMemberInherit(GLTFMeshComponent, Component)
 {
 	ar(m_gltfMeshId, m_gltfAssetInfo);
-}}
-
-registerClassMemberInherit(GLTFMaterialComponent, Component)
-{
-	ar(m_gltfAssetInfos);
-}}
-
-registerClassMemberInherit(SkyComponent, Component)
-{
-
+	ar(m_gltfMaterialAssetInfos);
 }}
 
 registerClassMember(SceneNode)

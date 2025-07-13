@@ -59,7 +59,8 @@ namespace chord::jobsystem
 		std::atomic<EJobState> jobState;         // 1  ... 63
 		EJobFlags flags;                         // 1  ... 64
 	#if JOB_SYSTEM_DEBUG_NAME
-		const char* debugName;
+		const char* debugName; // ... 8
+		                       // ... 56 pad
 	#endif 
 
 		explicit Job(EJobFlags inFlags)

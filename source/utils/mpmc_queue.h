@@ -12,8 +12,6 @@ namespace chord
 	private:
 		struct Node
 		{
-            TRACE_OP_NEW_AND_DELETE;
-
 			T data;
 			std::atomic<SizeT> seq;
 		};

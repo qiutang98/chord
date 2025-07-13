@@ -37,6 +37,7 @@ namespace chord
 {
     HZBContext chord::buildHZB(graphics::GraphicsQueue& queue, graphics::PoolTextureRef depthImage, bool bBuildMin, bool bBuildMax, bool bBuildValidRange)
     {
+        ZoneScoped;
         using namespace graphics;
 
         // At least need to build one type.

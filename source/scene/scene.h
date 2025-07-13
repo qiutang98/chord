@@ -4,7 +4,7 @@
 #include <scene/scene_node.h>
 #include <shader/base.h>
 
-#include <renderer/atmosphere.h>
+#include <scene/manager/manager_atmosphere.h>
 #include <scene/manager/manager_shadow.h>
 #include <scene/manager/manager_ddgi.h>
 #include <scene/manager/manager_postprocessing.h>

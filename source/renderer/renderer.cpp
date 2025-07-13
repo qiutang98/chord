@@ -10,9 +10,8 @@
 #include <application/application.h>
 #include <renderer/gpu_scene.h>
 #include <scene/scene_subsystem.h>
-#include <renderer/atmosphere.h>
+#include <scene/manager/manager_atmosphere.h>
 #include <renderer/visibility_tile.h>
-#include <scene/component/component_sky.h>
 #include <scene/scene.h>
 #include <renderer/lighting.h>
 #include <utils/profiler.h>
@@ -21,13 +20,12 @@ namespace chord
 {
 
 static uint32 sGIMethod = 0;
-static AutoCVarRef cVarEnableDDGI(
+static AutoCVarRef<uint32> cVarEnableDDGI(
 	"r.gi.method",
 	sGIMethod,
 	"GI Method Selected:"
 	"0: Screen Probe Gather GI."
-	"1: DDGI. (WIP)"
-);
+	"1: DDGI. (WIP)");
 
 constexpr uint32 kTimerFramePeriod = 3;
 constexpr uint32 kTimerStampMaxCount = 128;
@@ -517,14 +515,7 @@ GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
 	auto  scene = sceneManager->getActiveScene();
 	const auto& GPUScene = Application::get().getGPUScene();
 
-	if (auto skyComp = scene->getFirstComponent<SkyComponent>())
-	{
-		result.sunInfo = skyComp->getSkyLightInfo();
-	}
-	else
-	{
-		result.sunInfo = getDefaultSkyLightInfo();
-	}
+	result.sunInfo = scene->getAtmosphereManager().getSunLightInfo();
 
 
 	// Basic data collect.

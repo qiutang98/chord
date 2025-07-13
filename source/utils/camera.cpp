@@ -1,5 +1,5 @@
 #include <utils/camera.h>
-#include <renderer/atmosphere.h>
+#include <scene/manager/manager_atmosphere.h>
 
 namespace chord
 {

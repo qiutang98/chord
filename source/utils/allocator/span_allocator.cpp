@@ -1,5 +1,5 @@
-#include "allocator.h"
-#include "log.h"
+#include <utils/allocator/span_allocator.h>
+#include <utils/log.h>
 
 namespace chord
 {
@@ -23,6 +23,7 @@ namespace chord
 
 	int32_t SpanAllocator::allocate(uint32_t size)
 	{
+		ZoneScoped;
 		// 
 		int32_t freeSpanIndex = searchFreeList(m_firstNonEmptySpan, size);
 
@@ -71,6 +72,7 @@ namespace chord
 
 	int32_t SpanAllocator::searchFreeList(uint32_t offset, uint32_t size) const
 	{
+		ZoneScoped;
 		for (auto index = offset; index < m_freeSpans.size(); index++)
 		{
 			// Use first valid span.
@@ -85,6 +87,7 @@ namespace chord
 
 	void SpanAllocator::prune()
 	{
+		ZoneScoped;
 		if (m_pendingFreeSpans.empty() && m_firstNonEmptySpan == 0)
 		{
 			return;

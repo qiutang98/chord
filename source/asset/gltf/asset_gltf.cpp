@@ -25,7 +25,7 @@ namespace chord
 		return false;
 	}
 
-	GPUGLTFPrimitiveAssetRef GLTFAsset::getGPUPrimitives()
+	GPUGLTFPrimitiveAssetRef GLTFAsset::getGPUPrimitives_AnyThread()
 	{
 		using namespace graphics;
 
@@ -205,11 +205,16 @@ namespace chord
 
 				checkMsgf(totalUsedSize == sizeAccumulate, "Mesh primitive data size un-match!");
 			},
-			[newGPUPrimitives]() // Finish loading.
+			[newGPUPrimitives, assetPtr]() // Finish loading.
 			{
-				newGPUPrimitives->setLoadingState(false);
+				newGPUPrimitives->setLoadingReady();
 				newGPUPrimitives->updateGPUScene();
-				newGPUPrimitives->buildBLAS();
+
+				if (getContext().isRaytraceSupport())
+				{
+					newGPUPrimitives->buildBLAS();
+					newGPUPrimitives->buildCacheBLASInstances(assetPtr);
+				}
 			});
 
 		anyThread.gpuPrimitives = newGPUPrimitives;
@@ -560,6 +565,39 @@ namespace chord
 
 		// 
 		m_blasBuilder.build(allBlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR);
+	}
+
+	static inline void fillVkAccelerationStructureInstance(VkAccelerationStructureInstanceKHR& as, uint64_t address)
+	{
+		as.accelerationStructureReference = address;
+		as.mask = 0xFF;
+
+		// NOTE: VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR // Faster.
+		//       VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR // Two side.
+		as.flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR; // We current just use opaque bit.
+		as.instanceShaderBindingTableRecordOffset = 0;
+	}
+
+	void GPUGLTFPrimitiveAsset::buildCacheBLASInstances(std::shared_ptr<GLTFAsset> asset)
+	{
+		m_cacheBLASInstances.clear();
+		m_cacheBLASInstances.resize(asset->getMeshes().size());
+
+		VkAccelerationStructureInstanceKHR instanceTamplate{};
+		for (size_t gltfMeshId = 0; gltfMeshId < asset->getMeshes().size(); gltfMeshId++)
+		{
+			const auto& meshes = asset->getMeshes().at(gltfMeshId);
+			auto& cacheBLASInstances = m_cacheBLASInstances.at(gltfMeshId);
+
+			for (uint32 primitiveId = 0; primitiveId < meshes.primitives.size(); primitiveId++)
+			{
+				VkDeviceAddress blasAddress = getBLASDeviceAddress(gltfMeshId, primitiveId);
+				fillVkAccelerationStructureInstance(instanceTamplate, blasAddress);
+
+				//
+				cacheBLASInstances.asInstances.push_back(instanceTamplate);
+			}
+		}
 	}
 
 	const VkDeviceAddress GPUGLTFPrimitiveAsset::getBLASDeviceAddress(uint32 meshId, uint32 primitiveId) const

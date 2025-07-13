@@ -27,6 +27,9 @@ set_property(TARGET chord PROPERTY UNITY_BUILD ON)
 set_source_files_properties(
   "${PROJECT_SOURCE_DIR}/source/utils/utils_windows.cpp" 
   "${PROJECT_SOURCE_DIR}/source/shader_compiler/compiler.cpp"
+  "${PROJECT_SOURCE_DIR}/source/ui/imgui/imgui_demo.cpp"
+  "${PROJECT_SOURCE_DIR}/source/ui/imgui/imgui_draw.cpp"
+  "${PROJECT_SOURCE_DIR}/source/ui/imgui/imgui.cpp"
   PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 ## Alias name for easy use.

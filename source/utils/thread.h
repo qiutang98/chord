@@ -54,7 +54,6 @@ namespace chord
 
 		}
 
-		void waitForRenderThreadFinish() const;
 	public:
 		static MainThread& get();
 
@@ -62,30 +61,7 @@ namespace chord
 		void tick();
 	};
 
-	class RenderThread : public ThreadContext
-	{
-	private:
-		uint64 m_renderThreadFrameId = 0;
-		std::vector<ResourceRef> m_pendingRenderingResource[2];
-
-		RenderThread(const std::wstring& name)
-			: ThreadContext(name)
-		{
-
-		}
-
-		void waitForMainThreadTask() const;
-
-
-	public:
-		static RenderThread& get();
-
-		void tick();
-		uint64 getFrameId() const { return m_renderThreadFrameId; }
-	};
-
 	extern bool isInMainThread();
-	extern bool isInRenderThread();
 
 	// Enqueue one command in main thread, execute in next tick.
 	#define ENQUEUE_MAIN_COMMAND(...) MainThread::get().pushAnyThread(__VA_ARGS__)

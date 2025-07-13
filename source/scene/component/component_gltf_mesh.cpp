@@ -1,7 +1,6 @@
 #include <scene/component/component_gltf_mesh.h>
 #include <ui/ui_helper.h>
 #include <scene/scene_node.h>
-#include <scene/component/component_gltf_material.h>
 
 namespace chord
 {
@@ -26,6 +25,10 @@ namespace chord
 				if (!meshComponent->m_gltfAssetInfo.empty())
 				{
 					ImGui::TextDisabled("Choose mesh id: #%d.", meshComponent->m_gltfMeshId);
+					for (int32 i = 0; i < meshComponent->m_gltfMaterialAssetInfos.size(); i++)
+					{
+						ui::inspectAssetSaveInfo(meshComponent->m_gltfMaterialAssetInfos[i]);
+					}
 				}
 			}
 
@@ -35,85 +38,87 @@ namespace chord
 		return result;
 	}
 
-	void GLTFMeshComponent::reloadResource()
+	void GLTFMeshComponent::reloadMesh()
 	{
+		m_cachedDrawCommandNeedLoading = true;
 		m_gltfAsset = Application::get().getAssetManager().getOrLoadAsset<GLTFAsset>(m_gltfAssetInfo.path(), true);
-		m_gltfGPU = m_gltfAsset->getGPUPrimitives();
+		m_gltfGPU = m_gltfAsset->getGPUPrimitives_AnyThread();
 	}
 
-	static inline void fillVkAccelerationStructureInstance(VkAccelerationStructureInstanceKHR& as, uint64_t address)
+	void GLTFMeshComponent::reloadMaterials()
 	{
-		as.accelerationStructureReference = address;
-		as.mask = 0xFF;
-
-		// NOTE: VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR // Faster.
-		//       VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR // Two side.
-		as.flags = VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR; // We current just use opaque bit.
-		as.instanceShaderBindingTableRecordOffset = 0;
+		m_cachedDrawCommandNeedLoading = true;
+		m_gltfMaterialAssetsProxy.resize(m_gltfMaterialAssetInfos.size());
+		for (int32 i = 0; i < m_gltfMaterialAssetsProxy.size(); i++)
+		{
+			m_gltfMaterialAssetsProxy[i] = tryLoadGLTFMaterialAsset(m_gltfMaterialAssetInfos[i])->getProxy();
+		}
 	}
 
-	// TODO: Add some cache.
-	void GLTFMeshComponent::onPerViewPerframeCollect(
-		PerframeCollected& collector, 
-		const ICamera* camera) const
+	void GLTFMeshComponent::buildCacheMeshDrawCommand()
 	{
-		Super::onPerViewPerframeCollect(collector, camera);
-		auto materialComp = getNode()->getComponent<GLTFMaterialComponent>();
-
-		if (m_gltfGPU == nullptr || m_gltfAsset == nullptr || m_gltfMeshId < 0)
-		{
-			return;
-		}
-
-		if (!m_gltfGPU->isReady())
-		{
-			return;
-		}
-
-		GPUObjectGLTFPrimitive templatePrimitive { };
-		templatePrimitive.basicData = getNode()->getActiveViewGPUObjectBasicData();
-
 		const auto& meshes = m_gltfAsset->getMeshes().at(m_gltfMeshId);
 
-		VkAccelerationStructureInstanceKHR instanceTamplate{};
-		{
-			// We use local to translated world matrix to build a precision TLAS.
-			math::mat4 temp = math::transpose(templatePrimitive.basicData.localToTranslatedWorld);
-			// 
-			memcpy(&instanceTamplate.transform, &temp, sizeof(VkTransformMatrixKHR));
-		}
-		const bool bASReady = graphics::getContext().isRaytraceSupport() && m_gltfGPU->isBLASInit();
+		m_cacheMeshDrawCommand.gltfLod0MeshletCount = 0;
+		m_cacheMeshDrawCommand.gltfMeshletGroupCount = 0;
+
+		m_cacheMeshDrawCommand.gltfPrimitives.clear();
+		m_cacheMeshDrawCommand.gltfPrimitives.reserve(meshes.primitives.size());
+
+		GPUObjectGLTFPrimitive templatePrimitive{ };
 
 		uint lod0MeshletCount = 0;
 		uint meshletGroupCount = 0;
 		for (uint32 primitiveId = 0; primitiveId < meshes.primitives.size(); primitiveId++)
 		{
-			uint32 primitiveObjectId = collector.gltfPrimitives.size();
-
-			auto materialProxy = materialComp->getProxy(primitiveId);
+			auto materialProxy = getMaterialProxy(primitiveId);
 
 			templatePrimitive.GLTFPrimitiveDetail = m_gltfGPU->getGPUScenePrimitiveDetailId(m_gltfMeshId, primitiveId);
 			templatePrimitive.GLTFMaterialData = materialProxy->getGPUSceneId();
 
-			lod0MeshletCount  += meshes.primitives[primitiveId].lod0meshletCount;
+			lod0MeshletCount += meshes.primitives[primitiveId].lod0meshletCount;
 			meshletGroupCount += meshes.primitives[primitiveId].meshletGroupCount;
 
-			collector.gltfPrimitives.push_back(templatePrimitive);
-
-			if (bASReady)
-			{
-				VkDeviceAddress blasAddress = m_gltfGPU->getBLASDeviceAddress(m_gltfMeshId, primitiveId);
-				// Update primitive object id, used for ray hit indexing object.
-				instanceTamplate.instanceCustomIndex = primitiveObjectId;
-				fillVkAccelerationStructureInstance(instanceTamplate, blasAddress);
-
-				//
-				collector.asInstances.asInstances.push_back(instanceTamplate);
-			}
+			m_cacheMeshDrawCommand.gltfPrimitives.push_back(templatePrimitive);
 		}
 
-		collector.gltfLod0MeshletCount.fetch_add(lod0MeshletCount);
-		collector.gltfMeshletGroupCount.fetch_add(meshletGroupCount);
+		m_cacheMeshDrawCommand.gltfLod0MeshletCount = lod0MeshletCount;
+		m_cacheMeshDrawCommand.gltfMeshletGroupCount = meshletGroupCount;
+	}
+
+	void GLTFMeshComponent::onPerViewPerframeCollect(
+		PerframeCollected& collector, 
+		const ICamera* camera) const
+	{
+		Super::onPerViewPerframeCollect(collector, camera);
+
+		const uint32 basePrimitiveObjectId = collector.gltfPrimitives.size();
+		const auto& basicData = getNode()->getActiveViewGPUObjectBasicData();
+		if (!m_cacheMeshDrawCommand.gltfPrimitives.empty())
+		{
+			for (auto& prim : m_cacheMeshDrawCommand.gltfPrimitives)
+			{
+				prim.basicData = basicData;
+			}
+
+			collector.gltfPrimitives.insert(collector.gltfPrimitives.end(), m_cacheMeshDrawCommand.gltfPrimitives.begin(), m_cacheMeshDrawCommand.gltfPrimitives.end());
+			collector.gltfLod0MeshletCount.fetch_add(m_cacheMeshDrawCommand.gltfLod0MeshletCount);
+			collector.gltfMeshletGroupCount.fetch_add(m_cacheMeshDrawCommand.gltfMeshletGroupCount);
+		}
+
+		if (m_gltfGPU->isBLASInit())
+		{
+			math::mat4 temp = math::transpose(basicData.localToTranslatedWorld);
+			const auto& cacheBLASInstanceCollector = m_gltfGPU->getBLASInstanceCollector(m_gltfMeshId);
+
+			collector.asInstances.asInstances.insert(collector.asInstances.asInstances.end(), cacheBLASInstanceCollector.asInstances.begin(), cacheBLASInstanceCollector.asInstances.end());
+			for (uint32 primitiveId = 0; primitiveId < cacheBLASInstanceCollector.asInstances.size(); primitiveId++)
+			{
+				auto& instance = collector.asInstances.asInstances[primitiveId + basePrimitiveObjectId];
+				instance.instanceCustomIndex = basePrimitiveObjectId + primitiveId;
+				memcpy(&instance.transform, &temp, sizeof(VkTransformMatrixKHR));
+			}
+		}
 	}
 
 	bool GLTFMeshComponent::setGLTFMesh(const AssetSaveInfo& asset, int32 meshId)
@@ -125,7 +130,7 @@ namespace chord
 			if (asset != m_gltfAssetInfo)
 			{
 				m_gltfAssetInfo = asset;
-				reloadResource();
+				reloadMesh();
 			}
 
 			markDirty();
@@ -138,7 +143,49 @@ namespace chord
 	{
 		if (!m_gltfAssetInfo.empty())
 		{
-			reloadResource();
+			reloadMesh();
+			reloadMaterials();
+		}
+	}
+
+	void GLTFMeshComponent::tick(const ApplicationTickData& tickData)
+	{
+		Super::tick(tickData);
+
+		if (m_gltfGPU && m_gltfAsset && m_gltfMeshId >= 0 && m_gltfGPU->isReady())
+		{
+			if (m_cachedDrawCommandNeedLoading)
+			{
+				buildCacheMeshDrawCommand();
+				m_cachedDrawCommandNeedLoading = false;
+			}
+		}
+	}
+
+	void GLTFMeshComponent::setGLTFMaterial(const std::vector<AssetSaveInfo>& assets)
+	{
+		bool bChange = false;
+		if (m_gltfMaterialAssetInfos.size() == assets.size())
+		{
+			for (size_t i = 0; i < assets.size(); i++)
+			{
+				if (assets[i] != m_gltfMaterialAssetInfos[i])
+				{
+					bChange = true;
+					break;
+				}
+			}
+		}
+		else
+		{
+			bChange = true;
+		}
+
+		if (bChange)
+		{
+			m_gltfMaterialAssetInfos = assets;
+			reloadMaterials();
+			markDirty();
 		}
 	}
 }

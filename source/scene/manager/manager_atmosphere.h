@@ -95,10 +95,12 @@ namespace chord
 		const AtmosphereLut& getLuts() const { return m_luts; }
 
 		// Clear GPU lut assets.
-		void clearLuts() 
-		{ 
-			m_luts = {}; 
-		}
+		void clearLuts() { m_luts = {}; }
+
+		SkyLightInfo getSunLightInfo() const;
+		float3 getSunDirection() const;
+
+		static constexpr math::vec3 kDefaultSunDirection = math::vec3(0.1f, -0.8f, 0.2f);
 
 	protected:
 		virtual void onDrawUI(SceneRef scene) override;
@@ -139,5 +141,8 @@ namespace chord
 
 	private: // Archives.
 		AtmosphereConfig m_config{ };
+
+		//
+		math::vec3 m_sunRotation = kDefaultSunDirection;
 	};
 }

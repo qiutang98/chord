@@ -9,22 +9,10 @@ namespace chord
 		return MainThread::get().isInThread(std::this_thread::get_id());
 	}
 
-	bool chord::isInRenderThread()
-	{
-		return RenderThread::get().isInThread(std::this_thread::get_id());
-	}
-
 	MainThread& MainThread::get()
 	{
 		static MainThread mainThrad(L"MainThread");
 		return mainThrad;
-	}
-
-
-	RenderThread& RenderThread::get()
-	{
-		static RenderThread renderThread(L"RenderThread");
-		return renderThread;
 	}
 
 	void ThreadContext::init()
@@ -35,7 +23,10 @@ namespace chord
 
 	void ThreadContext::beforeRelease()
 	{
-		flush();
+		while (!m_queue.isEmpty())
+		{
+			flush();
+		}
 	}
 
 	void ThreadContext::release()
@@ -81,39 +72,9 @@ namespace chord
 		}
 	}
 
-	void MainThread::waitForRenderThreadFinish() const
-	{
-		RenderThread& RT = RenderThread::get();
-		while (RT.getFrameId() + 1 < m_mainThreadFrameId)
-		{
-			std::this_thread::yield();
-		}
-	}
-
-	void RenderThread::waitForMainThreadTask() const
-	{
-		MainThread& mainT = MainThread::get();
-		while (mainT.getFrameId() <= m_renderThreadFrameId)
-		{
-			std::this_thread::yield();
-		}
-
-	}
-
 	void MainThread::tick()
 	{
-		// waitForRenderThreadFinish();
-		
-
+		// Flush all pending task in current frame.
 		flush();
-		// m_mainThreadFrameId++;
-	}
-
-	void RenderThread::tick()
-	{
-		waitForMainThreadTask();
-		flush();
-		m_renderThreadFrameId ++;
 	}
 }
-

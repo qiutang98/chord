@@ -126,6 +126,8 @@ namespace chord::graphics
 		bool isRequiredHDR() const { return m_initConfig.bHDR; }
 		bool isRaytraceSupport() const { return m_initConfig.bRaytracing; }
 
+		bool isEnableDebugUtils() const { return m_initConfig.bDebugUtils; }
+
 		// Current application own bindless manager.
 		auto& getBindlessManger() { return *m_bindlessManager; }
 		const auto& getBindlessManger() const { return *m_bindlessManager; }

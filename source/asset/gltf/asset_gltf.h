@@ -334,7 +334,7 @@ namespace chord
 		const auto& getMeshes() const { return m_meshes; }
 
 		bool isGPUPrimitivesStreamingReady() const;
-		GPUGLTFPrimitiveAssetRef getGPUPrimitives();
+		GPUGLTFPrimitiveAssetRef getGPUPrimitives_AnyThread();
 
 	protected:
 		// ~IAsset virtual function.

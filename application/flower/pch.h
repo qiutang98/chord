@@ -28,7 +28,5 @@
 #include <asset/texture/asset_texture.h>
 #include <renderer/renderer.h>
 #include <utils/allocator.h>
-#include <scene/component/component_gltf_material.h>
-#include <scene/component/component_sky.h>
 
 constexpr chord::uint32 kMultiWidgetMaxNum = 4;
