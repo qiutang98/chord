@@ -92,14 +92,14 @@ void MainViewportDockspaceAndMenu::drawDockspaceMenu()
                     check(!sceneAssetSave.afterEventAccept);
                     sceneAssetSave.afterEventAccept = []()
                     {
-                        auto& sceneManager = Application::get().getEngine().getSubsystem<SceneSubSystem>();
+                        auto& sceneManager = Application::get().getEngine().getSubsystem<SceneSubsystem>();
                         sceneManager.releaseScene();
                     };
                 }
             }
             else
             {
-                Application::get().getEngine().getSubsystem<SceneSubSystem>().releaseScene();
+                Application::get().getEngine().getSubsystem<SceneSubsystem>().releaseScene();
             }
         }
 
@@ -198,7 +198,7 @@ SceneAssetSaveWidget::SceneAssetSaveWidget(const std::string& titleName)
 void SceneAssetSaveWidget::onDraw()
 {
     auto& projectContent = Flower::get().getContentManager();
-    auto& sceneManager = Application::get().getEngine().getSubsystem<SceneSubSystem>();
+    auto& sceneManager = Application::get().getEngine().getSubsystem<SceneSubsystem>();
 
     auto scenes = projectContent.getDirtyAsset<Scene>();
 

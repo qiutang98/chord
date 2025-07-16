@@ -108,7 +108,7 @@ namespace chord
 	{
 		ZoneScopedN("Scene Tick");
 
-		auto& sceneSubSystem = Application::get().getEngine().getSubsystem<SceneSubSystem>();
+		auto& sceneSubSystem = Application::get().getEngine().getSubsystem<SceneSubsystem>();
 		m_atmosphereManager->update(tickData);
 
 		// Pre nodes tick

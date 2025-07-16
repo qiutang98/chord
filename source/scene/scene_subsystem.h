@@ -7,11 +7,11 @@
 
 namespace chord
 {
-	class SceneSubSystem final : public ISubsystem
+	class SceneSubsystem final : public ISubsystem
 	{
 	public:
-		explicit SceneSubSystem();
-		virtual ~SceneSubSystem() = default;
+		explicit SceneSubsystem();
+		virtual ~SceneSubsystem() = default;
 
 		virtual bool onInit() override;
 		virtual bool onTick(const SubsystemTickData& tickData) override;

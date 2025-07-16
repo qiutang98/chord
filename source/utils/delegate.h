@@ -54,7 +54,8 @@ namespace chord
 					else
 					{
 						assert(taggedPtr.getTag() + uint16(1) == m_brocastId);
-						assert(m_queue.dequeue(taggedPtr));
+						bool bDequeue = m_queue.dequeue(taggedPtr);
+						assert(bDequeue);
 
 						auto* task = taggedPtr.getPointer();
 						task->execute<void, Args...>(std::forward<Args>(args)...);

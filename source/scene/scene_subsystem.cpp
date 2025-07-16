@@ -6,7 +6,7 @@
 
 namespace chord
 {
-	SceneSubSystem::SceneSubSystem()
+	SceneSubsystem::SceneSubsystem()
 		: ISubsystem("SceneManager") 
 	{ 
 		auto registerAsset = [this](const UIComponentDrawDetails& type, const std::string& name)
@@ -19,12 +19,12 @@ namespace chord
 		registerAsset(GLTFMeshComponent::kComponentUIDrawDetails, typeid(GLTFMeshComponent).name());
 	}
 
-	bool SceneSubSystem::onInit()
+	bool SceneSubsystem::onInit()
 	{
 		return true;
 	}
 
-	bool SceneSubSystem::onTick(const SubsystemTickData& tickData)
+	bool SceneSubsystem::onTick(const SubsystemTickData& tickData)
 	{
 		if (Project::get().isSetup())
 		{
@@ -34,17 +34,17 @@ namespace chord
 		return true;
 	}
 
-	void SceneSubSystem::beforeRelease()
+	void SceneSubsystem::beforeRelease()
 	{
 
 	}
 
-	void SceneSubSystem::onRelease()
+	void SceneSubsystem::onRelease()
 	{
 		releaseScene();
 	}
 
-	SceneRef SceneSubSystem::getActiveScene()
+	SceneRef SceneSubsystem::getActiveScene()
 	{
 		if (!m_scene.lock())
 		{
@@ -61,7 +61,7 @@ namespace chord
 		return m_scene.lock();
 	}
 
-	void SceneSubSystem::releaseScene()
+	void SceneSubsystem::releaseScene()
 	{
 		if (auto scene = m_scene.lock())
 		{
@@ -76,7 +76,7 @@ namespace chord
 		}
 	}
 
-	bool SceneSubSystem::loadScene(const std::filesystem::path& loadPath)
+	bool SceneSubsystem::loadScene(const std::filesystem::path& loadPath)
 	{
 		if (m_scene.lock())
 		{

@@ -23,5 +23,5 @@ protected:
 	virtual void onRelease() override;
 
 private:
-	chord::SceneSubSystem* m_sceneManager;
+	chord::SceneSubsystem* m_sceneManager;
 };

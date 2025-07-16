@@ -83,7 +83,7 @@ void Flower::updateApplicationTitle()
 	const auto& projectConfig = Project::get().getPath();
 	if (Project::get().isSetup())
 	{
-		auto activeScene = Application::get().getEngine().getSubsystem<SceneSubSystem>().getActiveScene();
+		auto activeScene = Application::get().getEngine().getSubsystem<SceneSubsystem>().getActiveScene();
 
 		std::u16string showName = projectConfig.projectName.u16() + u" - " + activeScene->getName().u16();
 		if (activeScene->isDirty())

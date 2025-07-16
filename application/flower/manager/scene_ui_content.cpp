@@ -5,7 +5,7 @@ using namespace chord::graphics;
 
 UISceneContentManager::UISceneContentManager()
 {
-	m_sceneManager = &Application::get().getEngine().getSubsystem<SceneSubSystem>();
+	m_sceneManager = &Application::get().getEngine().getSubsystem<SceneSubsystem>();
 
 	m_onSceneUnloadHandle = m_sceneManager->onSceneUnload.add([this](SceneRef scene) { onSceneUnload(scene);  });
 	m_onSceneLoadHandle = m_sceneManager->onSceneLoad.add([this](SceneRef scene) { onSceneLoad(scene);  });

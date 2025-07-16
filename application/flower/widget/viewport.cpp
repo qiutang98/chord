@@ -45,7 +45,7 @@ void WidgetViewport::onInit()
 {
 	// Camera prepare.
 	m_camera = std::make_unique<ViewportCamera>(this);
-	Application::get().getEngine().getSubsystem<chord::SceneSubSystem>().registerCameraView(m_camera.get());
+	Application::get().getEngine().getSubsystem<chord::SceneSubsystem>().registerCameraView(m_camera.get());
 
 	// Viewport renderer.
 	m_deferredRenderer = std::make_unique<DeferredRenderer>(std::format("Viewport#{} DeferredRenderer", m_index));
@@ -133,7 +133,7 @@ void WidgetViewport::onAfterTick(const ApplicationTickData& tickData)
 
 void WidgetViewport::onRelease()
 {
-	Application::get().getEngine().getSubsystem<chord::SceneSubSystem>().unregisterCameraView(m_camera.get());
+	Application::get().getEngine().getSubsystem<chord::SceneSubsystem>().unregisterCameraView(m_camera.get());
 	m_deferredRenderer.reset();
 }
 

@@ -151,7 +151,7 @@ void DeferredRenderer::render(
 	const uint32 currentRenderWidth = m_dimensionConfig.getRenderWidth();
 	const uint32 currentRenderHeight = m_dimensionConfig.getRenderHeight();
 
-	auto* sceneSubSystem = &Application::get().getEngine().getSubsystem<SceneSubSystem>();
+	auto* sceneSubSystem = &Application::get().getEngine().getSubsystem<SceneSubsystem>();
 	auto scene = sceneSubSystem->getActiveScene();
 
 	// Update atmosphere parameters.
@@ -511,7 +511,7 @@ GPUBasicData chord::getGPUBasicData(const AtmosphereParameters& atmosphere)
 	// Fill atmosphere first.
 	result.atmosphere = atmosphere;
 
-	auto* sceneManager = &Application::get().getEngine().getSubsystem<SceneSubSystem>();
+	auto* sceneManager = &Application::get().getEngine().getSubsystem<SceneSubsystem>();
 	auto  scene = sceneManager->getActiveScene();
 	const auto& GPUScene = Application::get().getGPUScene();
 

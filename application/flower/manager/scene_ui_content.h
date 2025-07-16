@@ -60,7 +60,7 @@ private:
 
 
 private:
-	chord::SceneSubSystem* m_sceneManager;
+	chord::SceneSubsystem* m_sceneManager;
 
 	Selection<SceneNodeSelctor> m_sceneSelections;
 

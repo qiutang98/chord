@@ -29,7 +29,7 @@ namespace chord
 		bool bResult = true;
 
 		// Register necessary manager.
-		if (bResult) { bResult &= registerSubsystem<SceneSubSystem>(); }
+		if (bResult) { bResult &= registerSubsystem<SceneSubsystem>(); }
 
 		return bResult;
 	}
