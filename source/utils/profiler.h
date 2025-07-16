@@ -18,7 +18,7 @@
 
 // MSVC /ZI build can't treat __LINE__ as a constexpr.
 #ifndef TracyConstExpr
-	#if defined(_MSC_VER) && (defined(_DEBUG) || defined(DEBUG))
+	#if defined(_MSC_VER) // && (defined(_DEBUG) || defined(DEBUG))
 		#define TracyConstExpr const
 	#endif 
 #endif // !TracyConstExpr
