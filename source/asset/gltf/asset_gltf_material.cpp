@@ -190,7 +190,7 @@ namespace chord
 				imageChannelUsageMap[metallicRoughnessImageIndex].rgba.b = true;
 			}
 
-			if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialSpecular)))
+			if (0 && material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialSpecular)))
 			{
 				const auto& ext = material.extensions.at(getGLTFExtension(EKHRGLTFExtension::MaterialSpecular));
 
@@ -219,7 +219,7 @@ namespace chord
 				}
 			}
 
-			if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialAnisotropy)))
+			if (0 && material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialAnisotropy)))
 			{
 				const auto& ext = material.extensions.at(getGLTFExtension(EKHRGLTFExtension::MaterialAnisotropy));
 				int32 texture;
@@ -235,7 +235,7 @@ namespace chord
 				imageChannelUsageMap[imageIndex].rgba.b = true;
 			}
 
-			if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialClearCoat)))
+			if (0 && material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialClearCoat)))
 			{
 				const auto& ext = material.extensions.at(getGLTFExtension(EKHRGLTFExtension::MaterialClearCoat));
 
@@ -263,7 +263,7 @@ namespace chord
 				}
 			}
 
-			if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialSheen)))
+			if (0 && material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialSheen)))
 			{
 				const auto& ext = material.extensions.at(getGLTFExtension(EKHRGLTFExtension::MaterialSheen));
 				int32 colorTexture;
@@ -288,24 +288,27 @@ namespace chord
 				}
 			}
 
-			if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialTransmission)))
+			if (0 && material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialTransmission)))
 			{
 				const auto& ext = material.extensions.at(getGLTFExtension(EKHRGLTFExtension::MaterialTransmission));
 				int32 texture;
 				getTexId(ext, "transmissionTexture", texture);
-				int32 imageIndex = model.textures.at(texture).source;
-
-				imageChannelUsageMap[imageIndex].rgba.r = true;
+				if (texture != -1)
+				{
+					int32 imageIndex = model.textures.at(texture).source;
+					imageChannelUsageMap[imageIndex].rgba.r = true;
+				}
 			}
 
-			if (material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialVolume)))
+			if (0 && material.extensions.contains(getGLTFExtension(EKHRGLTFExtension::MaterialVolume)))
 			{
 				const auto& ext = material.extensions.at(getGLTFExtension(EKHRGLTFExtension::MaterialVolume));
 				int32 texture;
 				getTexId(ext, "thicknessTexture", texture);
-				int32 imageIndex = model.textures.at(texture).source;
-
-				imageChannelUsageMap[imageIndex].rgba.g = true;
+				{
+					int32 imageIndex = model.textures.at(texture).source;
+					imageChannelUsageMap[imageIndex].rgba.g = true;
+				}
 			}
 		}
 
